@@ -1,0 +1,9 @@
+[fuzz]
+# Fuzzing configuration
+fuzzing_with_stats = true
+allow_duplicate_txs = false
+programs_data = []
+
+[test]
+# Validator settings for invariant tests
+validator_startup_timeout = 15000

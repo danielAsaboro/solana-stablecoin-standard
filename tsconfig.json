@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "types": ["mocha", "chai", "node"],
+    "typeRoots": ["./node_modules/@types"],
+    "lib": ["es2015"],
+    "skipLibCheck": true,
+    "module": "commonjs",
+    "target": "es6",
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "moduleResolution": "node",
+    "sourceMap": true,
+    "outDir": "./dist",
+    "baseUrl": ".",
+    "paths": {
+      "@stbr/sss-core-sdk": ["sdk/core/src"],
+      "@stbr/sss-compliance-sdk": ["sdk/compliance/src"]
+    }
+  },
+  "include": ["tests/**/*.ts", "scripts/**/*.ts"]
+}

@@ -1,0 +1,31 @@
+[package]
+name = "transfer-hook"
+version = "0.1.0"
+description = "SSS-2 Transfer Hook - Blacklist enforcement on every transfer"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "transfer_hook"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+idl-build = [
+    "anchor-lang/idl-build",
+    "anchor-spl/idl-build",
+]
+
+[dependencies]
+anchor-lang = "0.31.1"
+anchor-spl = { version = "0.31.1", features = ["token"] }
+spl-token-2022 = { version = "6.0.0", features = ["no-entrypoint"] }
+spl-transfer-hook-interface = "0.8.0"
+spl-tlv-account-resolution = "0.8.0"
+spl-pod = "0.4.0"
+spl-type-length-value = "0.6.0"
+constant_time_eq = "=0.3.1"
+blake3 = "=1.5.5"

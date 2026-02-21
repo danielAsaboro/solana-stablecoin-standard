@@ -26,6 +26,7 @@
  * - PDA helpers — `getConfigAddress`, `getRoleAddress`, etc.
  * - {@link SSS_1}, {@link SSS_2} — Preset configurations
  * - Utility functions — Token-2022 helpers (ATA, balances, supply)
+ * - {@link SSSEventParser} — Strongly-typed event parsing from logs, transactions, and WebSocket
  *
  * @module @stbr/sss-core-sdk
  * @packageDocumentation
@@ -107,3 +108,15 @@ export {
   BlacklistRemoveBuilder,
   SeizeBuilder,
 } from "./builder";
+
+// Event parsing utilities
+export {
+  SSSEventName,
+  type TypedEvent,
+  type SSSEvent,
+  type SSSEventDataMap,
+  type SSSEventCallback,
+  SSSEventParser,
+  parseEvents,
+  parseTransaction,
+} from "./events";

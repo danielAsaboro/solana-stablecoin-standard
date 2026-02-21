@@ -27,6 +27,7 @@
  * - {@link SSS_1}, {@link SSS_2} — Preset configurations
  * - Utility functions — Token-2022 helpers (ATA, balances, supply)
  * - {@link SSSEventParser} — Strongly-typed event parsing from logs, transactions, and WebSocket
+ * - Batch builders — {@link BatchBuilder}, {@link BatchMintBuilder}, etc. for multi-operation transactions
  *
  * @module @stbr/sss-core-sdk
  * @packageDocumentation
@@ -108,6 +109,20 @@ export {
   BlacklistRemoveBuilder,
   SeizeBuilder,
 } from "./builder";
+
+// Batch operation builders
+export {
+  BatchBuilder,
+  BatchMintBuilder,
+  BatchBurnBuilder,
+  BatchFreezeBuilder,
+  BatchThawBuilder,
+  BatchBlacklistAddBuilder,
+  BatchBlacklistRemoveBuilder,
+  type BatchMintEntry,
+  type BatchBurnEntry,
+  type BatchBlacklistEntry,
+} from "./batch";
 
 // Event parsing utilities
 export {

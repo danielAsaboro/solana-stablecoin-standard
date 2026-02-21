@@ -167,6 +167,18 @@ export abstract class OperationBuilder {
   }
 
   /**
+   * Returns signers collected by fluent methods like `.by(keypair)`.
+   *
+   * Used internally by {@link BatchBuilder} to gather signers from
+   * sub-operations into the combined transaction.
+   *
+   * @internal
+   */
+  getCollectedSigners(): Keypair[] {
+    return [...this._additionalSigners];
+  }
+
+  /**
    * Build the core operation instruction(s). Subclasses must implement this.
    * @internal
    */

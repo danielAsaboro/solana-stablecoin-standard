@@ -61,6 +61,18 @@ import {
   BlacklistRemoveBuilder,
   SeizeBuilder,
 } from "./builder";
+import {
+  BatchBuilder,
+  BatchMintBuilder,
+  BatchBurnBuilder,
+  BatchFreezeBuilder,
+  BatchThawBuilder,
+  BatchBlacklistAddBuilder,
+  BatchBlacklistRemoveBuilder,
+  type BatchMintEntry,
+  type BatchBurnEntry,
+  type BatchBlacklistEntry,
+} from "./batch";
 
 // ---------------------------------------------------------------------------
 // IDL import — the Anchor-generated IDL for the SSS program
@@ -289,6 +301,47 @@ export class ComplianceModule {
       },
     ]);
     return accounts.map((a: any) => a.account as unknown as BlacklistEntry);
+  }
+
+  // -------------------------------------------------------------------
+  // Batch compliance operations
+  // -------------------------------------------------------------------
+
+  /**
+   * Batch-add multiple addresses to the blacklist in one transaction.
+   *
+   * @example
+   * ```ts
+   * await stablecoin.compliance.batchBlacklistAdd([
+   *   { address: alice, reason: "OFAC SDN match" },
+   *   { address: bob, reason: "Suspicious activity" },
+   * ])
+   *   .by(blacklisterKeypair)
+   *   .send(payerKeypair);
+   * ```
+   *
+   * @param entries - Array of addresses + reasons to blacklist
+   * @returns A {@link BatchBlacklistAddBuilder}
+   */
+  batchBlacklistAdd(entries: BatchBlacklistEntry[]): BatchBlacklistAddBuilder {
+    return new BatchBlacklistAddBuilder(this.builderCtx(), entries);
+  }
+
+  /**
+   * Batch-remove multiple addresses from the blacklist in one transaction.
+   *
+   * @example
+   * ```ts
+   * await stablecoin.compliance.batchBlacklistRemove([alice, bob])
+   *   .by(blacklisterKeypair)
+   *   .send(payerKeypair);
+   * ```
+   *
+   * @param addresses - Array of addresses to remove
+   * @returns A {@link BatchBlacklistRemoveBuilder}
+   */
+  batchBlacklistRemove(addresses: PublicKey[]): BatchBlacklistRemoveBuilder {
+    return new BatchBlacklistRemoveBuilder(this.builderCtx(), addresses);
   }
 
   /**
@@ -935,6 +988,113 @@ export class SolanaStablecoin {
         config: this.configAddress,
       })
       .instruction();
+  }
+
+  // -------------------------------------------------------------------
+  // Batch operations — multiple actions in a single transaction
+  // -------------------------------------------------------------------
+
+  /**
+   * Start a general-purpose batch builder for composing multiple
+   * operations into a single atomic transaction.
+   *
+   * @example
+   * ```ts
+   * const sig = await stablecoin.batch()
+   *   .add(stablecoin.mint(1_000_000).to(alice).by(minterKp))
+   *   .add(stablecoin.mint(2_000_000).to(bob).by(minterKp))
+   *   .add(stablecoin.freeze(suspect).by(pauserKp))
+   *   .withMemo("Batch issuance + freeze")
+   *   .send(payerKp);
+   * ```
+   *
+   * @returns A {@link BatchBuilder}
+   */
+  batch(): BatchBuilder {
+    return new BatchBuilder(this);
+  }
+
+  /**
+   * Batch-mint tokens to multiple recipients in one transaction.
+   *
+   * Optimizes instruction ordering: ATA-creation instructions (if enabled)
+   * come first, followed by all mint instructions. Duplicate ATAs are
+   * deduplicated automatically.
+   *
+   * @example
+   * ```ts
+   * const sig = await stablecoin.batchMint([
+   *   { amount: 1_000_000, to: alice },
+   *   { amount: 2_000_000, to: bob },
+   *   { amount: 500_000, toAccount: carolATA },
+   * ])
+   *   .by(minterKeypair)
+   *   .createAccountsIfNeeded()
+   *   .withMemo("Monthly distribution")
+   *   .send(payerKeypair);
+   * ```
+   *
+   * @param entries - Array of mint targets with amounts
+   * @returns A {@link BatchMintBuilder}
+   */
+  batchMint(entries: BatchMintEntry[]): BatchMintBuilder {
+    return new BatchMintBuilder(this, entries);
+  }
+
+  /**
+   * Batch-burn tokens from multiple accounts in one transaction.
+   *
+   * @example
+   * ```ts
+   * const sig = await stablecoin.batchBurn([
+   *   { amount: 500_000, from: alice },
+   *   { amount: 1_000_000, from: bob },
+   * ])
+   *   .by(burnerKeypair)
+   *   .send(payerKeypair);
+   * ```
+   *
+   * @param entries - Array of burn sources with amounts
+   * @returns A {@link BatchBurnBuilder}
+   */
+  batchBurn(entries: BatchBurnEntry[]): BatchBurnBuilder {
+    return new BatchBurnBuilder(this, entries);
+  }
+
+  /**
+   * Batch-freeze multiple token accounts in one transaction.
+   *
+   * Accepts wallet addresses — ATAs are derived automatically.
+   *
+   * @example
+   * ```ts
+   * const sig = await stablecoin.batchFreeze([alice, bob, carol])
+   *   .by(pauserKeypair)
+   *   .send(payerKeypair);
+   * ```
+   *
+   * @param wallets - Array of wallet addresses to freeze
+   * @returns A {@link BatchFreezeBuilder}
+   */
+  batchFreeze(wallets: PublicKey[]): BatchFreezeBuilder {
+    return new BatchFreezeBuilder(this, wallets);
+  }
+
+  /**
+   * Batch-thaw multiple frozen token accounts in one transaction.
+   *
+   * @example
+   * ```ts
+   * const sig = await stablecoin.batchThaw([alice, bob])
+   *   .by(pauserKeypair)
+   *   .send(payerKeypair);
+   * ```
+   *
+   * @param wallets - Array of wallet addresses to thaw
+   * @returns A {@link BatchThawBuilder}
+   */
+  batchThaw(wallets: PublicKey[]): BatchThawBuilder {
+    return new BatchThawBuilder(this, wallets);
   }
 
   // -------------------------------------------------------------------

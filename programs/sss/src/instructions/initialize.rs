@@ -148,19 +148,14 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
         &[ctx.accounts.mint.to_account_info()],
     )?;
 
-    // 5. Initialize the mint
-    let freeze_authority = if params.default_account_frozen || params.enable_transfer_hook {
-        Some(&config_key)
-    } else {
-        Some(&config_key)
-    };
-
+    // 5. Initialize the mint — config PDA always owns freeze authority so
+    //    accounts can be frozen for compliance or pause enforcement.
     invoke(
         &token_instruction::initialize_mint2(
             ctx.accounts.token_program.key,
             &mint_key,
             &config_key,
-            freeze_authority.map(|f| f as &Pubkey),
+            Some(&config_key),
             params.decimals,
         )?,
         &[ctx.accounts.mint.to_account_info()],

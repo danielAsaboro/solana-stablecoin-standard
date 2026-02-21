@@ -1,3 +1,9 @@
+#![deny(clippy::all)]
+// Anchor-generated code triggers these — safe to allow at crate level.
+#![allow(unexpected_cfgs)]
+#![allow(deprecated)]
+#![allow(clippy::result_large_err)]
+
 pub mod constants;
 pub mod error;
 pub mod instructions;
@@ -50,7 +56,13 @@ pub mod transfer_hook {
 
         if data.len() >= 8 && data[..8] == execute_discriminator {
             let amount = if data.len() >= 16 {
-                u64::from_le_bytes(data[8..16].try_into().unwrap())
+                // Safety: slice length is guaranteed to be exactly 8 bytes
+                // by the bounds check above, so try_into cannot fail.
+                u64::from_le_bytes(
+                    data[8..16]
+                        .try_into()
+                        .map_err(|_| ProgramError::InvalidInstructionData)?,
+                )
             } else {
                 0u64
             };

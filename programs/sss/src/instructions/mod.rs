@@ -12,6 +12,9 @@ pub mod add_to_blacklist;
 pub mod remove_from_blacklist;
 pub mod seize;
 
+// Glob re-exports are required for Anchor-generated __client_accounts_* modules.
+// The `handler` name collision is harmless — lib.rs calls handlers via qualified paths.
+#[allow(ambiguous_glob_reexports)]
 pub use initialize::*;
 pub use mint::*;
 pub use burn::*;

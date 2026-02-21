@@ -1,3 +1,9 @@
+#![deny(clippy::all)]
+// Anchor-generated code triggers these — safe to allow at crate level.
+#![allow(unexpected_cfgs)]
+#![allow(deprecated)]
+#![allow(clippy::result_large_err)]
+
 pub mod constants;
 pub mod error;
 pub mod events;

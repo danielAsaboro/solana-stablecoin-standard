@@ -1,3 +1,29 @@
+//! # SSS Transfer Hook Program
+//!
+//! SPL Transfer Hook that enforces blacklist checks on every `transfer_checked`
+//! call for SSS-2 (Compliant Stablecoin) mints.
+//!
+//! ## How it works
+//!
+//! When Token-2022 processes a `transfer_checked` for a mint with a transfer hook
+//! extension, it CPIs into this program with the SPL Transfer Hook Interface
+//! discriminator. The program checks whether either the source or destination
+//! owner has a [`BlacklistEntry`](crate::constants::BLACKLIST_SEED) PDA on the
+//! SSS main program. If a blacklist PDA exists and is initialized, the transfer
+//! is rejected.
+//!
+//! ## Seizure bypass
+//!
+//! When the permanent delegate (the [`StablecoinConfig`] PDA) is the authority
+//! on a transfer, the hook allows it unconditionally. This enables the `seize`
+//! instruction to move tokens from blacklisted accounts to a treasury.
+//!
+//! ## Account resolution
+//!
+//! The [`ExtraAccountMetas`] PDA stores the account resolution recipe so that
+//! Token-2022 can dynamically derive the required extra accounts (config PDA,
+//! source blacklist PDA, destination blacklist PDA) for each transfer.
+
 #![deny(clippy::all)]
 // Anchor-generated code triggers these — safe to allow at crate level.
 #![allow(unexpected_cfgs)]

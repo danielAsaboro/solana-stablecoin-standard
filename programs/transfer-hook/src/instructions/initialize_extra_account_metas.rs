@@ -6,6 +6,12 @@ use spl_tlv_account_resolution::{
 
 use crate::constants::*;
 
+/// Accounts required to initialize the ExtraAccountMetas PDA for a mint.
+///
+/// This must be called once per stablecoin mint after the SSS program's
+/// `initialize` instruction has set up the transfer hook extension. The PDA
+/// stores the account resolution recipe that Token-2022 uses to derive the
+/// extra accounts needed by the hook on each transfer.
 #[derive(Accounts)]
 pub struct InitializeExtraAccountMetaList<'info> {
     #[account(mut)]
@@ -28,6 +34,16 @@ pub struct InitializeExtraAccountMetaList<'info> {
     pub system_program: Program<'info, System>,
 }
 
+/// Initialize the ExtraAccountMetas PDA with the account resolution recipe.
+///
+/// Defines four extra accounts that Token-2022 will resolve and pass to the
+/// hook on each transfer:
+/// - Index 5: SSS program (static key for PDA derivation)
+/// - Index 6: StablecoinConfig PDA (`["stablecoin", mint]` on SSS program)
+/// - Index 7: Source owner's BlacklistEntry PDA (`["blacklist", config, source_owner]`)
+/// - Index 8: Destination owner's BlacklistEntry PDA (`["blacklist", config, dest_owner]`)
+///
+/// Indices 0–4 are the standard SPL Transfer Hook accounts provided by Token-2022.
 pub fn handler(ctx: Context<InitializeExtraAccountMetaList>) -> Result<()> {
     // Define the extra accounts needed by the transfer hook:
     //

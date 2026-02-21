@@ -7,6 +7,10 @@ use crate::error::StablecoinError;
 use crate::events::AccountFrozen;
 use crate::state::{RoleAccount, StablecoinConfig};
 
+/// Accounts required to freeze a token account.
+///
+/// The authority must hold an active Pauser role. The config PDA signs the
+/// `freeze_account` CPI as the freeze authority.
 #[derive(Accounts)]
 pub struct FreezeTokenAccount<'info> {
     pub authority: Signer<'info>,
@@ -35,6 +39,9 @@ pub struct FreezeTokenAccount<'info> {
     pub token_program: Interface<'info, TokenInterface>,
 }
 
+/// Freeze a token account, preventing all transfers out.
+///
+/// The stablecoin must not be paused. Emits [`AccountFrozen`].
 pub fn handler(ctx: Context<FreezeTokenAccount>) -> Result<()> {
     require!(!ctx.accounts.config.paused, StablecoinError::Paused);
 

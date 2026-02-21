@@ -1,5 +1,11 @@
+//! Custom error codes for the SSS program.
+//!
+//! Each variant maps to a unique Anchor error code and includes a human-readable
+//! message returned to clients.
+
 use anchor_lang::prelude::*;
 
+/// Errors that can be returned by SSS program instructions.
 #[error_code]
 pub enum StablecoinError {
     #[msg("Unauthorized - caller lacks the required role")]

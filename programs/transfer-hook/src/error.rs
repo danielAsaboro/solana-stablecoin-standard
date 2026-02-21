@@ -1,5 +1,8 @@
+//! Custom error codes for the transfer hook program.
+
 use anchor_lang::prelude::*;
 
+/// Errors returned when a transfer is blocked by blacklist enforcement.
 #[error_code]
 pub enum TransferHookError {
     #[msg("Source address is blacklisted")]

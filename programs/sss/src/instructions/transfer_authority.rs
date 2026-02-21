@@ -5,6 +5,11 @@ use crate::error::StablecoinError;
 use crate::events::AuthorityTransferred;
 use crate::state::StablecoinConfig;
 
+/// Accounts required to transfer master authority to a new address.
+///
+/// Only the current master authority can execute this. The transfer is
+/// immediate and irreversible — the old authority loses all privileges in
+/// the same transaction.
 #[derive(Accounts)]
 pub struct TransferAuthority<'info> {
     pub authority: Signer<'info>,
@@ -18,6 +23,10 @@ pub struct TransferAuthority<'info> {
     pub config: Account<'info, StablecoinConfig>,
 }
 
+/// Transfer master authority to a new address.
+///
+/// Fails if `new_authority` equals the current authority (prevents no-op
+/// transfers). Emits [`AuthorityTransferred`].
 pub fn handler(ctx: Context<TransferAuthority>, new_authority: Pubkey) -> Result<()> {
     require!(
         new_authority != ctx.accounts.config.master_authority,

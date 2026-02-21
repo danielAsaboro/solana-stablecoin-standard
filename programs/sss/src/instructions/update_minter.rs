@@ -5,6 +5,11 @@ use crate::error::StablecoinError;
 use crate::events::MinterQuotaUpdated;
 use crate::state::{MinterQuota, StablecoinConfig};
 
+/// Accounts required to set or update a minter's quota.
+///
+/// Only the master authority can call this instruction. The minter quota PDA
+/// is created on first assignment (`init_if_needed`). Updating the quota does
+/// not reset the `minted` counter, preserving the audit trail.
 #[derive(Accounts)]
 #[instruction(minter: Pubkey)]
 pub struct UpdateMinter<'info> {
@@ -30,6 +35,10 @@ pub struct UpdateMinter<'info> {
     pub system_program: Program<'info, System>,
 }
 
+/// Set or update a minter's maximum mint quota.
+///
+/// The `minted` counter is intentionally preserved so that increasing the quota
+/// after partial minting does not erase history. Emits [`MinterQuotaUpdated`].
 pub fn handler(ctx: Context<UpdateMinter>, minter: Pubkey, quota: u64) -> Result<()> {
     let minter_quota = &mut ctx.accounts.minter_quota;
     minter_quota.config = ctx.accounts.config.key();

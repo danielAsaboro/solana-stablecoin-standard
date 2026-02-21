@@ -5,6 +5,10 @@ use crate::error::StablecoinError;
 use crate::events::StablecoinPaused;
 use crate::state::{RoleAccount, StablecoinConfig};
 
+/// Accounts required to pause the stablecoin.
+///
+/// The authority must hold an active Pauser role. Pausing blocks minting and
+/// burning but does not prevent transfers.
 #[derive(Accounts)]
 pub struct Pause<'info> {
     pub authority: Signer<'info>,
@@ -24,6 +28,9 @@ pub struct Pause<'info> {
     pub role_account: Account<'info, RoleAccount>,
 }
 
+/// Pause the stablecoin, blocking all mint and burn operations.
+///
+/// Fails if already paused. Emits [`StablecoinPaused`].
 pub fn handler(ctx: Context<Pause>) -> Result<()> {
     require!(!ctx.accounts.config.paused, StablecoinError::Paused);
 

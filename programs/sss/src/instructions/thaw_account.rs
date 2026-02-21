@@ -7,6 +7,10 @@ use crate::error::StablecoinError;
 use crate::events::AccountThawed;
 use crate::state::{RoleAccount, StablecoinConfig};
 
+/// Accounts required to thaw a previously frozen token account.
+///
+/// The authority must hold an active Pauser role. The config PDA signs the
+/// `thaw_account` CPI as the freeze authority.
 #[derive(Accounts)]
 pub struct ThawTokenAccount<'info> {
     pub authority: Signer<'info>,
@@ -35,6 +39,10 @@ pub struct ThawTokenAccount<'info> {
     pub token_program: Interface<'info, TokenInterface>,
 }
 
+/// Thaw a frozen token account, restoring transfer capability.
+///
+/// Unlike freeze, thaw does not require the stablecoin to be unpaused — an
+/// operator may need to thaw accounts even while paused. Emits [`AccountThawed`].
 pub fn handler(ctx: Context<ThawTokenAccount>) -> Result<()> {
     let mint_key = ctx.accounts.config.mint;
     let bump = ctx.accounts.config.bump;

@@ -7,6 +7,11 @@ use crate::error::StablecoinError;
 use crate::events::TokensBurned;
 use crate::state::{RoleAccount, StablecoinConfig};
 
+/// Accounts required to burn tokens.
+///
+/// The burner must hold an active Burner role. The burner must also be the
+/// owner or delegate of the source token account, enforced by the Token-2022
+/// program during the `burn` CPI.
 #[derive(Accounts)]
 pub struct BurnTokens<'info> {
     pub burner: Signer<'info>,
@@ -39,6 +44,11 @@ pub struct BurnTokens<'info> {
     pub token_program: Interface<'info, TokenInterface>,
 }
 
+/// Burn `amount` tokens from the specified token account.
+///
+/// Validates the stablecoin is not paused and the amount is non-zero, then
+/// performs a `burn` CPI. Updates the global `total_burned` counter.
+/// Emits [`TokensBurned`].
 pub fn handler(ctx: Context<BurnTokens>, amount: u64) -> Result<()> {
     require!(amount > 0, StablecoinError::ZeroAmount);
     require!(!ctx.accounts.config.paused, StablecoinError::Paused);

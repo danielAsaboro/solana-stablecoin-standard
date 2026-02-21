@@ -43,6 +43,12 @@ pub struct TransferHookAccounts<'info> {
     pub dest_blacklist: AccountInfo<'info>,
 }
 
+/// Anchor-dispatched transfer hook handler.
+///
+/// Checks blacklist PDAs for both source and destination owners. If either PDA
+/// exists and is initialized (owned by the SSS program), the transfer is rejected.
+/// Seizure transfers (where the authority is the config PDA / permanent delegate)
+/// are allowed unconditionally.
 pub fn handler(ctx: Context<TransferHookAccounts>, _amount: u64) -> Result<()> {
     // Check if this is a seizure by the permanent delegate (config PDA)
     // The authority is the 4th standard account (index 3)

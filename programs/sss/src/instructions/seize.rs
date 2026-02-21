@@ -7,6 +7,14 @@ use crate::error::StablecoinError;
 use crate::events::TokensSeized;
 use crate::state::{RoleAccount, StablecoinConfig};
 
+/// Accounts required to seize tokens from an account (SSS-2 only).
+///
+/// The authority must hold an active Seizer role and the stablecoin must have
+/// permanent delegate enabled. The config PDA acts as the permanent delegate,
+/// allowing it to transfer tokens out of any account without the owner's consent.
+///
+/// `remaining_accounts` must include the transfer hook's extra account metas
+/// (resolved by the SDK) so Token-2022 can forward them to the hook program.
 #[derive(Accounts)]
 pub struct Seize<'info> {
     pub authority: Signer<'info>,
@@ -40,6 +48,12 @@ pub struct Seize<'info> {
     pub token_program: Interface<'info, TokenInterface>,
 }
 
+/// Seize `amount` tokens from a source account to a destination (e.g., treasury).
+///
+/// Uses the config PDA as permanent delegate to execute `transfer_checked`.
+/// The transfer hook's extra accounts are passed via `remaining_accounts` so
+/// Token-2022 can invoke the hook — the hook recognizes the permanent delegate
+/// as the authority and skips blacklist checks. Emits [`TokensSeized`].
 pub fn handler<'info>(ctx: Context<'_, '_, 'info, 'info, Seize<'info>>, amount: u64) -> Result<()> {
     require!(amount > 0, StablecoinError::ZeroAmount);
 

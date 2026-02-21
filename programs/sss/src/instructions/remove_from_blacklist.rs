@@ -5,6 +5,10 @@ use crate::error::StablecoinError;
 use crate::events::AddressUnblacklisted;
 use crate::state::{BlacklistEntry, RoleAccount, StablecoinConfig};
 
+/// Accounts required to remove an address from the blacklist (SSS-2 only).
+///
+/// The authority must hold an active Blacklister role. Closing the
+/// [`BlacklistEntry`] PDA returns the rent-exempt lamports to the authority.
 #[derive(Accounts)]
 #[instruction(address: Pubkey)]
 pub struct RemoveFromBlacklist<'info> {
@@ -35,6 +39,11 @@ pub struct RemoveFromBlacklist<'info> {
     pub blacklist_entry: Account<'info, BlacklistEntry>,
 }
 
+/// Remove an address from the blacklist.
+///
+/// The [`BlacklistEntry`] PDA is closed and rent returned to the authority.
+/// Subsequent transfers involving this address will no longer be blocked by
+/// the transfer hook. Emits [`AddressUnblacklisted`].
 pub fn handler(ctx: Context<RemoveFromBlacklist>, address: Pubkey) -> Result<()> {
     emit!(AddressUnblacklisted {
         config: ctx.accounts.config.key(),

@@ -7,6 +7,10 @@ use crate::error::StablecoinError;
 use crate::events::TokensMinted;
 use crate::state::{MinterQuota, RoleAccount, StablecoinConfig};
 
+/// Accounts required to mint tokens to a recipient.
+///
+/// The minter must hold an active Minter role and have remaining quota. The
+/// config PDA signs the `mint_to` CPI as the mint authority.
 #[derive(Accounts)]
 pub struct MintTokens<'info> {
     pub minter: Signer<'info>,
@@ -46,6 +50,11 @@ pub struct MintTokens<'info> {
     pub token_program: Interface<'info, TokenInterface>,
 }
 
+/// Mint `amount` tokens to the recipient's token account.
+///
+/// Validates the stablecoin is not paused, the minter has sufficient quota,
+/// then performs a `mint_to` CPI signed by the config PDA. Updates the minter's
+/// cumulative total and the global `total_minted` counter. Emits [`TokensMinted`].
 pub fn handler(ctx: Context<MintTokens>, amount: u64) -> Result<()> {
     require!(amount > 0, StablecoinError::ZeroAmount);
     require!(!ctx.accounts.config.paused, StablecoinError::Paused);

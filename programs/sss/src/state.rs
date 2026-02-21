@@ -1,7 +1,19 @@
+//! On-chain account state for the SSS program.
+//!
+//! All accounts are PDAs derived from deterministic seeds documented in
+//! [`constants`](crate::constants). Field-level docs describe each stored value.
+
 use anchor_lang::prelude::*;
 
 use crate::constants::*;
 
+/// Central configuration account for a stablecoin instance.
+///
+/// Created during [`initialize`](crate::sss::initialize) and owned by this program.
+/// The config PDA also serves as the mint authority, freeze authority, and (if SSS-2)
+/// permanent delegate for the Token-2022 mint.
+///
+/// Seeds: `["stablecoin", mint_pubkey]`
 #[account]
 pub struct StablecoinConfig {
     /// The Token-2022 mint address
@@ -62,6 +74,13 @@ impl StablecoinConfig {
     pub const SEED_PREFIX: &'static [u8] = STABLECOIN_SEED;
 }
 
+/// Tracks whether a user holds a specific role for a stablecoin.
+///
+/// One PDA per (config, role_type, user) triple. The `active` flag controls
+/// whether the role is currently in effect — deactivated roles retain their PDA
+/// so they can be re-activated without a new `init`.
+///
+/// Seeds: `["role", config_pubkey, role_type_u8, user_pubkey]`
 #[account]
 pub struct RoleAccount {
     /// The stablecoin config this role belongs to
@@ -87,6 +106,14 @@ impl RoleAccount {
     pub const SEED_PREFIX: &'static [u8] = ROLE_SEED;
 }
 
+/// Per-minter allowance tracking.
+///
+/// Each minter has an independent quota and a running total of tokens minted.
+/// The master authority sets the `quota`; `minted` is incremented on each
+/// [`mint_tokens`](crate::sss::mint_tokens) call and is never reset (preserves
+/// audit history even when the quota is increased).
+///
+/// Seeds: `["minter_quota", config_pubkey, minter_pubkey]`
 #[account]
 pub struct MinterQuota {
     /// The stablecoin config
@@ -112,6 +139,13 @@ impl MinterQuota {
     pub const SEED_PREFIX: &'static [u8] = MINTER_QUOTA_SEED;
 }
 
+/// Records that an address is on the blacklist (SSS-2 only).
+///
+/// The transfer hook program checks for the existence of this PDA to block
+/// transfers involving blacklisted addresses. When removed, the PDA is closed
+/// via `close = authority` and rent is returned.
+///
+/// Seeds: `["blacklist", config_pubkey, address_pubkey]`
 #[account]
 pub struct BlacklistEntry {
     /// The stablecoin config

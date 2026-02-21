@@ -16,18 +16,36 @@ use crate::error::StablecoinError;
 use crate::events::StablecoinInitialized;
 use crate::state::StablecoinConfig;
 
+/// Parameters for initializing a new stablecoin.
+///
+/// Passed to [`initialize`](crate::sss::initialize). Feature flags are immutable
+/// after initialization — choose SSS-1 (all disabled) or SSS-2 (delegate + hook
+/// enabled) at creation time.
 #[derive(AnchorSerialize, AnchorDeserialize)]
 pub struct InitializeParams {
+    /// Human-readable name (max 32 bytes).
     pub name: String,
+    /// Token ticker symbol (max 10 bytes).
     pub symbol: String,
+    /// Metadata URI pointing to off-chain JSON (max 200 bytes).
     pub uri: String,
+    /// Decimal places for the token (0–9).
     pub decimals: u8,
+    /// Enable the permanent delegate extension (required for seize, SSS-2).
     pub enable_permanent_delegate: bool,
+    /// Enable the transfer hook extension (required for blacklist enforcement, SSS-2).
     pub enable_transfer_hook: bool,
+    /// Whether newly created token accounts default to a frozen state.
     pub default_account_frozen: bool,
+    /// The transfer hook program ID. Required when `enable_transfer_hook` is true.
     pub transfer_hook_program_id: Option<Pubkey>,
 }
 
+/// Accounts required to initialize a new stablecoin.
+///
+/// The instruction creates the Token-2022 mint with the requested extensions,
+/// sets on-chain metadata, and initializes the config PDA that governs the
+/// stablecoin's lifecycle.
 #[derive(Accounts)]
 #[instruction(params: InitializeParams)]
 pub struct Initialize<'info> {
@@ -53,6 +71,16 @@ pub struct Initialize<'info> {
     pub rent: Sysvar<'info, Rent>,
 }
 
+/// Initialize a new stablecoin with Token-2022 extensions.
+///
+/// Performs the following steps:
+/// 1. Validates input parameters (name, symbol, URI lengths; decimal range).
+/// 2. Creates the Token-2022 mint with metadata-pointer (+ optional permanent
+///    delegate and transfer hook extensions).
+/// 3. Initializes mint authority and freeze authority to the config PDA.
+/// 4. Writes on-chain token metadata (name, symbol, URI).
+/// 5. Populates the [`StablecoinConfig`] PDA with runtime state.
+/// 6. Emits a [`StablecoinInitialized`] event.
 pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()> {
     require!(params.name.len() <= MAX_NAME_LEN, StablecoinError::NameTooLong);
     require!(params.symbol.len() <= MAX_SYMBOL_LEN, StablecoinError::SymbolTooLong);

@@ -1,3 +1,30 @@
+//! # Solana Stablecoin Standard (SSS) — Main Program
+//!
+//! A modular, configurable stablecoin program built on Token-2022. Supports two
+//! opinionated presets:
+//!
+//! - **SSS-1 (Minimal):** Mint authority, freeze authority, metadata, role-based
+//!   access control, per-minter quotas, and pause capability. Suitable for DAO
+//!   treasuries, internal tokens, and ecosystem settlement.
+//!
+//! - **SSS-2 (Compliant):** SSS-1 plus permanent delegate (for seizure), transfer
+//!   hook (for blacklist enforcement on every transfer), and blacklist management.
+//!   Designed for regulated stablecoins (USDC/USDT-class) where on-chain compliance
+//!   is mandatory.
+//!
+//! ## Security Model
+//!
+//! The [`StablecoinConfig`](state::StablecoinConfig) PDA owns the mint authority,
+//! freeze authority, and (if enabled) serves as the permanent delegate. All privileged
+//! operations require a valid [`RoleAccount`](state::RoleAccount) PDA with an active
+//! role. The master authority can assign/revoke roles but cannot directly mint, burn,
+//! or freeze — separation of duties is enforced at the protocol level.
+//!
+//! ## Checked Arithmetic
+//!
+//! All arithmetic operations use `checked_add` / `checked_sub` and return
+//! [`StablecoinError::MathOverflow`](error::StablecoinError::MathOverflow) on overflow.
+
 #![deny(clippy::all)]
 // Anchor-generated code triggers these — safe to allow at crate level.
 #![allow(unexpected_cfgs)]

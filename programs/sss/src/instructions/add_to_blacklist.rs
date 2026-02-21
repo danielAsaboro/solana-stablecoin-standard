@@ -5,6 +5,12 @@ use crate::error::StablecoinError;
 use crate::events::AddressBlacklisted;
 use crate::state::{BlacklistEntry, RoleAccount, StablecoinConfig};
 
+/// Accounts required to add an address to the blacklist (SSS-2 only).
+///
+/// The authority must hold an active Blacklister role and the stablecoin must
+/// have transfer hook enabled. Uses `init` (not `init_if_needed`) so that
+/// attempting to re-blacklist an already-blacklisted address fails with an
+/// Anchor account-already-in-use error.
 #[derive(Accounts)]
 #[instruction(address: Pubkey)]
 pub struct AddToBlacklist<'info> {
@@ -37,6 +43,10 @@ pub struct AddToBlacklist<'info> {
     pub system_program: Program<'info, System>,
 }
 
+/// Add an address to the blacklist with a reason string.
+///
+/// Creates a [`BlacklistEntry`] PDA that the transfer hook program checks on
+/// every `transfer_checked` call. Emits [`AddressBlacklisted`].
 pub fn handler(ctx: Context<AddToBlacklist>, address: Pubkey, reason: String) -> Result<()> {
     require!(reason.len() <= MAX_REASON_LEN, StablecoinError::ReasonTooLong);
 

@@ -1,3 +1,32 @@
+//! Instruction handlers for the SSS program.
+//!
+//! Each sub-module defines an Anchor `Accounts` context struct and a `handler`
+//! function. The program entry points in [`lib.rs`](crate::sss) delegate to
+//! these handlers via qualified paths.
+//!
+//! ## Core instructions (all presets)
+//!
+//! | Instruction            | Module               | Role required    |
+//! |------------------------|----------------------|------------------|
+//! | `initialize`           | [`initialize`]       | None (creator)   |
+//! | `mint_tokens`          | [`mint`]             | Minter           |
+//! | `burn_tokens`          | [`burn`]             | Burner           |
+//! | `freeze_token_account` | [`freeze_account`]   | Pauser           |
+//! | `thaw_token_account`   | [`thaw_account`]     | Pauser           |
+//! | `pause`                | [`pause`]            | Pauser           |
+//! | `unpause`              | [`unpause`]          | Pauser           |
+//! | `update_roles`         | [`update_roles`]     | Master authority |
+//! | `update_minter`        | [`update_minter`]    | Master authority |
+//! | `transfer_authority`   | [`transfer_authority`] | Master authority |
+//!
+//! ## SSS-2 compliance instructions
+//!
+//! | Instruction              | Module                    | Role required |
+//! |--------------------------|---------------------------|---------------|
+//! | `add_to_blacklist`       | [`add_to_blacklist`]      | Blacklister   |
+//! | `remove_from_blacklist`  | [`remove_from_blacklist`] | Blacklister   |
+//! | `seize`                  | [`seize`]                 | Seizer        |
+
 pub mod initialize;
 pub mod mint;
 pub mod burn;

@@ -5,6 +5,11 @@ use crate::error::StablecoinError;
 use crate::events::RoleUpdated;
 use crate::state::{RoleAccount, StablecoinConfig};
 
+/// Accounts required to assign or revoke a role.
+///
+/// Only the master authority can call this instruction. The role PDA is created
+/// on first assignment (`init_if_needed`) and persists across activate/deactivate
+/// cycles to preserve the PDA address.
 #[derive(Accounts)]
 #[instruction(role_type: u8, user: Pubkey)]
 pub struct UpdateRoles<'info> {
@@ -30,6 +35,11 @@ pub struct UpdateRoles<'info> {
     pub system_program: Program<'info, System>,
 }
 
+/// Assign or revoke a role for a user.
+///
+/// Validates the role type is in range (0–4) and that SSS-2 roles (Blacklister,
+/// Seizer) are only assignable when the corresponding feature is enabled.
+/// Emits [`RoleUpdated`].
 pub fn handler(ctx: Context<UpdateRoles>, role_type: u8, user: Pubkey, active: bool) -> Result<()> {
     require!(role_type <= ROLE_SEIZER, StablecoinError::InvalidRole);
 

@@ -5,6 +5,9 @@ use crate::error::StablecoinError;
 use crate::events::StablecoinUnpaused;
 use crate::state::{RoleAccount, StablecoinConfig};
 
+/// Accounts required to unpause the stablecoin.
+///
+/// The authority must hold an active Pauser role.
 #[derive(Accounts)]
 pub struct Unpause<'info> {
     pub authority: Signer<'info>,
@@ -24,6 +27,9 @@ pub struct Unpause<'info> {
     pub role_account: Account<'info, RoleAccount>,
 }
 
+/// Unpause the stablecoin, re-enabling mint and burn operations.
+///
+/// Fails if not currently paused. Emits [`StablecoinUnpaused`].
 pub fn handler(ctx: Context<Unpause>) -> Result<()> {
     require!(ctx.accounts.config.paused, StablecoinError::NotPaused);
 

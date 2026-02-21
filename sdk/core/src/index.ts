@@ -90,3 +90,20 @@ export {
 
 // Main SDK class
 export { SolanaStablecoin, ComplianceModule } from "./stablecoin";
+
+// Fluent operation builders
+export {
+  type BuilderContext,
+  OperationBuilder,
+  MintBuilder,
+  BurnBuilder,
+  FreezeBuilder,
+  ThawBuilder,
+  PauseBuilder,
+  UpdateRolesBuilder,
+  UpdateMinterBuilder,
+  TransferAuthorityBuilder,
+  BlacklistAddBuilder,
+  BlacklistRemoveBuilder,
+  SeizeBuilder,
+} from "./builder";

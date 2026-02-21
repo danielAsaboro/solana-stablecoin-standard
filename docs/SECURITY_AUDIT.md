@@ -220,6 +220,8 @@ Only justified uses remain:
 | `mint.rs:75` | `config.total_minted.checked_add(amount)` | u64 + u64 | `MathOverflow` |
 | `burn.rs:75` | `config.total_burned.checked_add(amount)` | u64 + u64 | `MathOverflow` |
 | `initialize.rs:103` | `ExtensionType::try_calculate_account_len` | usize | `MathOverflow` |
+| `initialize.rs:118` | `METADATA_FIXED_OVERHEAD.checked_add(name.len())...` | usize chain | `MathOverflow` |
+| `initialize.rs:124` | `space.checked_add(metadata_space)` | usize + usize | `MathOverflow` |
 
 ### Overflow Scenario Analysis
 
@@ -229,12 +231,27 @@ Only justified uses remain:
 | `minter_quota.minted` overflow | u64::MAX | Same as above | `checked_add` returns `MathOverflow` |
 | `total_burned` overflow | u64::MAX | Same — bounded by total_minted | `checked_add` returns `MathOverflow` |
 | Mint account space | Platform-bounded | Cannot overflow — `try_calculate_account_len` returns error | Mapped to `MathOverflow` |
+| Metadata space calc | Bounded (max ≈ 334 bytes) | Input validation caps name≤32, symbol≤10, uri≤200 | `checked_add` chain returns `MathOverflow` |
+| Total space (base+metadata) | Platform-bounded | Base ≈ 234 bytes + metadata ≈ 334 bytes = ~568 | `checked_add` returns `MathOverflow` |
+
+### Compile-Time Constant Arithmetic
+
+Account size constants (`StablecoinConfig::LEN`, `RoleAccount::LEN`, `MinterQuota::LEN`, `BlacklistEntry::LEN`) use `+` operators in `const` expressions. Rust evaluates `const` arithmetic at compile time with overflow checking — any overflow is a **compile-time error**, not a runtime risk.
+
+### Type Cast Audit
+
+| File | Cast | Direction | Status |
+|------|------|-----------|--------|
+| `initialize.rs:130` | `space as u64` | usize → u64 | [x] Safe — usize ≤ u64 on all Solana targets |
+| `initialize_extra_account_metas.rs:143` | `account_size as u64` | usize → u64 | [x] Safe — same reason |
+
+No narrowing casts (e.g., u64 → u32) exist in either program.
 
 ### Unchecked Arithmetic Scan
 
-**Result**: [x] Zero unchecked arithmetic operations found in production code.
+**Result**: [x] Zero unchecked arithmetic operations on runtime values in production code.
 
-No uses of `+`, `-`, `*`, `/` operators on integer types in any instruction handler. All arithmetic uses `checked_*` methods with explicit error propagation via `?`.
+Full audit verified: no uses of `+`, `-`, `*`, `/` operators on runtime integer values in any instruction handler. All runtime arithmetic uses `checked_*` methods with explicit error propagation via `ok_or(StablecoinError::MathOverflow)?`.
 
 ---
 
@@ -523,7 +540,7 @@ Events contain sufficient data for full reconstruction:
 | Access Control | 13 instructions | 0 | **Pass** |
 | PDA Validation | 5 PDA types | 0 | **Pass** |
 | Account Constraints | 14 token/mint accounts | 0 | **Pass** |
-| Arithmetic Safety | 4 operations | 0 | **Pass** |
+| Arithmetic Safety | 6 operations + 2 casts | 0 | **Pass** |
 | CPI Security | 11 CPI calls | 0 | **Pass** |
 | Reentrancy | 3 CPI chains | 0 | **Pass** |
 | Feature Gating | 4 gate points | 0 | **Pass** |

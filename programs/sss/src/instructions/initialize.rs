@@ -106,20 +106,29 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     // Calculate additional space needed for token metadata TLV entry.
     // Token-2022 will realloc the mint account when we call initialize_token_metadata,
     // but the account must have enough lamports to cover the new rent-exempt minimum.
-    // TLV overhead: 8 (discriminator) + 4 (length) = 12 bytes
-    // TokenMetadata fields: update_authority(32) + mint(32) + name(4+len) +
-    //   symbol(4+len) + uri(4+len) + additional_metadata(4)
-    let metadata_space: usize = 12
-        + 32  // update_authority (OptionalNonZeroPubkey)
-        + 32  // mint
-        + 4 + params.name.len()
-        + 4 + params.symbol.len()
-        + 4 + params.uri.len()
-        + 4;  // empty additional_metadata vec
+    //
+    // Fixed overhead (92 bytes):
+    //   TLV header: 8 (discriminator) + 4 (length) = 12
+    //   update_authority (OptionalNonZeroPubkey): 32
+    //   mint: 32
+    //   3 string length prefixes (name, symbol, uri): 4 × 3 = 12
+    //   additional_metadata vec length prefix: 4
+    //
+    // Variable part: name.len() + symbol.len() + uri.len()
+    // (bounded by validation above: ≤ 32 + 10 + 200 = 242)
+    const METADATA_FIXED_OVERHEAD: usize = 12 + 32 + 32 + 4 + 4 + 4 + 4;
+    let metadata_space = METADATA_FIXED_OVERHEAD
+        .checked_add(params.name.len())
+        .and_then(|v| v.checked_add(params.symbol.len()))
+        .and_then(|v| v.checked_add(params.uri.len()))
+        .ok_or(StablecoinError::MathOverflow)?;
 
     let rent = Rent::get()?;
     // Allocate lamports for the full size (base + metadata) to cover post-realloc rent
-    let lamports = rent.minimum_balance(space + metadata_space);
+    let total_space = space
+        .checked_add(metadata_space)
+        .ok_or(StablecoinError::MathOverflow)?;
+    let lamports = rent.minimum_balance(total_space);
 
     // 1. Create the mint account with base extension space
     invoke(

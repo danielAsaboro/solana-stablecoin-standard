@@ -29,6 +29,7 @@
  * - {@link SSSEventParser} — Strongly-typed event parsing from logs, transactions, and WebSocket
  * - Batch builders — {@link BatchBuilder}, {@link BatchMintBuilder}, etc. for multi-operation transactions
  * - {@link withRetry} — Automatic retry with exponential backoff for transient RPC failures
+ * - {@link simulateTransaction} — Pre-flight simulation with human-readable error parsing
  *
  * @module @stbr/sss-core-sdk
  * @packageDocumentation
@@ -145,3 +146,12 @@ export {
   SSSTransactionError,
   withRetry,
 } from "./retry";
+
+// Transaction simulation and pre-flight validation
+export {
+  type ProgramError,
+  type SimulationResult,
+  simulateTransaction,
+  formatSimulationError,
+  SSSSimulationError,
+} from "./simulation";

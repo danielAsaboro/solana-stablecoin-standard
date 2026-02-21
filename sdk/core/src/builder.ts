@@ -35,8 +35,6 @@ import {
   ConfirmOptions,
   sendAndConfirmTransaction,
   ComputeBudgetProgram,
-  SimulatedTransactionResponse,
-  RpcResponseAndContext,
 } from "@solana/web3.js";
 import { BN, Program } from "@coral-xyz/anchor";
 import { TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
@@ -48,6 +46,11 @@ import {
 import { getAssociatedTokenAddress, createATAInstruction } from "./utils";
 import { RoleType } from "./types";
 import { type RetryConfig, withRetry } from "./retry";
+import {
+  simulateTransaction,
+  type SimulationResult,
+  SSSSimulationError,
+} from "./simulation";
 
 /** SPL Memo Program v2 address. */
 const MEMO_PROGRAM_ID = new PublicKey(
@@ -122,6 +125,7 @@ export abstract class OperationBuilder {
   /** @internal */ protected _postInstructions: TransactionInstruction[] = [];
   /** @internal */ protected _additionalSigners: Keypair[] = [];
   /** @internal */ protected _retryConfig?: Partial<RetryConfig>;
+  /** @internal */ protected _simulateBeforeSend = false;
 
   /** @internal */
   constructor(ctx: BuilderContext) {
@@ -192,6 +196,38 @@ export abstract class OperationBuilder {
    */
   withRetry(config?: Partial<RetryConfig>): this {
     this._retryConfig = config ?? {};
+    return this;
+  }
+
+  /**
+   * Enable pre-flight simulation before sending the transaction.
+   *
+   * When enabled, `send()` will first dry-run the transaction. If the
+   * simulation detects an error, an {@link SSSSimulationError} is thrown
+   * **before** the transaction is submitted — no SOL is spent, no state
+   * is changed.
+   *
+   * This is the recommended safety net for production deployments where
+   * failed transactions waste SOL on fees and can cause confusion.
+   *
+   * @example
+   * ```ts
+   * try {
+   *   const sig = await stablecoin.mint(1_000_000)
+   *     .to(recipient)
+   *     .by(minterKeypair)
+   *     .withSimulation()
+   *     .send(payerKeypair);
+   * } catch (err) {
+   *   if (err instanceof SSSSimulationError) {
+   *     console.error("Would fail:", err.message);
+   *     console.error("Program:", err.programError?.program);
+   *   }
+   * }
+   * ```
+   */
+  withSimulation(): this {
+    this._simulateBeforeSend = true;
     return this;
   }
 
@@ -315,6 +351,14 @@ export abstract class OperationBuilder {
     signers?: Keypair[],
     opts?: ConfirmOptions
   ): Promise<string> {
+    // Pre-flight simulation: catch errors before spending SOL
+    if (this._simulateBeforeSend) {
+      const simResult = await this.dryRun(payer.publicKey);
+      if (!simResult.success) {
+        throw new SSSSimulationError(simResult);
+      }
+    }
+
     const executeSend = async (): Promise<string> => {
       // Rebuild transaction on each attempt to get a fresh blockhash
       const tx = await this.transaction(payer.publicKey);
@@ -341,30 +385,82 @@ export abstract class OperationBuilder {
   }
 
   /**
-   * Simulate the transaction without sending.
+   * Dry-run the transaction and return a structured {@link SimulationResult}.
+   *
+   * Parses raw simulation output into human-readable error messages,
+   * identifies the failing program (SSS, TransferHook, Token, Anchor),
+   * and reports compute units consumed.
+   *
+   * Unlike `simulate()`, this method **does not throw** on failure —
+   * check `result.success` instead.
    *
    * When retry is enabled, transient RPC failures during simulation
    * trigger automatic retries (e.g. rate limits, timeouts).
    *
    * @param feePayer - The fee payer public key
-   * @returns Simulation result with logs and error info
+   * @returns A structured {@link SimulationResult} with parsed errors
+   *
+   * @example
+   * ```ts
+   * const result = await stablecoin.mint(1_000_000)
+   *   .to(recipient)
+   *   .by(minter)
+   *   .dryRun(payer.publicKey);
+   *
+   * if (!result.success) {
+   *   console.error(result.error);
+   *   // "SSS error: Minter quota exceeded (QuotaExceeded, code 6003)"
+   *   console.log(`Compute units consumed: ${result.unitsConsumed}`);
+   * }
+   * ```
    */
-  async simulate(
-    feePayer: PublicKey
-  ): Promise<RpcResponseAndContext<SimulatedTransactionResponse>> {
-    const executeSimulate = async (): Promise<
-      RpcResponseAndContext<SimulatedTransactionResponse>
-    > => {
+  async dryRun(feePayer: PublicKey): Promise<SimulationResult> {
+    const executeDryRun = async (): Promise<SimulationResult> => {
       const tx = await this.transaction(feePayer);
       const connection = this.ctx.program.provider.connection;
-      return connection.simulateTransaction(tx);
+      return simulateTransaction(connection, tx);
     };
 
     const retryConfig = this._retryConfig ?? this.ctx.retryConfig;
     if (retryConfig) {
-      return withRetry(executeSimulate, retryConfig);
+      return withRetry(executeDryRun, retryConfig);
     }
-    return executeSimulate();
+    return executeDryRun();
+  }
+
+  /**
+   * Simulate the transaction without sending.
+   *
+   * This is a convenience wrapper around {@link dryRun} that throws an
+   * {@link SSSSimulationError} on failure instead of returning a result object.
+   * On success, returns the {@link SimulationResult}.
+   *
+   * @param feePayer - The fee payer public key
+   * @returns The simulation result (only on success)
+   * @throws {SSSSimulationError} If the simulation detects a failure
+   *
+   * @example
+   * ```ts
+   * try {
+   *   const result = await stablecoin.mint(1_000_000)
+   *     .to(recipient)
+   *     .by(minter)
+   *     .simulate(payer.publicKey);
+   *   console.log(`Will use ~${result.unitsConsumed} compute units`);
+   * } catch (err) {
+   *   if (err instanceof SSSSimulationError) {
+   *     console.error(err.message);
+   *     console.error(err.programError);
+   *   }
+   * }
+   * ```
+   */
+  async simulate(feePayer: PublicKey): Promise<SimulationResult> {
+    const result = await this.dryRun(feePayer);
+    if (!result.success) {
+      throw new SSSSimulationError(result);
+    }
+    return result;
   }
 }
 

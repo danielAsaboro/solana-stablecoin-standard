@@ -28,6 +28,7 @@
  * - Utility functions — Token-2022 helpers (ATA, balances, supply)
  * - {@link SSSEventParser} — Strongly-typed event parsing from logs, transactions, and WebSocket
  * - Batch builders — {@link BatchBuilder}, {@link BatchMintBuilder}, etc. for multi-operation transactions
+ * - {@link withRetry} — Automatic retry with exponential backoff for transient RPC failures
  *
  * @module @stbr/sss-core-sdk
  * @packageDocumentation
@@ -135,3 +136,12 @@ export {
   parseEvents,
   parseTransaction,
 } from "./events";
+
+// Retry and error recovery
+export {
+  type RetryConfig,
+  DEFAULT_RETRY_CONFIG,
+  isTransientError,
+  SSSTransactionError,
+  withRetry,
+} from "./retry";

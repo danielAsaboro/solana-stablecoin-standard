@@ -47,6 +47,7 @@ import {
 } from "./pda";
 import { getAssociatedTokenAddress, createATAInstruction } from "./utils";
 import { RoleType } from "./types";
+import { type RetryConfig, withRetry } from "./retry";
 
 /** SPL Memo Program v2 address. */
 const MEMO_PROGRAM_ID = new PublicKey(
@@ -70,6 +71,11 @@ export interface BuilderContext {
   readonly mintAddress: PublicKey;
   /** The StablecoinConfig PDA address. */
   readonly configAddress: PublicKey;
+  /**
+   * Default retry configuration applied to all builders created from
+   * this context. Individual builders can override via `.withRetry()`.
+   */
+  readonly retryConfig?: Partial<RetryConfig>;
 }
 
 // ---------------------------------------------------------------------------
@@ -115,6 +121,7 @@ export abstract class OperationBuilder {
   /** @internal */ protected _preInstructions: TransactionInstruction[] = [];
   /** @internal */ protected _postInstructions: TransactionInstruction[] = [];
   /** @internal */ protected _additionalSigners: Keypair[] = [];
+  /** @internal */ protected _retryConfig?: Partial<RetryConfig>;
 
   /** @internal */
   constructor(ctx: BuilderContext) {
@@ -145,6 +152,46 @@ export abstract class OperationBuilder {
    */
   withPriorityFee(microLamports: number): this {
     this._priorityFee = microLamports;
+    return this;
+  }
+
+  /**
+   * Enable automatic retry with exponential backoff for transient RPC failures.
+   *
+   * When enabled, `send()` and `simulate()` will automatically retry on
+   * transient errors (rate limits, timeouts, network issues). Permanent
+   * errors (program failures, insufficient funds) propagate immediately.
+   *
+   * Call with no arguments to use {@link DEFAULT_RETRY_CONFIG}, or pass
+   * a partial config to customize.
+   *
+   * @param config - Optional partial retry configuration
+   *
+   * @example
+   * ```ts
+   * // Use defaults (3 retries, 500ms initial delay, 2x backoff)
+   * await stablecoin.mint(1_000_000)
+   *   .to(recipient)
+   *   .by(minter)
+   *   .withRetry()
+   *   .send(payer);
+   *
+   * // Custom config with logging
+   * await stablecoin.mint(1_000_000)
+   *   .to(recipient)
+   *   .by(minter)
+   *   .withRetry({
+   *     maxRetries: 5,
+   *     initialDelayMs: 200,
+   *     onRetry: (err, attempt, delay) => {
+   *       console.log(`Retry ${attempt} in ${delay}ms: ${err.message}`);
+   *     },
+   *   })
+   *   .send(payer);
+   * ```
+   */
+  withRetry(config?: Partial<RetryConfig>): this {
+    this._retryConfig = config ?? {};
     return this;
   }
 
@@ -253,6 +300,11 @@ export abstract class OperationBuilder {
    * automatically included as signers. Pass additional signers if
    * you used PublicKeys in builder methods.
    *
+   * When retry is enabled (via `.withRetry()` or context-level
+   * {@link BuilderContext.retryConfig}), transient RPC failures
+   * trigger automatic retries with exponential backoff. Each retry
+   * rebuilds the transaction with a fresh blockhash.
+   *
    * @param payer - The transaction payer Keypair
    * @param signers - Additional signers beyond payer and auto-collected ones
    * @param opts - Transaction confirmation options
@@ -263,23 +315,36 @@ export abstract class OperationBuilder {
     signers?: Keypair[],
     opts?: ConfirmOptions
   ): Promise<string> {
-    const tx = await this.transaction(payer.publicKey);
-    const allSigners = deduplicateSigners([
-      payer,
-      ...this._additionalSigners,
-      ...(signers ?? []),
-    ]);
-    const connection = this.ctx.program.provider.connection;
-    return sendAndConfirmTransaction(
-      connection,
-      tx,
-      allSigners,
-      opts ?? { commitment: "confirmed" }
-    );
+    const executeSend = async (): Promise<string> => {
+      // Rebuild transaction on each attempt to get a fresh blockhash
+      const tx = await this.transaction(payer.publicKey);
+      const allSigners = deduplicateSigners([
+        payer,
+        ...this._additionalSigners,
+        ...(signers ?? []),
+      ]);
+      const connection = this.ctx.program.provider.connection;
+      return sendAndConfirmTransaction(
+        connection,
+        tx,
+        allSigners,
+        opts ?? { commitment: "confirmed" }
+      );
+    };
+
+    // Use per-builder config, fall back to context-level config
+    const retryConfig = this._retryConfig ?? this.ctx.retryConfig;
+    if (retryConfig) {
+      return withRetry(executeSend, retryConfig);
+    }
+    return executeSend();
   }
 
   /**
    * Simulate the transaction without sending.
+   *
+   * When retry is enabled, transient RPC failures during simulation
+   * trigger automatic retries (e.g. rate limits, timeouts).
    *
    * @param feePayer - The fee payer public key
    * @returns Simulation result with logs and error info
@@ -287,9 +352,19 @@ export abstract class OperationBuilder {
   async simulate(
     feePayer: PublicKey
   ): Promise<RpcResponseAndContext<SimulatedTransactionResponse>> {
-    const tx = await this.transaction(feePayer);
-    const connection = this.ctx.program.provider.connection;
-    return connection.simulateTransaction(tx);
+    const executeSimulate = async (): Promise<
+      RpcResponseAndContext<SimulatedTransactionResponse>
+    > => {
+      const tx = await this.transaction(feePayer);
+      const connection = this.ctx.program.provider.connection;
+      return connection.simulateTransaction(tx);
+    };
+
+    const retryConfig = this._retryConfig ?? this.ctx.retryConfig;
+    if (retryConfig) {
+      return withRetry(executeSimulate, retryConfig);
+    }
+    return executeSimulate();
   }
 }
 

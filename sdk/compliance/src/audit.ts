@@ -1,17 +1,57 @@
+/**
+ * @module audit
+ *
+ * On-chain audit log for SSS stablecoins.
+ *
+ * Reconstructs a compliance audit trail by parsing transaction history
+ * and program logs for the stablecoin config account. Supports filtering
+ * by action type, time range, and result limit.
+ *
+ * @packageDocumentation
+ */
+
 import { Connection, PublicKey } from "@solana/web3.js";
 import { BN } from "@coral-xyz/anchor";
 
+/**
+ * A single audit log entry parsed from an on-chain transaction.
+ *
+ * Each entry corresponds to one program instruction execution and
+ * includes the transaction signature for on-chain verification.
+ */
 export interface AuditEntry {
+  /** The transaction signature (base-58 encoded). */
   signature: string;
+  /** Unix timestamp of the block containing this transaction. */
   timestamp: number;
+  /** The action type (e.g., `"mint"`, `"burn"`, `"blacklist_add"`, `"seize"`). */
   action: string;
-  details: Record<string, any>;
+  /** Additional details extracted from program logs (e.g., base-64 event data). */
+  details: Record<string, unknown>;
 }
 
+/**
+ * Filter criteria for querying audit log entries.
+ *
+ * All fields are optional — omit a field to skip that filter.
+ *
+ * @example
+ * ```ts
+ * const recentMints = await audit.getEntries({
+ *   action: "mint",
+ *   fromTimestamp: Math.floor(Date.now() / 1000) - 86400,
+ *   limit: 50,
+ * });
+ * ```
+ */
 export interface AuditFilter {
+  /** Filter by action type (e.g., `"mint"`, `"burn"`, `"seize"`). */
   action?: string;
+  /** Only include entries at or after this Unix timestamp. */
   fromTimestamp?: number;
+  /** Only include entries at or before this Unix timestamp. */
   toTimestamp?: number;
+  /** Maximum number of entries to return (default: 100). */
   limit?: number;
 }
 
@@ -20,8 +60,22 @@ export interface AuditFilter {
  *
  * Parses program logs and transaction data to reconstruct an audit trail
  * of all compliance-relevant actions (mint, burn, blacklist, seize, etc.).
+ *
+ * @example
+ * ```ts
+ * const audit = new AuditLog(connection, programId, configAddress);
+ * const entries = await audit.getEntries({ action: "seize", limit: 10 });
+ * for (const entry of entries) {
+ *   console.log(`${entry.action} at ${entry.timestamp}: ${entry.signature}`);
+ * }
+ * ```
  */
 export class AuditLog {
+  /**
+   * @param connection - Solana RPC connection
+   * @param programId - The SSS program ID
+   * @param configAddress - The stablecoin config PDA address
+   */
   constructor(
     private readonly connection: Connection,
     private readonly programId: PublicKey,
@@ -80,6 +134,12 @@ export class AuditLog {
 
   /**
    * Parse the action type from transaction logs.
+   *
+   * Scans log lines for Anchor instruction markers (e.g., `"Instruction: MintTokens"`)
+   * and maps them to normalized action strings used in {@link AuditEntry.action}.
+   *
+   * @param logs - Array of program log messages from the transaction
+   * @returns The normalized action string, or `null` if no SSS instruction was found
    */
   private parseAction(logs: string[]): string | null {
     for (const log of logs) {
@@ -102,12 +162,18 @@ export class AuditLog {
 
   /**
    * Parse additional details from transaction logs.
+   *
+   * Extracts base-64 encoded Anchor event data from `"Program data:"` log lines.
+   *
+   * @param logs - Array of program log messages from the transaction
+   * @param action - The parsed action type for context
+   * @returns Key-value map of extracted details
    */
   private parseDetails(
     logs: string[],
     action: string
-  ): Record<string, any> {
-    const details: Record<string, any> = {};
+  ): Record<string, unknown> {
+    const details: Record<string, unknown> = {};
 
     // Extract program data (Anchor event emission)
     for (const log of logs) {

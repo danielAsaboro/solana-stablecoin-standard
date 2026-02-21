@@ -1,3 +1,15 @@
+/**
+ * @module compliance
+ *
+ * High-level compliance module for SSS-2 stablecoins.
+ *
+ * Wraps blacklist management, seizure operations, and audit log queries
+ * into a single cohesive API. Use this module to check compliance feature
+ * status and retrieve a compliance summary for dashboards or reports.
+ *
+ * @packageDocumentation
+ */
+
 import { Connection, PublicKey, TransactionInstruction } from "@solana/web3.js";
 import { Program, BN } from "@coral-xyz/anchor";
 import { BlacklistManager } from "./blacklist";
@@ -8,11 +20,28 @@ import { AuditLog, AuditFilter, AuditEntry } from "./audit";
  *
  * Provides a higher-level API on top of the raw program instructions
  * for blacklist management, seizure, and audit log queries.
+ *
+ * @example
+ * ```ts
+ * import { ComplianceModule } from "@stbr/sss-compliance-sdk";
+ *
+ * const compliance = new ComplianceModule(program, connection, mint, config);
+ * const summary = await compliance.getSummary();
+ * console.log(`Blacklisted addresses: ${summary.blacklistedCount}`);
+ * ```
  */
 export class ComplianceModule {
+  /** Blacklist query helper for checking and listing blacklisted addresses. */
   public readonly blacklist: BlacklistManager;
+  /** Audit log helper for querying on-chain compliance event history. */
   public readonly audit: AuditLog;
 
+  /**
+   * @param program - The Anchor program instance for the SSS program
+   * @param connection - Solana RPC connection
+   * @param mint - The Token-2022 mint address
+   * @param configAddress - The stablecoin config PDA address
+   */
   constructor(
     private readonly program: Program,
     private readonly connection: Connection,

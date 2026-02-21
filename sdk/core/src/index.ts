@@ -1,6 +1,35 @@
-// ---------------------------------------------------------------------------
-// @stbr/sss-core-sdk — Solana Stablecoin Standard Core SDK
-// ---------------------------------------------------------------------------
+/**
+ * @stbr/sss-core-sdk — Solana Stablecoin Standard Core SDK
+ *
+ * The primary entry point for interacting with SSS stablecoins on Solana.
+ *
+ * ## Quick Start
+ * ```ts
+ * import { SolanaStablecoin, Presets } from "@stbr/sss-core-sdk";
+ *
+ * // Create an SSS-2 compliant stablecoin
+ * const stable = await SolanaStablecoin.create(connection, {
+ *   ...Presets.SSS_2,
+ *   name: "My Stablecoin",
+ *   symbol: "MYUSD",
+ *   decimals: 6,
+ *   authority: wallet.publicKey,
+ * });
+ *
+ * // Or load an existing one by mint address
+ * const existing = await SolanaStablecoin.load(connection, mintAddress);
+ * ```
+ *
+ * ## Exports
+ * - {@link SolanaStablecoin} — Main SDK class (create, load, mint, burn, freeze, etc.)
+ * - {@link ComplianceModule} — SSS-2 compliance operations (blacklist, seize)
+ * - PDA helpers — `getConfigAddress`, `getRoleAddress`, etc.
+ * - {@link SSS_1}, {@link SSS_2} — Preset configurations
+ * - Utility functions — Token-2022 helpers (ATA, balances, supply)
+ *
+ * @module @stbr/sss-core-sdk
+ * @packageDocumentation
+ */
 
 // PDA derivation helpers
 export {

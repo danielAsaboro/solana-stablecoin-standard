@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface;
-use anchor_spl::token_interface::TokenInterface;
+use anchor_spl::token_interface::{TokenAccount, TokenInterface};
 
 use crate::constants::*;
 use crate::error::StablecoinError;
@@ -37,9 +37,14 @@ pub struct BurnTokens<'info> {
     )]
     pub mint: AccountInfo<'info>,
 
-    /// CHECK: Token account to burn from (must be owned/delegated by burner)
-    #[account(mut)]
-    pub from_token_account: AccountInfo<'info>,
+    /// Token account to burn from. The burner must be the owner or delegate,
+    /// which is enforced by the Token-2022 program during the burn CPI.
+    #[account(
+        mut,
+        token::mint = mint,
+        token::token_program = token_program,
+    )]
+    pub from_token_account: InterfaceAccount<'info, TokenAccount>,
 
     pub token_program: Interface<'info, TokenInterface>,
 }

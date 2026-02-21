@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface;
-use anchor_spl::token_interface::TokenInterface;
+use anchor_spl::token_interface::{TokenAccount, TokenInterface};
 
 use crate::constants::*;
 use crate::error::StablecoinError;
@@ -32,9 +32,13 @@ pub struct FreezeTokenAccount<'info> {
     #[account(address = config.mint)]
     pub mint: AccountInfo<'info>,
 
-    /// CHECK: Token account to freeze
-    #[account(mut)]
-    pub token_account: AccountInfo<'info>,
+    /// Token account to freeze, validated to belong to the correct mint and token program.
+    #[account(
+        mut,
+        token::mint = mint,
+        token::token_program = token_program,
+    )]
+    pub token_account: InterfaceAccount<'info, TokenAccount>,
 
     pub token_program: Interface<'info, TokenInterface>,
 }

@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::program::invoke_signed;
-use anchor_spl::token_interface::TokenInterface;
+use anchor_spl::token_interface::{TokenAccount, TokenInterface};
 
 use crate::constants::*;
 use crate::error::StablecoinError;
@@ -37,13 +37,21 @@ pub struct Seize<'info> {
     #[account(address = config.mint)]
     pub mint: AccountInfo<'info>,
 
-    /// CHECK: Source token account to seize from
-    #[account(mut)]
-    pub from_token_account: AccountInfo<'info>,
+    /// Source token account to seize from, validated to belong to the correct mint.
+    #[account(
+        mut,
+        token::mint = mint,
+        token::token_program = token_program,
+    )]
+    pub from_token_account: InterfaceAccount<'info, TokenAccount>,
 
-    /// CHECK: Destination token account (e.g., treasury)
-    #[account(mut)]
-    pub to_token_account: AccountInfo<'info>,
+    /// Destination token account (e.g., treasury), validated to belong to the correct mint.
+    #[account(
+        mut,
+        token::mint = mint,
+        token::token_program = token_program,
+    )]
+    pub to_token_account: InterfaceAccount<'info, TokenAccount>,
 
     pub token_program: Interface<'info, TokenInterface>,
 }
@@ -74,9 +82,9 @@ pub fn handler<'info>(ctx: Context<'_, '_, 'info, 'info, Seize<'info>>, amount: 
     // hook's ExtraAccountMetas.
     let mut ix = spl_token_2022::instruction::transfer_checked(
         ctx.accounts.token_program.key,
-        ctx.accounts.from_token_account.key,
+        ctx.accounts.from_token_account.to_account_info().key,
         ctx.accounts.mint.key,
-        ctx.accounts.to_token_account.key,
+        ctx.accounts.to_token_account.to_account_info().key,
         ctx.accounts.config.to_account_info().key,
         &[],
         amount,

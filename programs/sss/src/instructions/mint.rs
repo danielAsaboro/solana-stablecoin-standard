@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface;
-use anchor_spl::token_interface::TokenInterface;
+use anchor_spl::token_interface::{TokenAccount, TokenInterface};
 
 use crate::constants::*;
 use crate::error::StablecoinError;
@@ -43,9 +43,13 @@ pub struct MintTokens<'info> {
     )]
     pub mint: AccountInfo<'info>,
 
-    /// CHECK: Recipient token account (Token-2022), validated by token program CPI
-    #[account(mut)]
-    pub recipient_token_account: AccountInfo<'info>,
+    /// Recipient's token account, validated to belong to the correct mint and token program.
+    #[account(
+        mut,
+        token::mint = mint,
+        token::token_program = token_program,
+    )]
+    pub recipient_token_account: InterfaceAccount<'info, TokenAccount>,
 
     pub token_program: Interface<'info, TokenInterface>,
 }

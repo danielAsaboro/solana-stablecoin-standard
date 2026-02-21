@@ -1,5 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::program::invoke_signed;
+use anchor_spl::token_interface::Mint;
 use spl_tlv_account_resolution::{
     account::ExtraAccountMeta, seeds::Seed, state::ExtraAccountMetaList,
 };
@@ -25,8 +26,9 @@ pub struct InitializeExtraAccountMetaList<'info> {
     )]
     pub extra_account_metas: AccountInfo<'info>,
 
-    /// CHECK: The Token-2022 mint this hook is associated with
-    pub mint: AccountInfo<'info>,
+    /// The Token-2022 mint this hook is associated with. Validated as a
+    /// legitimate token mint by the token program ownership check.
+    pub mint: InterfaceAccount<'info, Mint>,
 
     /// CHECK: The SSS main program ID for PDA derivation
     pub sss_program: AccountInfo<'info>,

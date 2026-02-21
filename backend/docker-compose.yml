@@ -7,6 +7,12 @@ services:
       - SSS_API_KEY=dev-api-key
       - DATABASE_URL=postgres://sss:sss@postgres:5432/sss
       - RPC_URL=https://api.devnet.solana.com
+      # Required for Solana operations — set to your deployed stablecoin mint:
+      # - SSS_MINT_ADDRESS=<your-mint-address>
+      # Optional — defaults to localnet program ID:
+      # - SSS_PROGRAM_ID=DNfk1e2vMJrxHm4BwoRTVqQxcfYjZLHggxr11hMZ5Dyu
+      # Optional — defaults to ~/.config/solana/id.json:
+      # - SSS_KEYPAIR_PATH=/app/keypair.json
       - RUST_LOG=sss_backend=info,tower_http=info
     depends_on:
       - postgres

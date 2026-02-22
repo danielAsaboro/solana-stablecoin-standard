@@ -1,18 +1,15 @@
 import { Command } from "commander";
 import * as anchor from "@coral-xyz/anchor";
 import { PublicKey } from "@solana/web3.js";
-import chalk from "chalk";
 import {
   loadKeypair,
   getConnection,
   loadConfig,
   deriveRolePDA,
-  success,
-  info,
-  error as logError,
   SSS_PROGRAM_ID,
   ROLE_PAUSER,
 } from "../helpers";
+import { spin, infoMsg, errorMsg, printTxResult } from "../output";
 
 export function registerPauseCommand(program: Command): void {
   program
@@ -22,7 +19,7 @@ export function registerPauseCommand(program: Command): void {
       try {
         await handlePause(program.opts());
       } catch (err: any) {
-        logError(err.message || err.toString());
+        errorMsg((err as Error).message || String(err));
       }
     });
 
@@ -33,7 +30,7 @@ export function registerPauseCommand(program: Command): void {
       try {
         await handleUnpause(program.opts());
       } catch (err: any) {
-        logError(err.message || err.toString());
+        errorMsg((err as Error).message || String(err));
       }
     });
 }
@@ -49,26 +46,33 @@ async function handlePause(globalOpts: any): Promise<void> {
 
   const [rolePDA] = deriveRolePDA(configPDA, ROLE_PAUSER, keypair.publicKey);
 
-  info("Pausing stablecoin...");
+  infoMsg("Pausing stablecoin...");
 
   const idl = await anchor.Program.fetchIdl(SSS_PROGRAM_ID, provider);
   if (!idl) {
-    logError("Could not fetch IDL.");
+    errorMsg("Could not fetch IDL.");
     return;
   }
   const program = new anchor.Program(idl, provider);
 
-  const tx = await program.methods
-    .pause()
-    .accounts({
-      authority: keypair.publicKey,
-      config: configPDA,
-      roleAccount: rolePDA,
-    })
-    .rpc();
+  const spinner = spin("Sending pause transaction...");
+  let tx: string;
+  try {
+    tx = await program.methods
+      .pause()
+      .accounts({
+        authority: keypair.publicKey,
+        config: configPDA,
+        roleAccount: rolePDA,
+      })
+      .rpc();
+    spinner.succeed("Stablecoin paused!");
+  } catch (err) {
+    spinner.fail("Pause transaction failed");
+    throw err;
+  }
 
-  success("Stablecoin paused!");
-  console.log(chalk.cyan("  Transaction:"), tx);
+  printTxResult(tx, connection.rpcEndpoint, [["Transaction", tx]]);
 }
 
 async function handleUnpause(globalOpts: any): Promise<void> {
@@ -82,24 +86,31 @@ async function handleUnpause(globalOpts: any): Promise<void> {
 
   const [rolePDA] = deriveRolePDA(configPDA, ROLE_PAUSER, keypair.publicKey);
 
-  info("Unpausing stablecoin...");
+  infoMsg("Unpausing stablecoin...");
 
   const idl = await anchor.Program.fetchIdl(SSS_PROGRAM_ID, provider);
   if (!idl) {
-    logError("Could not fetch IDL.");
+    errorMsg("Could not fetch IDL.");
     return;
   }
   const program = new anchor.Program(idl, provider);
 
-  const tx = await program.methods
-    .unpause()
-    .accounts({
-      authority: keypair.publicKey,
-      config: configPDA,
-      roleAccount: rolePDA,
-    })
-    .rpc();
+  const spinner = spin("Sending unpause transaction...");
+  let tx: string;
+  try {
+    tx = await program.methods
+      .unpause()
+      .accounts({
+        authority: keypair.publicKey,
+        config: configPDA,
+        roleAccount: rolePDA,
+      })
+      .rpc();
+    spinner.succeed("Stablecoin unpaused!");
+  } catch (err) {
+    spinner.fail("Unpause transaction failed");
+    throw err;
+  }
 
-  success("Stablecoin unpaused!");
-  console.log(chalk.cyan("  Transaction:"), tx);
+  printTxResult(tx, connection.rpcEndpoint, [["Transaction", tx]]);
 }

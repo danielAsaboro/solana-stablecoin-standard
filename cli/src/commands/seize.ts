@@ -2,19 +2,16 @@ import { Command } from "commander";
 import * as anchor from "@coral-xyz/anchor";
 import { PublicKey } from "@solana/web3.js";
 import { TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
-import chalk from "chalk";
 import {
   loadKeypair,
   getConnection,
   loadConfig,
   deriveRolePDA,
   getATA,
-  success,
-  info,
-  error as logError,
   SSS_PROGRAM_ID,
   ROLE_SEIZER,
 } from "../helpers";
+import { spin, infoMsg, errorMsg, printTxResult } from "../output";
 
 export function registerSeizeCommand(program: Command): void {
   program
@@ -27,7 +24,7 @@ export function registerSeizeCommand(program: Command): void {
       try {
         await handleSeize(address, opts.to, opts.amount, program.opts());
       } catch (err: any) {
-        logError(err.message || err.toString());
+        errorMsg((err as Error).message || String(err));
       }
     });
 }
@@ -56,37 +53,46 @@ async function handleSeize(
   // If no amount specified, we would need to query the balance.
   // For now, amount is required.
   if (!amountStr) {
-    logError("Please specify --amount to seize.");
+    errorMsg("Please specify --amount to seize.");
     return;
   }
   const amount = new anchor.BN(amountStr);
 
-  info(`Seizing ${amountStr} tokens from ${fromPubkey.toBase58()}...`);
-  info(`Destination: ${toPubkey.toBase58()}`);
+  infoMsg(`Seizing ${amountStr} tokens from ${fromPubkey.toBase58()}...`);
+  infoMsg(`Destination: ${toPubkey.toBase58()}`);
 
   const idl = await anchor.Program.fetchIdl(SSS_PROGRAM_ID, provider);
   if (!idl) {
-    logError("Could not fetch IDL.");
+    errorMsg("Could not fetch IDL.");
     return;
   }
   const program = new anchor.Program(idl, provider);
 
-  const tx = await program.methods
-    .seize(amount)
-    .accounts({
-      authority: keypair.publicKey,
-      config: configPDA,
-      roleAccount: rolePDA,
-      mint: mintPubkey,
-      fromTokenAccount: fromATA,
-      toTokenAccount: toATA,
-      tokenProgram: TOKEN_2022_PROGRAM_ID,
-    })
-    .rpc();
+  const spinner = spin("Sending seize transaction...");
+  let tx: string;
+  try {
+    tx = await program.methods
+      .seize(amount)
+      .accounts({
+        authority: keypair.publicKey,
+        config: configPDA,
+        roleAccount: rolePDA,
+        mint: mintPubkey,
+        fromTokenAccount: fromATA,
+        toTokenAccount: toATA,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+    spinner.succeed("Tokens seized!");
+  } catch (err) {
+    spinner.fail("Seize transaction failed");
+    throw err;
+  }
 
-  success(`Tokens seized!`);
-  console.log(chalk.cyan("  Transaction:"), tx);
-  console.log(chalk.cyan("  From:       "), fromPubkey.toBase58());
-  console.log(chalk.cyan("  To:         "), toPubkey.toBase58());
-  console.log(chalk.cyan("  Amount:     "), amountStr);
+  printTxResult(tx, connection.rpcEndpoint, [
+    ["Transaction", tx],
+    ["From", fromPubkey.toBase58()],
+    ["To", toPubkey.toBase58()],
+    ["Amount", amountStr],
+  ]);
 }

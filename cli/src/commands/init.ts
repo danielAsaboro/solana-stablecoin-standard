@@ -9,12 +9,10 @@ import {
   getConnection,
   deriveConfigPDA,
   saveConfig,
-  success,
-  info,
-  error as logError,
   SSS_PROGRAM_ID,
   TRANSFER_HOOK_PROGRAM_ID,
 } from "../helpers";
+import { spin, infoMsg, errorMsg, printTxResult, printDetail } from "../output";
 
 interface InitOptions {
   preset?: string;
@@ -51,8 +49,8 @@ export function registerInitCommand(program: Command): void {
     .action(async (opts: InitOptions) => {
       try {
         await handleInit(opts, program.opts());
-      } catch (err: any) {
-        logError(err.message || err.toString());
+      } catch (err: unknown) {
+        errorMsg((err as Error).message || String(err));
       }
     });
 }
@@ -78,7 +76,7 @@ async function handleInit(opts: InitOptions, globalOpts: any): Promise<void> {
   if (opts.custom) {
     // Load custom config from JSON file
     if (!fs.existsSync(opts.custom)) {
-      logError(`Custom config file not found: ${opts.custom}`);
+      errorMsg(`Custom config file not found: ${opts.custom}`);
       return;
     }
     const customConfig: CustomConfig = JSON.parse(fs.readFileSync(opts.custom, "utf-8"));
@@ -97,16 +95,16 @@ async function handleInit(opts: InitOptions, globalOpts: any): Promise<void> {
     enablePermanentDelegate = false;
     enableTransferHook = false;
     defaultAccountFrozen = false;
-    info(`Using SSS-1 preset: basic stablecoin (no permanent delegate, no transfer hook)`);
+    infoMsg(`Using SSS-1 preset: basic stablecoin (no permanent delegate, no transfer hook)`);
   } else if (opts.preset === "sss-2") {
     presetLabel = "SSS-2";
     enablePermanentDelegate = true;
     enableTransferHook = true;
     defaultAccountFrozen = false;
     transferHookProgramId = TRANSFER_HOOK_PROGRAM_ID;
-    info(`Using SSS-2 preset: compliance stablecoin (permanent delegate + transfer hook)`);
+    infoMsg(`Using SSS-2 preset: compliance stablecoin (permanent delegate + transfer hook)`);
   } else {
-    logError('Must specify --preset sss-1|sss-2 or --custom <path>');
+    errorMsg('Must specify --preset sss-1|sss-2 or --custom <path>');
     return;
   }
 
@@ -114,55 +112,65 @@ async function handleInit(opts: InitOptions, globalOpts: any): Promise<void> {
     transferHookProgramId = TRANSFER_HOOK_PROGRAM_ID;
   }
 
-  info(`Initializing stablecoin "${name}" (${symbol}) with ${decimals} decimals...`);
-  info(`Authority: ${keypair.publicKey.toBase58()}`);
+  infoMsg(`Initializing stablecoin "${name}" (${symbol}) with ${decimals} decimals...`);
+  infoMsg(`Authority: ${keypair.publicKey.toBase58()}`);
 
   // Generate a new mint keypair
   const mintKeypair = Keypair.generate();
   const [configPDA] = deriveConfigPDA(mintKeypair.publicKey);
 
-  info(`Mint: ${mintKeypair.publicKey.toBase58()}`);
-  info(`Config PDA: ${configPDA.toBase58()}`);
+  infoMsg(`Mint: ${mintKeypair.publicKey.toBase58()}`);
+  infoMsg(`Config PDA: ${configPDA.toBase58()}`);
 
   // Build the initialize instruction
   // Note: In a full implementation this would use the IDL-generated program client.
   // For now we construct the transaction manually using anchor Program with IDL.
   const idl = await anchor.Program.fetchIdl(SSS_PROGRAM_ID, provider);
   if (!idl) {
-    logError("Could not fetch IDL for the SSS program. Make sure the program is deployed.");
+    errorMsg("Could not fetch IDL for the SSS program. Make sure the program is deployed.");
     return;
   }
 
   const program = new anchor.Program(idl, provider);
 
-  const tx = await program.methods
-    .initialize({
-      name,
-      symbol,
-      uri,
-      decimals,
-      enablePermanentDelegate,
-      enableTransferHook,
-      defaultAccountFrozen,
-      transferHookProgramId: transferHookProgramId || null,
-    })
-    .accounts({
-      authority: keypair.publicKey,
-      config: configPDA,
-      mint: mintKeypair.publicKey,
-      tokenProgram: TOKEN_2022_PROGRAM_ID,
-      associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-      systemProgram: SystemProgram.programId,
-      rent: SYSVAR_RENT_PUBKEY,
-    })
-    .signers([mintKeypair])
-    .rpc();
+  const spinner = spin("Submitting initialize transaction...");
 
-  success(`Stablecoin initialized!`);
-  console.log(chalk.cyan("  Transaction:"), tx);
-  console.log(chalk.cyan("  Config PDA: "), configPDA.toBase58());
-  console.log(chalk.cyan("  Mint:       "), mintKeypair.publicKey.toBase58());
-  console.log(chalk.cyan("  Preset:     "), presetLabel);
+  let tx: string;
+  try {
+    tx = await program.methods
+      .initialize({
+        name,
+        symbol,
+        uri,
+        decimals,
+        enablePermanentDelegate,
+        enableTransferHook,
+        defaultAccountFrozen,
+        transferHookProgramId: transferHookProgramId || null,
+      })
+      .accounts({
+        authority: keypair.publicKey,
+        config: configPDA,
+        mint: mintKeypair.publicKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        rent: SYSVAR_RENT_PUBKEY,
+      })
+      .signers([mintKeypair])
+      .rpc();
+    spinner.succeed("Stablecoin initialized!");
+  } catch (err) {
+    spinner.fail("Initialization failed");
+    throw err;
+  }
+
+  printTxResult(tx, connection.rpcEndpoint, [
+    ["Transaction", tx],
+    ["Config PDA", configPDA.toBase58()],
+    ["Mint", mintKeypair.publicKey.toBase58()],
+    ["Preset", presetLabel],
+  ]);
 
   // Save config
   saveConfig({
@@ -172,5 +180,5 @@ async function handleInit(opts: InitOptions, globalOpts: any): Promise<void> {
     preset: presetLabel,
   });
 
-  info(`Config saved to ${chalk.bold(".sss-token.json")}`);
+  infoMsg(`Config saved to ${chalk.bold(".sss-token.json")}`);
 }

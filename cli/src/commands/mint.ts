@@ -2,7 +2,6 @@ import { Command } from "commander";
 import * as anchor from "@coral-xyz/anchor";
 import { PublicKey } from "@solana/web3.js";
 import { TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
-import chalk from "chalk";
 import {
   loadKeypair,
   getConnection,
@@ -10,12 +9,10 @@ import {
   deriveRolePDA,
   deriveMinterQuotaPDA,
   getATA,
-  success,
-  info,
-  error as logError,
   SSS_PROGRAM_ID,
   ROLE_MINTER,
 } from "../helpers";
+import { spin, infoMsg, errorMsg, printTxResult } from "../output";
 
 export function registerMintCommand(program: Command): void {
   program
@@ -27,7 +24,7 @@ export function registerMintCommand(program: Command): void {
       try {
         await handleMint(recipient, amount, program.opts());
       } catch (err: any) {
-        logError(err.message || err.toString());
+        errorMsg((err as Error).message || String(err));
       }
     });
 }
@@ -48,31 +45,37 @@ async function handleMint(recipientStr: string, amountStr: string, globalOpts: a
   const [quotaPDA] = deriveMinterQuotaPDA(configPDA, keypair.publicKey);
   const recipientATA = getATA(mintPubkey, recipientPubkey);
 
-  info(`Minting ${amountStr} tokens to ${recipientPubkey.toBase58()}...`);
-  info(`Recipient ATA: ${recipientATA.toBase58()}`);
+  infoMsg(`Minting ${amountStr} tokens to ${recipientPubkey.toBase58()}...`);
+  infoMsg(`Recipient ATA: ${recipientATA.toBase58()}`);
 
   const idl = await anchor.Program.fetchIdl(SSS_PROGRAM_ID, provider);
   if (!idl) {
-    logError("Could not fetch IDL.");
+    errorMsg("Could not fetch IDL.");
     return;
   }
   const program = new anchor.Program(idl, provider);
 
-  const tx = await program.methods
-    .mintTokens(amount)
-    .accounts({
-      minter: keypair.publicKey,
-      config: configPDA,
-      roleAccount: rolePDA,
-      minterQuota: quotaPDA,
-      mint: mintPubkey,
-      recipientTokenAccount: recipientATA,
-      tokenProgram: TOKEN_2022_PROGRAM_ID,
-    })
-    .rpc();
+  const spinner = spin("Sending mint transaction...");
 
-  success(`Minted ${amountStr} tokens!`);
-  console.log(chalk.cyan("  Transaction:"), tx);
-  console.log(chalk.cyan("  Recipient:  "), recipientPubkey.toBase58());
-  console.log(chalk.cyan("  Amount:     "), amountStr);
+  let tx: string;
+  try {
+    tx = await program.methods
+      .mintTokens(amount)
+      .accounts({
+        minter: keypair.publicKey,
+        config: configPDA,
+        roleAccount: rolePDA,
+        minterQuota: quotaPDA,
+        mint: mintPubkey,
+        recipientTokenAccount: recipientATA,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+    spinner.succeed("Tokens minted successfully!");
+  } catch (err) {
+    spinner.fail("Mint transaction failed");
+    throw err;
+  }
+
+  printTxResult(tx, connection.rpcEndpoint, [["Transaction", tx], ["Recipient", recipientPubkey.toBase58()], ["Amount", amountStr]]);
 }

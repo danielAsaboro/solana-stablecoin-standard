@@ -7,9 +7,6 @@ import {
   getConnection,
   loadConfig,
   deriveRolePDA,
-  success,
-  info,
-  error as logError,
   parseRoleType,
   roleName,
   SSS_PROGRAM_ID,
@@ -19,6 +16,7 @@ import {
   ROLE_BLACKLISTER,
   ROLE_SEIZER,
 } from "../helpers";
+import { spin, infoMsg, errorMsg, printTxResult, printHeader, printField, printDivider } from "../output";
 
 export function registerRolesCommand(program: Command): void {
   const roles = program
@@ -34,7 +32,7 @@ export function registerRolesCommand(program: Command): void {
       try {
         await handleRolesUpdate(role, address, true, program.opts());
       } catch (err: any) {
-        logError(err.message || err.toString());
+        errorMsg((err as Error).message || String(err));
       }
     });
 
@@ -47,7 +45,7 @@ export function registerRolesCommand(program: Command): void {
       try {
         await handleRolesUpdate(role, address, false, program.opts());
       } catch (err: any) {
-        logError(err.message || err.toString());
+        errorMsg((err as Error).message || String(err));
       }
     });
 
@@ -59,7 +57,7 @@ export function registerRolesCommand(program: Command): void {
       try {
         await handleRolesList(address, program.opts());
       } catch (err: any) {
-        logError(err.message || err.toString());
+        errorMsg((err as Error).message || String(err));
       }
     });
 }
@@ -83,30 +81,35 @@ async function handleRolesUpdate(
   const [rolePDA] = deriveRolePDA(configPDA, roleType, userPubkey);
 
   const action = active ? "Assigning" : "Revoking";
-  info(`${action} ${roleName(roleType)} role ${active ? "to" : "from"} ${userPubkey.toBase58()}...`);
+  infoMsg(`${action} ${roleName(roleType)} role ${active ? "to" : "from"} ${userPubkey.toBase58()}...`);
 
   const idl = await anchor.Program.fetchIdl(SSS_PROGRAM_ID, provider);
   if (!idl) {
-    logError("Could not fetch IDL.");
+    errorMsg("Could not fetch IDL.");
     return;
   }
   const program = new anchor.Program(idl, provider);
 
-  const tx = await program.methods
-    .updateRoles(roleType, userPubkey, active)
-    .accounts({
-      authority: keypair.publicKey,
-      config: configPDA,
-      roleAccount: rolePDA,
-      systemProgram: SystemProgram.programId,
-    })
-    .rpc();
+  const spinner = spin("Sending role update transaction...");
 
-  success(`Role ${active ? "assigned" : "revoked"}!`);
-  console.log(chalk.cyan("  Transaction:"), tx);
-  console.log(chalk.cyan("  Role:       "), roleName(roleType));
-  console.log(chalk.cyan("  User:       "), userPubkey.toBase58());
-  console.log(chalk.cyan("  Active:     "), active ? chalk.green("YES") : chalk.red("NO"));
+  let tx: string;
+  try {
+    tx = await program.methods
+      .updateRoles(roleType, userPubkey, active)
+      .accounts({
+        authority: keypair.publicKey,
+        config: configPDA,
+        roleAccount: rolePDA,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+  } catch (err) {
+    spinner.fail("Role update failed");
+    throw err;
+  }
+
+  spinner.succeed(`Role ${active ? "assigned" : "revoked"}!`);
+  printTxResult(tx, connection.rpcEndpoint, [["Transaction", tx], ["Role", roleName(roleType)], ["User", userPubkey.toBase58()], ["Active", active ? "YES" : "NO"]]);
 }
 
 async function handleRolesList(addressStr: string, globalOpts: any): Promise<void> {
@@ -121,25 +124,31 @@ async function handleRolesList(addressStr: string, globalOpts: any): Promise<voi
 
   const idl = await anchor.Program.fetchIdl(SSS_PROGRAM_ID, provider);
   if (!idl) {
-    logError("Could not fetch IDL.");
+    errorMsg("Could not fetch IDL.");
     return;
   }
   const program = new anchor.Program(idl, provider);
 
-  console.log(chalk.bold(`\n  Roles for ${userPubkey.toBase58()}`));
-  console.log(chalk.gray("  " + "-".repeat(50)));
+  const spinner = spin("Fetching roles...");
 
   const allRoles = [ROLE_MINTER, ROLE_BURNER, ROLE_PAUSER, ROLE_BLACKLISTER, ROLE_SEIZER];
 
+  const results: Array<{ rt: number; status: string }> = [];
   for (const rt of allRoles) {
     const [rolePDA] = deriveRolePDA(configPDA, rt, userPubkey);
     try {
       const roleAcct = await (program.account as any).roleAccount.fetch(rolePDA);
       const status = roleAcct.active ? chalk.green("ACTIVE") : chalk.red("INACTIVE");
-      console.log(`  ${chalk.cyan(roleName(rt).padEnd(15))} ${status}`);
+      results.push({ rt, status });
     } catch {
-      console.log(`  ${chalk.cyan(roleName(rt).padEnd(15))} ${chalk.gray("NOT ASSIGNED")}`);
+      results.push({ rt, status: chalk.gray("NOT ASSIGNED") });
     }
+  }
+
+  spinner.stop();
+  printHeader(`Roles for ${userPubkey.toBase58()}`);
+  for (const { rt, status } of results) {
+    printField(roleName(rt), status);
   }
   console.log();
 }

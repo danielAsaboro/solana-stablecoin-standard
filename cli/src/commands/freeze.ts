@@ -2,19 +2,16 @@ import { Command } from "commander";
 import * as anchor from "@coral-xyz/anchor";
 import { PublicKey } from "@solana/web3.js";
 import { TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
-import chalk from "chalk";
 import {
   loadKeypair,
   getConnection,
   loadConfig,
   deriveRolePDA,
   getATA,
-  success,
-  info,
-  error as logError,
   SSS_PROGRAM_ID,
   ROLE_PAUSER,
 } from "../helpers";
+import { spin, infoMsg, errorMsg, printTxResult } from "../output";
 
 export function registerFreezeCommand(program: Command): void {
   program
@@ -25,7 +22,7 @@ export function registerFreezeCommand(program: Command): void {
       try {
         await handleFreeze(address, program.opts());
       } catch (err: any) {
-        logError(err.message || err.toString());
+        errorMsg((err as Error).message || String(err));
       }
     });
 
@@ -37,7 +34,7 @@ export function registerFreezeCommand(program: Command): void {
       try {
         await handleThaw(address, program.opts());
       } catch (err: any) {
-        logError(err.message || err.toString());
+        errorMsg((err as Error).message || String(err));
       }
     });
 }
@@ -56,30 +53,36 @@ async function handleFreeze(addressStr: string, globalOpts: any): Promise<void> 
   const [rolePDA] = deriveRolePDA(configPDA, ROLE_PAUSER, keypair.publicKey);
   const targetATA = getATA(mintPubkey, targetPubkey);
 
-  info(`Freezing token account for ${targetPubkey.toBase58()}...`);
+  infoMsg(`Freezing token account for ${targetPubkey.toBase58()}...`);
 
   const idl = await anchor.Program.fetchIdl(SSS_PROGRAM_ID, provider);
   if (!idl) {
-    logError("Could not fetch IDL.");
+    errorMsg("Could not fetch IDL.");
     return;
   }
   const program = new anchor.Program(idl, provider);
 
-  const tx = await program.methods
-    .freezeTokenAccount()
-    .accounts({
-      authority: keypair.publicKey,
-      config: configPDA,
-      roleAccount: rolePDA,
-      mint: mintPubkey,
-      tokenAccount: targetATA,
-      tokenProgram: TOKEN_2022_PROGRAM_ID,
-    })
-    .rpc();
+  const spinner = spin("Sending freeze transaction...");
+  let tx: string;
+  try {
+    tx = await program.methods
+      .freezeTokenAccount()
+      .accounts({
+        authority: keypair.publicKey,
+        config: configPDA,
+        roleAccount: rolePDA,
+        mint: mintPubkey,
+        tokenAccount: targetATA,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+    spinner.succeed("Token account frozen!");
+  } catch (err) {
+    spinner.fail("Freeze transaction failed");
+    throw err;
+  }
 
-  success(`Token account frozen!`);
-  console.log(chalk.cyan("  Transaction:   "), tx);
-  console.log(chalk.cyan("  Token Account: "), targetATA.toBase58());
+  printTxResult(tx, connection.rpcEndpoint, [["Transaction", tx], ["Token Account", targetATA.toBase58()], ["Owner", targetPubkey.toBase58()]]);
 }
 
 async function handleThaw(addressStr: string, globalOpts: any): Promise<void> {
@@ -96,28 +99,34 @@ async function handleThaw(addressStr: string, globalOpts: any): Promise<void> {
   const [rolePDA] = deriveRolePDA(configPDA, ROLE_PAUSER, keypair.publicKey);
   const targetATA = getATA(mintPubkey, targetPubkey);
 
-  info(`Thawing token account for ${targetPubkey.toBase58()}...`);
+  infoMsg(`Thawing token account for ${targetPubkey.toBase58()}...`);
 
   const idl = await anchor.Program.fetchIdl(SSS_PROGRAM_ID, provider);
   if (!idl) {
-    logError("Could not fetch IDL.");
+    errorMsg("Could not fetch IDL.");
     return;
   }
   const program = new anchor.Program(idl, provider);
 
-  const tx = await program.methods
-    .thawTokenAccount()
-    .accounts({
-      authority: keypair.publicKey,
-      config: configPDA,
-      roleAccount: rolePDA,
-      mint: mintPubkey,
-      tokenAccount: targetATA,
-      tokenProgram: TOKEN_2022_PROGRAM_ID,
-    })
-    .rpc();
+  const spinner = spin("Sending thaw transaction...");
+  let tx: string;
+  try {
+    tx = await program.methods
+      .thawTokenAccount()
+      .accounts({
+        authority: keypair.publicKey,
+        config: configPDA,
+        roleAccount: rolePDA,
+        mint: mintPubkey,
+        tokenAccount: targetATA,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+    spinner.succeed("Token account thawed!");
+  } catch (err) {
+    spinner.fail("Thaw transaction failed");
+    throw err;
+  }
 
-  success(`Token account thawed!`);
-  console.log(chalk.cyan("  Transaction:   "), tx);
-  console.log(chalk.cyan("  Token Account: "), targetATA.toBase58());
+  printTxResult(tx, connection.rpcEndpoint, [["Transaction", tx], ["Token Account", targetATA.toBase58()], ["Owner", targetPubkey.toBase58()]]);
 }

@@ -1,9 +1,21 @@
+# SSS Program Fuzz Test Configuration
+#
+# Property-based fuzz tests using proptest to verify the SSS state machine.
+# Tests generate random operation sequences and check invariants after every step.
+#
+# Run: cd trident-tests && cargo test
+
 [fuzz]
-# Fuzzing configuration
+# Total randomized test cases across all suites: ~11,800
+# Increase with PROPTEST_CASES=N for deeper fuzzing
 fuzzing_with_stats = true
 allow_duplicate_txs = false
-programs_data = []
 
 [test]
-# Validator settings for invariant tests
 validator_startup_timeout = 15000
+
+[proptest]
+# Default cases per test (overridable via PROPTEST_CASES env var)
+cases = 1000
+# Max shrink iterations when a failure is found
+max_shrink_iters = 10000

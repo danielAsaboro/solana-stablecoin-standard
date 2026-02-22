@@ -18,6 +18,7 @@ SSS provides two preset configurations -- **SSS-1** (minimal) and **SSS-2** (com
 - [Tutorial: Launch an SSS-1 Stablecoin](#tutorial-launch-an-sss-1-stablecoin)
 - [Tutorial: Launch an SSS-2 Compliant Stablecoin](#tutorial-launch-an-sss-2-compliant-stablecoin)
 - [Tutorial: TypeScript SDK](#tutorial-typescript-sdk)
+- [Devnet Deployment](#devnet-deployment)
 - [Program IDs](#program-ids)
 - [SDK Usage](#sdk-usage)
 - [CLI Reference](#cli-reference)
@@ -731,6 +732,73 @@ For the full SDK API reference with 15 sections and 5 end-to-end workflows, see 
 
 ---
 
+## Devnet Deployment
+
+All three SSS programs can be deployed to Solana devnet using the automated deployment script or manually. The programs have been fully verified on a local validator with 155 passing tests (81 integration + 53 backend + 21 fuzz).
+
+### Quick Deploy
+
+```bash
+# Automated: deploys all programs and runs demo transactions
+./scripts/deploy-devnet.sh
+```
+
+### Manual Deploy
+
+```bash
+# 1. Switch to devnet
+solana config set --url https://api.devnet.solana.com
+
+# 2. Ensure sufficient SOL (~7 SOL needed for 3 programs)
+solana balance
+
+# 3. Deploy each program
+anchor deploy --program-name sss --provider.cluster devnet
+anchor deploy --program-name transfer_hook --provider.cluster devnet
+anchor deploy --program-name sss_oracle --provider.cluster devnet
+
+# 4. Run SSS-1 demo (init, roles, mint, burn, freeze, thaw, pause, unpause)
+ANCHOR_PROVIDER_URL=https://api.devnet.solana.com \
+ANCHOR_WALLET=~/.config/solana/id.json \
+npx ts-node scripts/deploy-devnet.ts
+
+# 5. Run SSS-2 demo (init, hook, roles, mint, blacklist, seize, unblacklist)
+ANCHOR_PROVIDER_URL=https://api.devnet.solana.com \
+ANCHOR_WALLET=~/.config/solana/id.json \
+npx ts-node scripts/deploy-sss2-devnet.ts
+```
+
+### Demo Transaction Proof (Localnet)
+
+Both scripts have been verified against a local validator. Example output:
+
+**SSS-1 Lifecycle** (init -> roles -> mint -> burn -> freeze -> thaw -> pause -> unpause):
+```
+Program ID: DNfk1e2vMJrxHm4BwoRTVqQxcfYjZLHggxr11hMZ5Dyu
+Initialize:  5su3q5RDgEw1oHVzSzQAL...
+Mint 100:    5pvLCnhdYPHVwVC3y1AXq...
+Burn 10:     5DsiDTnqA4aybTgZEfgbQ...
+Freeze:      4PEtXS4UhnQjDghzGPXdW...
+Thaw:        5wTs6ieVgKRBVGNqtreBb...
+Pause:       4xQCP55eJyAfWnik2uypdm...
+Unpause:     2fCQZHjdEvzR57dCCdeD2f...
+```
+
+**SSS-2 Compliance** (init -> hook -> roles -> mint -> blacklist -> seize -> unblacklist):
+```
+SSS Program:  DNfk1e2vMJrxHm4BwoRTVqQxcfYjZLHggxr11hMZ5Dyu
+Hook Program: Gcd58Ng9gqRg1XtiU1i8KopwX1u82Mt9VmxKbLJ8RANH
+Initialize:   533Xi1MQPe4vQ8zP3XpAw...
+Init Hook:    4BVY3dT1WzXZ3ENL29am9v...
+Blacklist:    3yiWkxC22NFSpN3EkmNM9m...
+Seize (PD):   REwUV7x4jVFCeGbn47HHz...
+Unblacklist:  4hLqK6yrT5SMdTF46Gb6oP...
+```
+
+For the complete deployment guide with all transaction signatures and troubleshooting, see [docs/DEVNET_DEPLOYMENT.md](docs/DEVNET_DEPLOYMENT.md).
+
+---
+
 ## Program IDs
 
 ### Devnet
@@ -988,6 +1056,8 @@ All `/api/v1/*` endpoints require an API key via the `X-API-Key` header. See [do
 | [Operations Runbook](docs/OPERATIONS.md)  | Step-by-step guide for every operation       |
 | [Compliance Guide](docs/COMPLIANCE.md)    | Regulatory considerations and audit trail    |
 | [API Reference](docs/API.md)             | Backend REST API documentation               |
+| [Devnet Deployment](docs/DEVNET_DEPLOYMENT.md) | Deployment guide with scripts and proof |
+| [Security Audit](docs/SECURITY_AUDIT.md) | Comprehensive security audit checklist       |
 
 ---
 

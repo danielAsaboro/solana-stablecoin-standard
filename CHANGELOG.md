@@ -160,5 +160,17 @@ with two presets: SSS-1 (Minimal Stablecoin) and SSS-2 (Compliant Stablecoin).
 - `docs/COMPLIANCE.md` — Regulatory considerations and audit trail format
 - `docs/API.md` — Backend REST API reference
 - `docs/SECURITY_AUDIT.md` — Comprehensive security audit checklist
+- `docs/DEVNET_DEPLOYMENT.md` — Devnet deployment guide with automated scripts,
+  example transactions, program IDs, and troubleshooting
+
+#### Deployment Automation
+- `scripts/deploy-devnet.sh` — Automated shell script for full devnet deployment
+  (builds, deploys 3 programs, runs demos, captures tx signatures, Explorer links)
+- `scripts/deploy-devnet.ts` — SSS-1 demo script exercising all 8 core operations
+  (init, roles, quota, mint, burn, freeze/thaw, pause/unpause) with tx signatures
+  and Explorer links output
+- `scripts/deploy-sss2-devnet.ts` — SSS-2 compliance demo script exercising full
+  lifecycle (init, hook setup, 5 roles, mint, blacklist, seize via permanent delegate
+  with transfer hook extra account resolution, unblacklist) with tx signatures output
 
 [0.1.0]: https://github.com/solanabr/solana-stablecoin-standard/releases/tag/v0.1.0

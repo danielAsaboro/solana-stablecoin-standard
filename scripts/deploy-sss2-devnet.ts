@@ -15,6 +15,8 @@ import {
   TOKEN_2022_PROGRAM_ID,
   getAssociatedTokenAddressSync,
   createAssociatedTokenAccountInstruction,
+  createTransferCheckedInstruction,
+  addExtraAccountMetasForExecute,
   ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 
@@ -201,12 +203,57 @@ async function main() {
 
   console.log(`  Minted 500 tokens: ${mintTx}`);
 
-  // --- Step 5: Blacklist an address ---
-  console.log("\n--- Step 5: Blacklist Demo ---");
+  // --- Step 5: Mint to a second user for seize demo ---
+  console.log("\n--- Step 5: Mint to Second User ---");
 
-  const suspiciousUser = Keypair.generate();
+  const secondUser = Keypair.generate();
+  const fundTx = new anchor.web3.Transaction().add(
+    SystemProgram.transfer({
+      fromPubkey: authority.publicKey,
+      toPubkey: secondUser.publicKey,
+      lamports: 100_000_000,
+    })
+  );
+  await provider.sendAndConfirm(fundTx);
+
+  const secondUserAta = getAssociatedTokenAddressSync(
+    mintKey,
+    secondUser.publicKey,
+    false,
+    TOKEN_2022_PROGRAM_ID
+  );
+
+  const createSecondAtaTx = new anchor.web3.Transaction().add(
+    createAssociatedTokenAccountInstruction(
+      authority.publicKey,
+      secondUserAta,
+      secondUser.publicKey,
+      mintKey,
+      TOKEN_2022_PROGRAM_ID
+    )
+  );
+  await provider.sendAndConfirm(createSecondAtaTx);
+
+  const mint2Tx = await sssProgram.methods
+    .mintTokens(new anchor.BN(200_000_000))
+    .accountsStrict({
+      minter: authority.publicKey,
+      config: configPda,
+      roleAccount: minterRolePda,
+      minterQuota: minterQuotaPda,
+      mint: mintKey,
+      recipientTokenAccount: secondUserAta,
+      tokenProgram: TOKEN_2022_PROGRAM_ID,
+    })
+    .rpc();
+
+  console.log(`  Minted 200 tokens to ${secondUser.publicKey.toBase58().slice(0, 8)}...: ${mint2Tx}`);
+
+  // --- Step 6: Blacklist the second user ---
+  console.log("\n--- Step 6: Blacklist Address ---");
+
   const [blacklistPda] = PublicKey.findProgramAddressSync(
-    [BLACKLIST_SEED, configPda.toBuffer(), suspiciousUser.publicKey.toBuffer()],
+    [BLACKLIST_SEED, configPda.toBuffer(), secondUser.publicKey.toBuffer()],
     sssProgram.programId
   );
 
@@ -221,7 +268,7 @@ async function main() {
   );
 
   const blTx = await sssProgram.methods
-    .addToBlacklist(suspiciousUser.publicKey, "Suspicious activity detected")
+    .addToBlacklist(secondUser.publicKey, "OFAC sanctioned entity")
     .accountsStrict({
       authority: authority.publicKey,
       config: configPda,
@@ -231,13 +278,66 @@ async function main() {
     })
     .rpc();
 
-  console.log(`  Blacklisted ${suspiciousUser.publicKey.toBase58().slice(0, 8)}...: ${blTx}`);
+  console.log(`  Blacklisted ${secondUser.publicKey.toBase58().slice(0, 8)}...: ${blTx}`);
 
-  // --- Step 6: Remove from Blacklist ---
-  console.log("\n--- Step 6: Remove from Blacklist ---");
+  // --- Step 7: Seize tokens via permanent delegate ---
+  console.log("\n--- Step 7: Seize Tokens (Permanent Delegate) ---");
+
+  const [seizerRolePda] = PublicKey.findProgramAddressSync(
+    [
+      ROLE_SEED,
+      configPda.toBuffer(),
+      Buffer.from([ROLE_SEIZER]),
+      authority.publicKey.toBuffer(),
+    ],
+    sssProgram.programId
+  );
+
+  // Build extra accounts for seize CPI (transfer hook resolution)
+  const dummyIx = createTransferCheckedInstruction(
+    secondUserAta,
+    mintKey,
+    authorityAta,
+    configPda,        // permanent delegate = config PDA
+    BigInt(200_000_000),
+    6,
+    [],
+    TOKEN_2022_PROGRAM_ID
+  );
+  await addExtraAccountMetasForExecute(
+    provider.connection,
+    dummyIx,
+    hookProgram.programId,
+    secondUserAta,
+    mintKey,
+    authorityAta,
+    configPda,
+    BigInt(200_000_000),
+    "confirmed"
+  );
+  const extraKeys = dummyIx.keys.slice(4);
+
+  const seizeTx = await sssProgram.methods
+    .seize(new anchor.BN(200_000_000))
+    .accountsStrict({
+      authority: authority.publicKey,
+      config: configPda,
+      roleAccount: seizerRolePda,
+      mint: mintKey,
+      fromTokenAccount: secondUserAta,
+      toTokenAccount: authorityAta,
+      tokenProgram: TOKEN_2022_PROGRAM_ID,
+    })
+    .remainingAccounts(extraKeys)
+    .rpc();
+
+  console.log(`  Seized 200 tokens from ${secondUser.publicKey.toBase58().slice(0, 8)}...: ${seizeTx}`);
+
+  // --- Step 8: Remove from Blacklist ---
+  console.log("\n--- Step 8: Remove from Blacklist ---");
 
   const unblTx = await sssProgram.methods
-    .removeFromBlacklist(suspiciousUser.publicKey)
+    .removeFromBlacklist(secondUser.publicKey)
     .accountsStrict({
       authority: authority.publicKey,
       config: configPda,
@@ -246,19 +346,44 @@ async function main() {
     })
     .rpc();
 
-  console.log(`  Unblacklisted: ${unblTx}`);
+  console.log(`  Unblacklisted ${secondUser.publicKey.toBase58().slice(0, 8)}...: ${unblTx}`);
 
   // --- Final Status ---
   console.log("\n--- Final Status ---");
-  const config = await (sssProgram.account as any).stablecoinConfig.fetch(configPda);
-  console.log(`  Name:             ${config.name}`);
-  console.log(`  Symbol:           ${config.symbol}`);
-  console.log(`  Total Minted:     ${config.totalMinted.toString()}`);
+  const config = await (sssProgram.account as Record<string, { fetch: (addr: PublicKey) => Promise<Record<string, unknown>> }>).stablecoinConfig.fetch(configPda);
+  console.log(`  Name:               ${config.name}`);
+  console.log(`  Symbol:             ${config.symbol}`);
+  console.log(`  Total Minted:       ${String(config.totalMinted)}`);
   console.log(`  Permanent Delegate: ${config.enablePermanentDelegate}`);
-  console.log(`  Transfer Hook:    ${config.enableTransferHook}`);
-  console.log(`  Hook Program:     ${config.transferHookProgram.toBase58()}`);
+  console.log(`  Transfer Hook:      ${config.enableTransferHook}`);
+
+  // --- Summary ---
+  const cluster = provider.connection.rpcEndpoint.includes("devnet") ? "devnet" : "custom";
+  const explorerBase = "https://explorer.solana.com";
+  const clusterParam = cluster === "devnet" ? "?cluster=devnet" : "?cluster=custom&customUrl=" + encodeURIComponent(provider.connection.rpcEndpoint);
 
   console.log("\n=== SSS-2 Deployment Complete! ===");
+  console.log("\nProgram IDs:");
+  console.log(`  SSS Program:       ${sssProgram.programId.toBase58()}`);
+  console.log(`  Hook Program:      ${hookProgram.programId.toBase58()}`);
+  console.log("\nAddresses:");
+  console.log(`  Mint:              ${mintKey.toBase58()}`);
+  console.log(`  Config PDA:        ${configPda.toBase58()}`);
+  console.log(`  ExtraAccountMetas: ${extraAccountMetasPda.toBase58()}`);
+  console.log(`  Authority:         ${authority.publicKey.toBase58()}`);
+  console.log("\nTransaction Signatures:");
+  console.log(`  Initialize:        ${tx1}`);
+  console.log(`  Init Hook:         ${hookTx}`);
+  console.log(`  Mint (authority):  ${mintTx}`);
+  console.log(`  Mint (2nd user):   ${mint2Tx}`);
+  console.log(`  Blacklist:         ${blTx}`);
+  console.log(`  Seize:             ${seizeTx}`);
+  console.log(`  Unblacklist:       ${unblTx}`);
+  console.log("\nExplorer Links:");
+  console.log(`  SSS Program:       ${explorerBase}/address/${sssProgram.programId.toBase58()}${clusterParam}`);
+  console.log(`  Hook Program:      ${explorerBase}/address/${hookProgram.programId.toBase58()}${clusterParam}`);
+  console.log(`  Initialize Tx:     ${explorerBase}/tx/${tx1}${clusterParam}`);
+  console.log(`  Seize Tx:          ${explorerBase}/tx/${seizeTx}${clusterParam}`);
 }
 
 main().catch(console.error);

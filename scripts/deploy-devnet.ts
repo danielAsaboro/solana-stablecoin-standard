@@ -179,22 +179,138 @@ async function main() {
 
   console.log(`  Minted 100 tokens: ${mintTx}`);
 
-  // --- Step 5: Check Status ---
-  console.log("\n--- Step 5: Status ---");
-  const config = await (program.account as any).stablecoinConfig.fetch(configPda);
+  // --- Step 5: Burn Tokens ---
+  console.log("\n--- Step 5: Burn Tokens ---");
+
+  const [burnerRolePda] = PublicKey.findProgramAddressSync(
+    [
+      ROLE_SEED,
+      configPda.toBuffer(),
+      Buffer.from([ROLE_BURNER]),
+      authority.publicKey.toBuffer(),
+    ],
+    program.programId
+  );
+
+  const burnTx = await program.methods
+    .burnTokens(new anchor.BN(10_000_000)) // 10 tokens
+    .accountsStrict({
+      burner: authority.publicKey,
+      config: configPda,
+      roleAccount: burnerRolePda,
+      mint: mintKey,
+      fromTokenAccount: recipientAta,
+      tokenProgram: TOKEN_2022_PROGRAM_ID,
+    })
+    .rpc();
+
+  console.log(`  Burned 10 tokens: ${burnTx}`);
+
+  // --- Step 6: Freeze / Thaw Account ---
+  console.log("\n--- Step 6: Freeze and Thaw ---");
+
+  const [pauserRolePda] = PublicKey.findProgramAddressSync(
+    [
+      ROLE_SEED,
+      configPda.toBuffer(),
+      Buffer.from([ROLE_PAUSER]),
+      authority.publicKey.toBuffer(),
+    ],
+    program.programId
+  );
+
+  const freezeTx = await program.methods
+    .freezeTokenAccount()
+    .accountsStrict({
+      authority: authority.publicKey,
+      config: configPda,
+      roleAccount: pauserRolePda,
+      mint: mintKey,
+      tokenAccount: recipientAta,
+      tokenProgram: TOKEN_2022_PROGRAM_ID,
+    })
+    .rpc();
+
+  console.log(`  Froze account:   ${freezeTx}`);
+
+  const thawTx = await program.methods
+    .thawTokenAccount()
+    .accountsStrict({
+      authority: authority.publicKey,
+      config: configPda,
+      roleAccount: pauserRolePda,
+      mint: mintKey,
+      tokenAccount: recipientAta,
+      tokenProgram: TOKEN_2022_PROGRAM_ID,
+    })
+    .rpc();
+
+  console.log(`  Thawed account:  ${thawTx}`);
+
+  // --- Step 7: Pause / Unpause ---
+  console.log("\n--- Step 7: Pause and Unpause ---");
+
+  const pauseTx = await program.methods
+    .pause()
+    .accountsStrict({
+      authority: authority.publicKey,
+      config: configPda,
+      roleAccount: pauserRolePda,
+    })
+    .rpc();
+
+  console.log(`  Paused system:   ${pauseTx}`);
+
+  const unpauseTx = await program.methods
+    .unpause()
+    .accountsStrict({
+      authority: authority.publicKey,
+      config: configPda,
+      roleAccount: pauserRolePda,
+    })
+    .rpc();
+
+  console.log(`  Unpaused system: ${unpauseTx}`);
+
+  // --- Step 8: Final Status ---
+  console.log("\n--- Step 8: Final Status ---");
+  const config = await (program.account as Record<string, { fetch: (addr: PublicKey) => Promise<Record<string, unknown>> }>).stablecoinConfig.fetch(configPda);
   console.log(`  Name:         ${config.name}`);
   console.log(`  Symbol:       ${config.symbol}`);
   console.log(`  Decimals:     ${config.decimals}`);
-  console.log(`  Total Minted: ${config.totalMinted.toString()}`);
-  console.log(`  Total Burned: ${config.totalBurned.toString()}`);
+  console.log(`  Total Minted: ${String(config.totalMinted)}`);
+  console.log(`  Total Burned: ${String(config.totalBurned)}`);
   console.log(`  Paused:       ${config.paused}`);
   console.log(`  PD Enabled:   ${config.enablePermanentDelegate}`);
   console.log(`  Hook Enabled: ${config.enableTransferHook}`);
 
-  console.log("\n=== Deployment Complete! ===");
-  console.log(`\nSave these for future reference:`);
-  console.log(`  Mint Address:   ${mintKey.toBase58()}`);
-  console.log(`  Config Address: ${configPda.toBase58()}`);
+  // --- Summary ---
+  const cluster = provider.connection.rpcEndpoint.includes("devnet") ? "devnet" : "custom";
+  const explorerBase = cluster === "devnet"
+    ? "https://explorer.solana.com"
+    : "https://explorer.solana.com";
+  const clusterParam = cluster === "devnet" ? "?cluster=devnet" : "?cluster=custom&customUrl=" + encodeURIComponent(provider.connection.rpcEndpoint);
+
+  console.log("\n=== SSS-1 Deployment Complete! ===");
+  console.log("\nProgram IDs:");
+  console.log(`  SSS Program:    ${program.programId.toBase58()}`);
+  console.log("\nAddresses:");
+  console.log(`  Mint:           ${mintKey.toBase58()}`);
+  console.log(`  Config PDA:     ${configPda.toBase58()}`);
+  console.log(`  Authority:      ${authority.publicKey.toBase58()}`);
+  console.log("\nTransaction Signatures:");
+  console.log(`  Initialize:     ${tx1}`);
+  console.log(`  Mint:           ${mintTx}`);
+  console.log(`  Burn:           ${burnTx}`);
+  console.log(`  Freeze:         ${freezeTx}`);
+  console.log(`  Thaw:           ${thawTx}`);
+  console.log(`  Pause:          ${pauseTx}`);
+  console.log(`  Unpause:        ${unpauseTx}`);
+  console.log("\nExplorer Links:");
+  console.log(`  Program:        ${explorerBase}/address/${program.programId.toBase58()}${clusterParam}`);
+  console.log(`  Mint:           ${explorerBase}/address/${mintKey.toBase58()}${clusterParam}`);
+  console.log(`  Initialize Tx:  ${explorerBase}/tx/${tx1}${clusterParam}`);
+  console.log(`  Mint Tx:        ${explorerBase}/tx/${mintTx}${clusterParam}`);
 }
 
 main().catch(console.error);

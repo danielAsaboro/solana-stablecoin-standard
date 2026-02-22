@@ -178,3 +178,71 @@ export function errorMsg(msg: string): void {
 export function printDetail(label: string, value: string): void {
   console.log(`    ${chalk.gray(label + ":")} ${value}`);
 }
+
+// ─── Enhanced Status Output ────────────────────────────────────────
+
+/**
+ * Print a section header within a status display.
+ * Smaller than printHeader — used for subsections.
+ */
+export function printSection(title: string): void {
+  console.log();
+  console.log(`  ${chalk.bold.cyan(title)}`);
+}
+
+/**
+ * Print an indented sub-field (for nested data like role entries).
+ */
+export function printSubField(label: string, value: string, maxWidth = 20): void {
+  const paddedLabel = label.padEnd(maxWidth);
+  console.log(`    ${chalk.gray(paddedLabel)} ${value}`);
+}
+
+/**
+ * Print a table row for role/minter entries.
+ * Shows address (truncated), role/status, and optional details.
+ */
+export function printRoleEntry(
+  address: string,
+  role: string,
+  active: boolean
+): void {
+  const truncated = address.length > 20
+    ? address.slice(0, 8) + "..." + address.slice(-8)
+    : address;
+  const status = active ? chalk.green("ACTIVE") : chalk.red("INACTIVE");
+  console.log(`    ${chalk.white(truncated)}  ${chalk.cyan(role.padEnd(12))}  ${status}`);
+}
+
+/**
+ * Print a minter quota entry with usage bar.
+ */
+export function printMinterEntry(
+  address: string,
+  minted: string,
+  quota: string,
+  active: boolean
+): void {
+  const truncated = address.length > 20
+    ? address.slice(0, 8) + "..." + address.slice(-8)
+    : address;
+  const status = active ? chalk.green("ACTIVE") : chalk.red("INACTIVE");
+  const usage = `${minted} / ${quota}`;
+  console.log(`    ${chalk.white(truncated)}  ${usage}  ${status}`);
+}
+
+/**
+ * Print a preset badge based on feature flags.
+ */
+export function printPresetBadge(
+  enablePermanentDelegate: boolean,
+  enableTransferHook: boolean
+): string {
+  if (enablePermanentDelegate && enableTransferHook) {
+    return chalk.bgBlue.white(" SSS-2 ") + " " + chalk.gray("Compliant Stablecoin");
+  }
+  if (!enablePermanentDelegate && !enableTransferHook) {
+    return chalk.bgGreen.white(" SSS-1 ") + " " + chalk.gray("Minimal Stablecoin");
+  }
+  return chalk.bgYellow.black(" CUSTOM ") + " " + chalk.gray("Custom Configuration");
+}

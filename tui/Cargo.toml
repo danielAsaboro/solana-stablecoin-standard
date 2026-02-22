@@ -1,0 +1,32 @@
+[package]
+name = "sss-admin-tui"
+version = "0.1.0"
+edition = "2021"
+description = "Interactive terminal dashboard for managing Solana Stablecoin Standard (SSS) tokens"
+
+[[bin]]
+name = "sss-admin-tui"
+path = "src/main.rs"
+
+[dependencies]
+# TUI
+ratatui = "0.29"
+crossterm = "0.28"
+
+# Solana
+solana-sdk = "1.18"
+solana-client = "1.18"
+
+# Serialization
+borsh = "0.10"
+
+# CLI
+clap = { version = "4", features = ["derive", "env"] }
+
+# Utilities
+chrono = "0.4"
+anyhow = "1"
+
+# Pinned for Solana BPF compatibility
+constant_time_eq = "=0.3.1"
+blake3 = "=1.5.5"

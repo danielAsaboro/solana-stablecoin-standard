@@ -1,6 +1,6 @@
 [workspace]
 members = ["programs/*"]
-exclude = ["backend", "trident-tests"]
+exclude = ["backend", "trident-tests", "tui"]
 resolver = "2"
 
 [profile.release]

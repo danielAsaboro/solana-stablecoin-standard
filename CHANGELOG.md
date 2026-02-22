@@ -77,6 +77,22 @@ with two presets: SSS-1 (Minimal Stablecoin) and SSS-2 (Compliant Stablecoin).
 - Structured logging via `tracing`
 - Environment-based configuration with `.env.example`
 
+#### Interactive Admin TUI (`tui/`)
+- Standalone `sss-admin-tui` binary built with [ratatui](https://ratatui.rs) + crossterm
+- 5-tab terminal dashboard: Dashboard, Roles, Minters, Blacklist, Help
+- Live supply metrics (total minted, burned, net, on-chain Token-2022 supply)
+- Preset auto-detection badge (SSS-1 / SSS-2 / Custom)
+- Role table with active/inactive status and per-user grouping
+- Minter quota gauges with color-coded utilization (green/yellow/red)
+- Blacklist entry table with reason, timestamp, and authority (SSS-2 only)
+- Circulation gauge (net supply / total minted ratio)
+- Background data polling via background thread (configurable interval, default 5s)
+- Borsh deserialization of all 4 Anchor account types (Config, Role, MinterQuota, BlacklistEntry)
+- Direct Token-2022 mint supply parsing (no `spl-token-2022` dependency needed)
+- CLI args via clap: `--rpc`, `--mint`, `--program-id`, `--refresh-interval`
+- Environment variable support: `RPC_URL`, `SSS_MINT_ADDRESS`, `SSS_PROGRAM_ID`
+- Zero clippy warnings
+
 #### Tests
 - 81 Anchor integration tests:
   - 34 core tests covering SSS-1 and SSS-2 full instruction sets

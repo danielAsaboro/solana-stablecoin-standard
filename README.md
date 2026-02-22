@@ -21,6 +21,7 @@ SSS provides two preset configurations -- **SSS-1** (minimal) and **SSS-2** (com
 - [Program IDs](#program-ids)
 - [SDK Usage](#sdk-usage)
 - [CLI Reference](#cli-reference)
+- [Admin TUI Dashboard](#admin-tui-dashboard)
 - [Backend API](#backend-api)
 - [Documentation](#documentation)
 - [Security Model](#security-model)
@@ -139,6 +140,7 @@ solana-stablecoin-standard/
     roles.ts             Role-based access control tests
     multi-minter.ts      Multi-minter quota tests
     edge-cases.ts        Edge case and error handling tests
+  tui/                   Interactive admin dashboard (ratatui terminal UI)
   trident-tests/         Fuzz tests (Trident)
   scripts/               Deployment and utility scripts
   docs/                  Detailed documentation
@@ -826,6 +828,37 @@ sss-token seize         # Seize tokens via permanent delegate (SSS-2)
 sss-token status        # Display stablecoin configuration
 sss-token supply        # Display supply information
 ```
+
+---
+
+## Admin TUI Dashboard
+
+An interactive terminal dashboard built with [ratatui](https://ratatui.rs) for real-time monitoring of your stablecoin.
+
+```bash
+# Build the TUI
+cd tui && cargo build --release
+
+# Launch (connects to local validator by default)
+./target/release/sss-admin-tui --mint <MINT_ADDRESS>
+
+# Connect to devnet
+./target/release/sss-admin-tui --rpc https://api.devnet.solana.com --mint <MINT_ADDRESS>
+
+# Custom program ID and refresh interval
+./target/release/sss-admin-tui --mint <MINT> --program-id <PROGRAM_ID> --refresh-interval 10
+```
+
+**Features:**
+- **Dashboard** — Live supply metrics (minted/burned/net/on-chain), preset badge (SSS-1/SSS-2), pause status, feature flags, circulation gauge
+- **Roles** — All role assignments with address, type, and active/inactive status
+- **Minters** — Quota usage with progress bars and color-coded utilization (green <50%, yellow 50-90%, red >90%)
+- **Blacklist** — Entries with reason, timestamp, and authority (SSS-2 only)
+- **Help** — Keyboard shortcuts reference
+
+**Navigation:** `Tab`/`Shift+Tab` to switch tabs, `1-5` for direct access, `↑↓`/`jk` to navigate lists, `r` to refresh, `q` to quit.
+
+Data auto-refreshes every 5 seconds from the Solana RPC. Environment variables `RPC_URL`, `SSS_MINT_ADDRESS`, and `SSS_PROGRAM_ID` are also supported.
 
 ---
 

@@ -83,7 +83,7 @@ export {
 } from "./types";
 
 // Preset configurations
-export { SSS_1, SSS_2, SSS_3 } from "./presets";
+export { SSS_1, SSS_2, SSS_3, Presets } from "./presets";
 
 // Token-2022 utility helpers
 export {

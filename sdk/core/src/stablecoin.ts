@@ -472,15 +472,28 @@ export class SolanaStablecoin {
       mint
     );
 
+    // Resolve feature flags: preset → individual overrides → defaults
+    const preset = params.preset;
+    const enablePermanentDelegate =
+      params.enablePermanentDelegate ?? preset?.permanentDelegate ?? false;
+    const enableTransferHook =
+      params.enableTransferHook ?? preset?.transferHook ?? false;
+    const defaultAccountFrozen =
+      params.defaultAccountFrozen ?? preset?.defaultAccountFrozen ?? false;
+    const enableConfidentialTransfer =
+      params.enableConfidentialTransfer ??
+      preset?.confidentialTransfer ??
+      false;
+
     const initParams = {
       name: params.name,
       symbol: params.symbol,
       uri: params.uri,
       decimals: params.decimals,
-      enablePermanentDelegate: params.enablePermanentDelegate,
-      enableTransferHook: params.enableTransferHook,
-      defaultAccountFrozen: params.defaultAccountFrozen,
-      enableConfidentialTransfer: params.enableConfidentialTransfer,
+      enablePermanentDelegate,
+      enableTransferHook,
+      defaultAccountFrozen,
+      enableConfidentialTransfer,
       transferHookProgramId: params.transferHookProgramId ?? null,
     };
 
@@ -567,6 +580,18 @@ export class SolanaStablecoin {
     uiAmount: number | null;
   }> {
     return getMintSupply(this.connection, this.mintAddress);
+  }
+
+  /**
+   * Fetch the total circulating supply of the stablecoin.
+   * Alias for {@link getSupply}.
+   */
+  async getTotalSupply(): Promise<{
+    amount: string;
+    decimals: number;
+    uiAmount: number | null;
+  }> {
+    return this.getSupply();
   }
 
   /**

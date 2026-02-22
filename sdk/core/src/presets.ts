@@ -54,3 +54,27 @@ export const SSS_3: PresetConfig = {
   defaultAccountFrozen: false,
   confidentialTransfer: true,
 };
+
+/**
+ * Namespace containing all standard preset configurations.
+ * Use with `SolanaStablecoin.create()` for preset-based initialization.
+ *
+ * @example
+ * ```ts
+ * import { Presets } from "@stbr/sss-core-sdk";
+ *
+ * // Use a preset directly
+ * const { stablecoin } = await SolanaStablecoin.create(connection, {
+ *   preset: Presets.SSS_2,
+ *   name: "My Stablecoin",
+ *   symbol: "MYUSD",
+ *   decimals: 6,
+ *   authority: wallet.publicKey,
+ * });
+ * ```
+ */
+export const Presets = {
+  SSS_1,
+  SSS_2,
+  SSS_3,
+} as const;

@@ -168,18 +168,25 @@ export interface CreateStablecoinParams {
   uri: string;
   /** Token decimals (0-9) */
   decimals: number;
-  /** Whether to enable permanent delegate */
-  enablePermanentDelegate: boolean;
-  /** Whether to enable transfer hook */
-  enableTransferHook: boolean;
-  /** Whether new token accounts default to frozen */
-  defaultAccountFrozen: boolean;
-  /** Whether to enable confidential transfers (SSS-3) */
-  enableConfidentialTransfer: boolean;
-  /** Transfer hook program ID (required when enableTransferHook = true) */
-  transferHookProgramId?: PublicKey;
   /** The authority (payer + master authority) */
   authority: PublicKey;
+  /**
+   * Optional preset to derive feature flags from. When provided,
+   * individual feature flags (`enablePermanentDelegate`, etc.) become
+   * optional and default to the preset values. Individual flags override
+   * the preset.
+   */
+  preset?: PresetConfig;
+  /** Whether to enable permanent delegate (default: false) */
+  enablePermanentDelegate?: boolean;
+  /** Whether to enable transfer hook (default: false) */
+  enableTransferHook?: boolean;
+  /** Whether new token accounts default to frozen (default: false) */
+  defaultAccountFrozen?: boolean;
+  /** Whether to enable confidential transfers — SSS-3 (default: false) */
+  enableConfidentialTransfer?: boolean;
+  /** Transfer hook program ID (required when enableTransferHook = true) */
+  transferHookProgramId?: PublicKey;
 }
 
 /** Parameters for minting tokens. */

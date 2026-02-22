@@ -22,6 +22,7 @@ SSS provides two preset configurations -- **SSS-1** (minimal) and **SSS-2** (com
 - [SDK Usage](#sdk-usage)
 - [CLI Reference](#cli-reference)
 - [Admin TUI Dashboard](#admin-tui-dashboard)
+- [Admin Frontend (Next.js)](#admin-frontend-nextjs)
 - [Backend API](#backend-api)
 - [Documentation](#documentation)
 - [Security Model](#security-model)
@@ -141,6 +142,7 @@ solana-stablecoin-standard/
     multi-minter.ts      Multi-minter quota tests
     edge-cases.ts        Edge case and error handling tests
   tui/                   Interactive admin dashboard (ratatui terminal UI)
+  frontend/              Next.js admin panel (web-based management UI)
   trident-tests/         Fuzz tests (Trident)
   scripts/               Deployment and utility scripts
   docs/                  Detailed documentation
@@ -859,6 +861,35 @@ cd tui && cargo build --release
 **Navigation:** `Tab`/`Shift+Tab` to switch tabs, `1-5` for direct access, `↑↓`/`jk` to navigate lists, `r` to refresh, `q` to quit.
 
 Data auto-refreshes every 5 seconds from the Solana RPC. Environment variables `RPC_URL`, `SSS_MINT_ADDRESS`, and `SSS_PROGRAM_ID` are also supported.
+
+---
+
+## Admin Frontend (Next.js)
+
+A web-based admin panel built with [Next.js 14](https://nextjs.org/) for managing stablecoin operations through a browser UI.
+
+```bash
+# Install dependencies
+cd frontend && yarn install
+
+# Start development server
+yarn dev    # → http://localhost:3000
+
+# Build for production
+yarn build && yarn start
+```
+
+**Features:**
+- **Dashboard** — Supply overview, token identity, addresses, feature flags, preset badge, pause status
+- **Mint & Burn** — Forms for minting tokens to any wallet and burning from token accounts
+- **Roles** — View all role assignments, assign/revoke roles, manage minter quotas with usage gauges
+- **Freeze & Thaw** — Freeze or thaw any wallet's associated token account
+- **Blacklist** — Add/remove addresses from the on-chain blacklist with reasons (SSS-2 only)
+- **Pause Control** — Pause/unpause the stablecoin with confirmation safety prompt
+
+**Stack:** Next.js 14, Tailwind CSS, `@solana/wallet-adapter`, `@coral-xyz/anchor`. Connects to the on-chain program directly via Anchor IDL — no backend dependency required.
+
+**Usage:** Connect your wallet (Phantom, Solflare, etc.), enter a mint address, and start managing. Works on localnet, devnet, and mainnet.
 
 ---
 

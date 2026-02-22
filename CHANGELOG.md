@@ -77,6 +77,18 @@ with two presets: SSS-1 (Minimal Stablecoin) and SSS-2 (Compliant Stablecoin).
 - Structured logging via `tracing`
 - Environment-based configuration with `.env.example`
 
+#### Example Frontend (`frontend/`)
+- Next.js 14 admin panel for web-based stablecoin management
+- Wallet adapter integration (Phantom, Solflare, any Solana wallet)
+- 6 views: Dashboard, Mint & Burn, Roles, Freeze & Thaw, Blacklist, Pause Control
+- Dashboard with supply metrics, token identity, feature flags, preset badge, pause status
+- Real-time data from on-chain program via Anchor IDL (no backend dependency)
+- Role management with assign/revoke forms and minter quota usage visualization
+- Blacklist management with add/remove forms and entry table (SSS-2 only)
+- Pause control with confirmation safety prompt (must type symbol to confirm)
+- Tailwind CSS dark theme with professional styling
+- Custom `useStablecoin` React hook encapsulating all program interactions
+
 #### Interactive Admin TUI (`tui/`)
 - Standalone `sss-admin-tui` binary built with [ratatui](https://ratatui.rs) + crossterm
 - 5-tab terminal dashboard: Dashboard, Roles, Minters, Blacklist, Help

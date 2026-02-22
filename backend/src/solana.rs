@@ -44,11 +44,14 @@ fn associated_token_program_id() -> Pubkey {
 const STABLECOIN_SEED: &[u8] = b"stablecoin";
 const ROLE_SEED: &[u8] = b"role";
 const MINTER_QUOTA_SEED: &[u8] = b"minter_quota";
+const BLACKLIST_SEED: &[u8] = b"blacklist";
 
 /// Minter role type identifier (matches on-chain `ROLE_MINTER`).
 const ROLE_MINTER: u8 = 0;
 /// Burner role type identifier (matches on-chain `ROLE_BURNER`).
 const ROLE_BURNER: u8 = 1;
+/// Blacklister role type identifier (matches on-chain `ROLE_BLACKLISTER`).
+const ROLE_BLACKLISTER: u8 = 3;
 
 // ── SolanaContext ──────────────────────────────────────────────────────────
 
@@ -165,6 +168,18 @@ pub fn derive_minter_quota_pda(
     )
 }
 
+/// Derive a blacklist entry PDA: `["blacklist", config, address]`.
+pub fn derive_blacklist_pda(
+    config: &Pubkey,
+    address: &Pubkey,
+    program_id: &Pubkey,
+) -> (Pubkey, u8) {
+    Pubkey::find_program_address(
+        &[BLACKLIST_SEED, config.as_ref(), address.as_ref()],
+        program_id,
+    )
+}
+
 /// Derive the Associated Token Account for a wallet on Token-2022.
 pub fn get_associated_token_address(wallet: &Pubkey, mint: &Pubkey) -> Pubkey {
     let (address, _) = Pubkey::find_program_address(
@@ -261,6 +276,92 @@ pub fn build_burn_instruction(
             AccountMeta::new(ctx.mint, false),
             AccountMeta::new(*from_token_account, false),
             AccountMeta::new_readonly(token_2022_program_id(), false),
+        ],
+        data,
+    }
+}
+
+/// The System Program ID.
+fn system_program_id() -> Pubkey {
+    static ID: OnceLock<Pubkey> = OnceLock::new();
+    *ID.get_or_init(|| {
+        Pubkey::from_str("11111111111111111111111111111111")
+            .expect("System program ID is a valid hardcoded constant")
+    })
+}
+
+/// Build the `add_to_blacklist` instruction for the SSS program.
+///
+/// Accounts (in order):
+/// 1. authority (signer, writable) — must hold active Blacklister role, pays rent
+/// 2. config — stablecoin config PDA (must have `enable_transfer_hook`)
+/// 3. role_account — authority's Blacklister role PDA
+/// 4. blacklist_entry (writable) — BlacklistEntry PDA to be created (`init`)
+/// 5. system_program — for PDA account creation
+///
+/// Data: `[discriminator("add_to_blacklist"), address: Pubkey, reason_len: u32, reason: bytes]`
+pub fn build_add_to_blacklist_instruction(
+    ctx: &SolanaContext,
+    address: &Pubkey,
+    reason: &str,
+) -> Instruction {
+    let authority = ctx.keypair.pubkey();
+    let (role_pda, _) =
+        derive_role_pda(&ctx.config_pda, ROLE_BLACKLISTER, &authority, &ctx.program_id);
+    let (blacklist_pda, _) =
+        derive_blacklist_pda(&ctx.config_pda, address, &ctx.program_id);
+
+    let reason_bytes = reason.as_bytes();
+    let reason_len = reason_bytes.len() as u32;
+    let mut data = Vec::with_capacity(8 + 32 + 4 + reason_bytes.len());
+    data.extend_from_slice(&anchor_discriminator("add_to_blacklist"));
+    data.extend_from_slice(address.as_ref());
+    data.extend_from_slice(&reason_len.to_le_bytes());
+    data.extend_from_slice(reason_bytes);
+
+    Instruction {
+        program_id: ctx.program_id,
+        accounts: vec![
+            AccountMeta::new(authority, true),
+            AccountMeta::new_readonly(ctx.config_pda, false),
+            AccountMeta::new_readonly(role_pda, false),
+            AccountMeta::new(blacklist_pda, false),
+            AccountMeta::new_readonly(system_program_id(), false),
+        ],
+        data,
+    }
+}
+
+/// Build the `remove_from_blacklist` instruction for the SSS program.
+///
+/// Accounts (in order):
+/// 1. authority (signer, writable) — must hold active Blacklister role, receives rent
+/// 2. config — stablecoin config PDA
+/// 3. role_account — authority's Blacklister role PDA
+/// 4. blacklist_entry (writable) — BlacklistEntry PDA to be closed
+///
+/// Data: `[discriminator("remove_from_blacklist"), address: Pubkey]`
+pub fn build_remove_from_blacklist_instruction(
+    ctx: &SolanaContext,
+    address: &Pubkey,
+) -> Instruction {
+    let authority = ctx.keypair.pubkey();
+    let (role_pda, _) =
+        derive_role_pda(&ctx.config_pda, ROLE_BLACKLISTER, &authority, &ctx.program_id);
+    let (blacklist_pda, _) =
+        derive_blacklist_pda(&ctx.config_pda, address, &ctx.program_id);
+
+    let mut data = Vec::with_capacity(8 + 32);
+    data.extend_from_slice(&anchor_discriminator("remove_from_blacklist"));
+    data.extend_from_slice(address.as_ref());
+
+    Instruction {
+        program_id: ctx.program_id,
+        accounts: vec![
+            AccountMeta::new(authority, true),
+            AccountMeta::new_readonly(ctx.config_pda, false),
+            AccountMeta::new_readonly(role_pda, false),
+            AccountMeta::new(blacklist_pda, false),
         ],
         data,
     }

@@ -1,5 +1,6 @@
 pub mod compliance;
 pub mod health;
+pub mod indexer;
 pub mod mint_burn;
 pub mod webhooks;
 
@@ -13,4 +14,5 @@ pub fn api_router() -> Router<AppState> {
         .merge(mint_burn::router())
         .merge(compliance::router())
         .merge(webhooks::router())
+        .merge(indexer::router())
 }

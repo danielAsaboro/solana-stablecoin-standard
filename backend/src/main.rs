@@ -22,7 +22,10 @@ use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+use crate::services::compliance::ComplianceService;
+use crate::services::indexer::IndexerService;
 use crate::services::mint_burn::MintBurnService;
+use crate::services::webhook::WebhookService;
 use crate::solana::SolanaContext;
 
 /// Shared application state passed to all route handlers via Axum's `State` extractor.
@@ -30,6 +33,12 @@ use crate::solana::SolanaContext;
 pub struct AppState {
     /// MintBurn service — `None` if Solana context is not configured.
     pub mint_burn: Option<Arc<MintBurnService>>,
+    /// Compliance service — `None` if Solana context is not configured.
+    pub compliance: Option<Arc<ComplianceService>>,
+    /// Indexer service — `None` if Solana context is not configured.
+    pub indexer: Option<Arc<IndexerService>>,
+    /// Webhook service — always available (no Solana dependency).
+    pub webhook: Arc<WebhookService>,
 }
 
 /// API-key authentication middleware.
@@ -115,9 +124,34 @@ async fn main() {
 
     // Initialize Solana context (optional — backend works without it)
     let solana_ctx = init_solana_context();
-    let mint_burn = solana_ctx.map(|ctx| Arc::new(MintBurnService::new(ctx)));
+    let mint_burn = solana_ctx
+        .as_ref()
+        .map(|ctx| Arc::new(MintBurnService::new(Arc::clone(ctx))));
+    let compliance = solana_ctx
+        .as_ref()
+        .map(|ctx| Arc::new(ComplianceService::new(Arc::clone(ctx))));
+    let indexer = solana_ctx
+        .as_ref()
+        .map(|ctx| Arc::new(IndexerService::new(Arc::clone(ctx))));
 
-    let state = AppState { mint_burn };
+    // Start the indexer background polling loop (every 10 seconds)
+    if let Some(ref indexer_service) = indexer {
+        let polling_interval = env::var("SSS_INDEXER_INTERVAL_SECS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(10);
+        Arc::clone(indexer_service).start_polling(polling_interval);
+    }
+
+    // Webhook service is always available (no Solana dependency)
+    let webhook = Arc::new(WebhookService::new());
+
+    let state = AppState {
+        mint_burn,
+        compliance,
+        indexer,
+        webhook,
+    };
 
     // CORS configuration
     let cors = CorsLayer::new()

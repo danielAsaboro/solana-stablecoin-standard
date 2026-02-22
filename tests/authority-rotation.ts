@@ -136,6 +136,7 @@ describe("Authority Rotation: SSS-1 Lifecycle", () => {
         enablePermanentDelegate: false,
         enableTransferHook: false,
         defaultAccountFrozen: false,
+        enableConfidentialTransfer: false,
         transferHookProgramId: null,
       })
       .accountsStrict({
@@ -756,6 +757,7 @@ describe("Authority Rotation: SSS-2 Compliance", () => {
         enablePermanentDelegate: true,
         enableTransferHook: true,
         defaultAccountFrozen: false,
+        enableConfidentialTransfer: false,
         transferHookProgramId: hookProgram.programId,
       })
       .accountsStrict({

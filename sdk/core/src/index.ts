@@ -31,6 +31,8 @@
  * - {@link withRetry} — Automatic retry with exponential backoff for transient RPC failures
  * - {@link simulateTransaction} — Pre-flight simulation with human-readable error parsing
  * - {@link OracleModule} — Switchboard V2 price feed integration for non-USD pegs
+ * - {@link PrivacyModule} — Confidential transfer allowlist management for SSS-3
+ * - {@link SSS_3} — Privacy stablecoin preset (experimental/PoC)
  *
  * @module @stbr/sss-core-sdk
  * @packageDocumentation
@@ -81,7 +83,7 @@ export {
 } from "./types";
 
 // Preset configurations
-export { SSS_1, SSS_2 } from "./presets";
+export { SSS_1, SSS_2, SSS_3 } from "./presets";
 
 // Token-2022 utility helpers
 export {
@@ -167,3 +169,14 @@ export {
   type InitOracleParams,
   type UpdateOracleParams,
 } from "./oracle";
+
+// Privacy Module — Confidential transfer allowlist management for SSS-3
+export {
+  PRIVACY_PROGRAM_ID,
+  getPrivacyConfigAddress,
+  getAllowlistEntryAddress,
+  PrivacyModule,
+  type PrivacyConfigData,
+  type AllowlistEntryData,
+  type InitPrivacyParams,
+} from "./privacy";

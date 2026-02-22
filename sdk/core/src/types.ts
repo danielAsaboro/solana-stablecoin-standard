@@ -77,6 +77,8 @@ export interface StablecoinConfig {
   enableTransferHook: boolean;
   /** Whether new token accounts default to frozen state */
   defaultAccountFrozen: boolean;
+  /** Whether confidential transfers are enabled (SSS-3) */
+  enableConfidentialTransfer: boolean;
 
   // Runtime state
   /** Whether the stablecoin is paused */
@@ -148,6 +150,8 @@ export interface PresetConfig {
   transferHook: boolean;
   /** Whether new token accounts default to frozen */
   defaultAccountFrozen: boolean;
+  /** Whether to enable confidential transfers (SSS-3 privacy preset) */
+  confidentialTransfer?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -170,6 +174,8 @@ export interface CreateStablecoinParams {
   enableTransferHook: boolean;
   /** Whether new token accounts default to frozen */
   defaultAccountFrozen: boolean;
+  /** Whether to enable confidential transfers (SSS-3) */
+  enableConfidentialTransfer: boolean;
   /** Transfer hook program ID (required when enableTransferHook = true) */
   transferHookProgramId?: PublicKey;
   /** The authority (payer + master authority) */
@@ -307,6 +313,8 @@ export interface StablecoinInitializedEvent {
   enablePermanentDelegate: boolean;
   /** Whether transfer hook was enabled. */
   enableTransferHook: boolean;
+  /** Whether confidential transfers were enabled (SSS-3). */
+  enableConfidentialTransfer: boolean;
 }
 
 /**

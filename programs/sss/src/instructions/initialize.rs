@@ -4,7 +4,7 @@ use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token_interface::TokenInterface;
 use spl_token_2022::{
     extension::{
-        metadata_pointer, transfer_hook, ExtensionType,
+        confidential_transfer, metadata_pointer, transfer_hook, ExtensionType,
     },
     instruction as token_instruction,
     state::Mint as MintState,
@@ -37,6 +37,8 @@ pub struct InitializeParams {
     pub enable_transfer_hook: bool,
     /// Whether newly created token accounts default to a frozen state.
     pub default_account_frozen: bool,
+    /// Enable confidential transfers via Token-2022 ConfidentialTransferMint extension (SSS-3).
+    pub enable_confidential_transfer: bool,
     /// The transfer hook program ID. Required when `enable_transfer_hook` is true.
     pub transfer_hook_program_id: Option<Pubkey>,
 }
@@ -76,7 +78,7 @@ pub struct Initialize<'info> {
 /// Performs the following steps:
 /// 1. Validates input parameters (name, symbol, URI lengths; decimal range).
 /// 2. Creates the Token-2022 mint with metadata-pointer (+ optional permanent
-///    delegate and transfer hook extensions).
+///    delegate, transfer hook, and confidential transfer extensions).
 /// 3. Initializes mint authority and freeze authority to the config PDA.
 /// 4. Writes on-chain token metadata (name, symbol, URI).
 /// 5. Populates the [`StablecoinConfig`] PDA with runtime state.
@@ -97,6 +99,9 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     }
     if params.enable_transfer_hook {
         extensions.push(ExtensionType::TransferHook);
+    }
+    if params.enable_confidential_transfer {
+        extensions.push(ExtensionType::ConfidentialTransferMint);
     }
 
     // Calculate space for mint + extensions (NOT including variable-length metadata)
@@ -174,7 +179,21 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
         )?;
     }
 
-    // 4. Initialize metadata pointer — BEFORE initialize_mint2
+    // 4. Initialize confidential transfer mint extension (if enabled) — BEFORE initialize_mint2
+    if params.enable_confidential_transfer {
+        invoke(
+            &confidential_transfer::instruction::initialize_mint(
+                ctx.accounts.token_program.key,
+                &mint_key,
+                Some(config_key),
+                true,  // auto_approve_new_accounts for PoC
+                None,  // no auditor for PoC
+            )?,
+            &[ctx.accounts.mint.to_account_info()],
+        )?;
+    }
+
+    // 5. Initialize metadata pointer — BEFORE initialize_mint2 (extension inits must precede mint init)
     invoke(
         &metadata_pointer::instruction::initialize(
             ctx.accounts.token_program.key,
@@ -185,7 +204,7 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
         &[ctx.accounts.mint.to_account_info()],
     )?;
 
-    // 5. Initialize the mint — config PDA always owns freeze authority so
+    // 6. Initialize the mint — config PDA always owns freeze authority so
     //    accounts can be frozen for compliance or pause enforcement.
     invoke(
         &token_instruction::initialize_mint2(
@@ -198,7 +217,7 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
         &[ctx.accounts.mint.to_account_info()],
     )?;
 
-    // 6. Initialize token metadata on the mint itself
+    // 7. Initialize token metadata on the mint itself
     let bump = ctx.bumps.config;
     let signer_seeds: &[&[&[u8]]] = &[&[
         STABLECOIN_SEED,
@@ -224,7 +243,7 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
         signer_seeds,
     )?;
 
-    // 7. Initialize config PDA
+    // 8. Initialize config PDA
     let config = &mut ctx.accounts.config;
     config.mint = mint_key;
     config.name = params.name.clone();
@@ -235,6 +254,7 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     config.enable_permanent_delegate = params.enable_permanent_delegate;
     config.enable_transfer_hook = params.enable_transfer_hook;
     config.default_account_frozen = params.default_account_frozen;
+    config.enable_confidential_transfer = params.enable_confidential_transfer;
     config.paused = false;
     config.total_minted = 0;
     config.total_burned = 0;
@@ -242,7 +262,7 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
         .transfer_hook_program_id
         .unwrap_or_default();
     config.bump = bump;
-    config._reserved = [0u8; 64];
+    config._reserved = [0u8; 63];
 
     emit!(StablecoinInitialized {
         config: config_key,
@@ -253,6 +273,7 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
         decimals: params.decimals,
         enable_permanent_delegate: params.enable_permanent_delegate,
         enable_transfer_hook: params.enable_transfer_hook,
+        enable_confidential_transfer: params.enable_confidential_transfer,
     });
 
     Ok(())

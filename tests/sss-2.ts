@@ -85,6 +85,7 @@ describe("SSS-2: Compliant Stablecoin Lifecycle", () => {
           enablePermanentDelegate: true,
           enableTransferHook: true,
           defaultAccountFrozen: false,
+          enableConfidentialTransfer: false,
           transferHookProgramId: hookProgram.programId,
         })
         .accountsStrict({

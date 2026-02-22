@@ -91,6 +91,7 @@ pub enum Operation {
         decimals: u8,
         enable_permanent_delegate: bool,
         enable_transfer_hook: bool,
+        enable_confidential_transfer: bool,
     },
     /// `mint_tokens` — requires Minter role + quota
     Mint { minter: u8, amount: u64 },
@@ -155,6 +156,7 @@ pub struct StablecoinModel {
     pub total_burned: u64,
     pub enable_permanent_delegate: bool,
     pub enable_transfer_hook: bool,
+    pub enable_confidential_transfer: bool,
     pub master_authority: u8,
 
     // --- Role state: (user_id, role_type) -> active ---
@@ -196,6 +198,7 @@ impl StablecoinModel {
             total_burned: 0,
             enable_permanent_delegate: false,
             enable_transfer_hook: false,
+            enable_confidential_transfer: false,
             master_authority: 0,
             roles: HashMap::new(),
             minter_quotas: HashMap::new(),
@@ -248,7 +251,8 @@ impl StablecoinModel {
                 decimals,
                 enable_permanent_delegate,
                 enable_transfer_hook,
-            } => self.apply_initialize(*caller, *decimals, *enable_permanent_delegate, *enable_transfer_hook),
+                enable_confidential_transfer,
+            } => self.apply_initialize(*caller, *decimals, *enable_permanent_delegate, *enable_transfer_hook, *enable_confidential_transfer),
 
             Operation::Mint { minter, amount } => self.apply_mint(*minter, *amount),
 
@@ -323,6 +327,7 @@ impl StablecoinModel {
         decimals: u8,
         enable_permanent_delegate: bool,
         enable_transfer_hook: bool,
+        enable_confidential_transfer: bool,
     ) -> ModelResult<()> {
         if self.initialized {
             return Err(ModelError::AnchorError); // PDA already exists
@@ -336,6 +341,7 @@ impl StablecoinModel {
         self.master_authority = caller;
         self.enable_permanent_delegate = enable_permanent_delegate;
         self.enable_transfer_hook = enable_transfer_hook;
+        self.enable_confidential_transfer = enable_confidential_transfer;
         self.paused = false;
         self.total_minted = 0;
         self.total_burned = 0;
@@ -1392,6 +1398,7 @@ mod tests {
                     decimals,
                     enable_permanent_delegate: false,
                     enable_transfer_hook: false,
+                    enable_confidential_transfer: false,
                 });
 
                 if decimals > 9 {
@@ -1587,6 +1594,7 @@ mod tests {
                 decimals: 6,
                 enable_permanent_delegate: false,
                 enable_transfer_hook: false,
+                enable_confidential_transfer: false,
             })
             .is_ok());
         assert_eq!(
@@ -1595,6 +1603,7 @@ mod tests {
                 decimals: 6,
                 enable_permanent_delegate: false,
                 enable_transfer_hook: false,
+                enable_confidential_transfer: false,
             }),
             Err(ModelError::AnchorError)
         );

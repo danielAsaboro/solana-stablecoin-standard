@@ -480,6 +480,7 @@ export class SolanaStablecoin {
       enablePermanentDelegate: params.enablePermanentDelegate,
       enableTransferHook: params.enableTransferHook,
       defaultAccountFrozen: params.defaultAccountFrozen,
+      enableConfidentialTransfer: params.enableConfidentialTransfer,
       transferHookProgramId: params.transferHookProgramId ?? null,
     };
 

@@ -65,6 +65,7 @@ describe("Seize", () => {
         enablePermanentDelegate: true,
         enableTransferHook: false,
         defaultAccountFrozen: false,
+        enableConfidentialTransfer: false,
         transferHookProgramId: null,
       })
       .accountsStrict({

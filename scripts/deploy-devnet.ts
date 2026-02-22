@@ -59,6 +59,7 @@ async function main() {
     enablePermanentDelegate: false,
     enableTransferHook: false,
     defaultAccountFrozen: false,
+    enableConfidentialTransfer: false,
     transferHookProgramId: null,
   };
 

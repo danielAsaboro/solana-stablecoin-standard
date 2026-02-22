@@ -49,6 +49,7 @@ describe("Transfer Hook", () => {
         enablePermanentDelegate: true,
         enableTransferHook: true,
         defaultAccountFrozen: false,
+        enableConfidentialTransfer: false,
         transferHookProgramId: hookProgram.programId,
       })
       .accountsStrict({

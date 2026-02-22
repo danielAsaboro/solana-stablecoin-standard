@@ -93,6 +93,7 @@ describe("SSS-1: Minimal Stablecoin Lifecycle", () => {
         enablePermanentDelegate: false,
         enableTransferHook: false,
         defaultAccountFrozen: false,
+        enableConfidentialTransfer: false,
         transferHookProgramId: null,
       };
 

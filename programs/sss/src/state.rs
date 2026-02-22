@@ -36,6 +36,8 @@ pub struct StablecoinConfig {
     pub enable_transfer_hook: bool,
     /// Whether new token accounts default to frozen state
     pub default_account_frozen: bool,
+    /// Whether confidential transfers are enabled (SSS-3 privacy preset)
+    pub enable_confidential_transfer: bool,
 
     // Runtime state
     /// Whether the stablecoin is paused
@@ -50,7 +52,7 @@ pub struct StablecoinConfig {
     /// PDA bump seed
     pub bump: u8,
     /// Reserved for future use
-    pub _reserved: [u8; 64],
+    pub _reserved: [u8; 63],
 }
 
 impl StablecoinConfig {
@@ -64,12 +66,13 @@ impl StablecoinConfig {
         + 1                // enable_permanent_delegate
         + 1                // enable_transfer_hook
         + 1                // default_account_frozen
+        + 1                // enable_confidential_transfer
         + 1                // paused
         + 8                // total_minted
         + 8                // total_burned
         + 32               // transfer_hook_program
         + 1                // bump
-        + 64;              // _reserved
+        + 63;              // _reserved
 
     pub const SEED_PREFIX: &'static [u8] = STABLECOIN_SEED;
 }

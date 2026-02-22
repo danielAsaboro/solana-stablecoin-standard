@@ -66,6 +66,7 @@ describe("Edge Cases: SSS-1", () => {
         enablePermanentDelegate: false,
         enableTransferHook: false,
         defaultAccountFrozen: false,
+        enableConfidentialTransfer: false,
         transferHookProgramId: null,
       })
       .accountsStrict({
@@ -181,6 +182,7 @@ describe("Edge Cases: SSS-1", () => {
             enablePermanentDelegate: false,
             enableTransferHook: false,
             defaultAccountFrozen: false,
+            enableConfidentialTransfer: false,
             transferHookProgramId: null,
           })
           .accountsStrict({
@@ -216,6 +218,7 @@ describe("Edge Cases: SSS-1", () => {
             enablePermanentDelegate: false,
             enableTransferHook: false,
             defaultAccountFrozen: false,
+            enableConfidentialTransfer: false,
             transferHookProgramId: null,
           })
           .accountsStrict({
@@ -251,6 +254,7 @@ describe("Edge Cases: SSS-1", () => {
             enablePermanentDelegate: false,
             enableTransferHook: false,
             defaultAccountFrozen: false,
+            enableConfidentialTransfer: false,
             transferHookProgramId: null,
           })
           .accountsStrict({
@@ -653,6 +657,7 @@ describe("Edge Cases: SSS-2 Compliance", () => {
         enablePermanentDelegate: true,
         enableTransferHook: true,
         defaultAccountFrozen: false,
+        enableConfidentialTransfer: false,
         transferHookProgramId: hookProgram.programId,
       })
       .accountsStrict({

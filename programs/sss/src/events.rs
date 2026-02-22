@@ -25,6 +25,8 @@ pub struct StablecoinInitialized {
     pub enable_permanent_delegate: bool,
     /// Whether the transfer hook extension is enabled (SSS-2).
     pub enable_transfer_hook: bool,
+    /// Whether confidential transfers are enabled (SSS-3).
+    pub enable_confidential_transfer: bool,
 }
 
 /// Emitted when tokens are minted via [`mint_tokens`](crate::sss::mint_tokens).

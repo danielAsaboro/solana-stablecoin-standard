@@ -2,7 +2,7 @@
 
 > A modular, open-source framework for launching regulated stablecoins on Solana using the Token-2022 program.
 
-SSS provides two preset configurations -- **SSS-1** (minimal) and **SSS-2** (compliant) -- so that issuers can go from zero to a fully operational stablecoin in minutes rather than months. Built on Anchor and Token-2022, it packages battle-tested patterns for role-based access control, mint quotas, on-chain blacklist enforcement, and forced seizure into a single cohesive toolkit.
+SSS provides three preset configurations -- **SSS-1** (minimal), **SSS-2** (compliant), and **SSS-3** (privacy) -- so that issuers can go from zero to a fully operational stablecoin in minutes rather than months. Built on Anchor and Token-2022, it packages battle-tested patterns for role-based access control, mint quotas, on-chain blacklist enforcement, forced seizure, and confidential transfers into a single cohesive toolkit.
 
 ---
 
@@ -23,6 +23,7 @@ SSS provides two preset configurations -- **SSS-1** (minimal) and **SSS-2** (com
 - [SDK Usage](#sdk-usage)
 - [CLI Reference](#cli-reference)
 - [Oracle Integration Module](#oracle-integration-module)
+- [SSS-3 Privacy Stablecoin (Experimental)](#sss-3-privacy-stablecoin-experimental)
 - [Admin TUI Dashboard](#admin-tui-dashboard)
 - [Admin Frontend (Next.js)](#admin-frontend-nextjs)
 - [Backend API](#backend-api)
@@ -48,22 +49,24 @@ Stablecoin issuers on Solana today must build bespoke smart contracts, complianc
 
 ## Preset Comparison
 
-| Feature                    | SSS-1 (Minimal) | SSS-2 (Compliant) |
-| -------------------------- | :--------------: | :----------------: |
-| Token-2022 Mint            |        Y         |         Y          |
-| On-chain Metadata          |        Y         |         Y          |
-| Role-based Access Control  |        Y         |         Y          |
-| Mint / Burn with Quotas    |        Y         |         Y          |
-| Pause / Unpause            |        Y         |         Y          |
-| Freeze / Thaw Accounts     |        Y         |         Y          |
-| Transfer Authority         |        Y         |         Y          |
-| Permanent Delegate (Seize) |                  |         Y          |
-| Transfer Hook (Blacklist)  |                  |         Y          |
-| On-chain Blacklist PDAs    |                  |         Y          |
-| Blacklister Role           |                  |         Y          |
-| Seizer Role                |                  |         Y          |
+| Feature                          | SSS-1 (Minimal) | SSS-2 (Compliant) | SSS-3 (Privacy) |
+| -------------------------------- | :--------------: | :----------------: | :--------------: |
+| Token-2022 Mint                  |        Y         |         Y          |        Y         |
+| On-chain Metadata                |        Y         |         Y          |        Y         |
+| Role-based Access Control        |        Y         |         Y          |        Y         |
+| Mint / Burn with Quotas          |        Y         |         Y          |        Y         |
+| Pause / Unpause                  |        Y         |         Y          |        Y         |
+| Freeze / Thaw Accounts           |        Y         |         Y          |        Y         |
+| Transfer Authority               |        Y         |         Y          |        Y         |
+| Permanent Delegate (Seize)       |                  |         Y          |                  |
+| Transfer Hook (Blacklist)        |                  |         Y          |                  |
+| On-chain Blacklist PDAs          |                  |         Y          |                  |
+| Blacklister Role                 |                  |         Y          |                  |
+| Seizer Role                      |                  |         Y          |                  |
+| ConfidentialTransferMint Ext.    |                  |                    |        Y         |
+| Privacy Allowlist (companion)    |                  |                    |        Y         |
 
-See [docs/SSS-1.md](docs/SSS-1.md) and [docs/SSS-2.md](docs/SSS-2.md) for the full specifications.
+See [docs/SSS-1.md](docs/SSS-1.md), [docs/SSS-2.md](docs/SSS-2.md), and [docs/SSS-3.md](docs/SSS-3.md) for the full specifications.
 
 ---
 
@@ -95,6 +98,8 @@ Layer 1  On-chain Programs  SSS Program (sss)    |   Transfer Hook Program
 | BlacklistEntry      | `["blacklist", config, address]`        | SSS           |
 | ExtraAccountMetas   | `["extra-account-metas", mint]`         | Transfer Hook |
 | OracleConfig        | `["oracle_config", stablecoin_config]`  | Oracle        |
+| PrivacyConfig       | `["privacy_config", stablecoin_config]` | Privacy       |
+| AllowlistEntry      | `["allowlist", privacy_config, address]`| Privacy       |
 
 ### Data Flow: Mint
 
@@ -132,6 +137,7 @@ solana-stablecoin-standard/
     sss/                 Anchor program -- core stablecoin logic
     transfer-hook/       Anchor program -- blacklist enforcement hook
     oracle/              Anchor program -- Switchboard price feed integration
+    privacy/             Anchor program -- confidential transfer allowlist management
   sdk/
     core/                TypeScript SDK -- SolanaStablecoin class, presets, PDA helpers
     compliance/          TypeScript SDK -- ComplianceModule, BlacklistManager, AuditLog
@@ -808,6 +814,7 @@ For the complete deployment guide with all transaction signatures and troublesho
 | SSS             | `EaQk4dxh7MmvE3cL57Ns3QFqNKnfoCrxeVzFLSHajWFr` |
 | Transfer Hook   | `EFui8Qo2RuojKfzfPCTzQjiSUAaHpiJ5qKwW6NXLbMAr` |
 | Oracle          | `6PHWYPgkVWE7f5Saak4EXVh49rv9ZcXdz7HMfHnQdNLJ` |
+| SSS Privacy     | `Bmyova5VaKqiBRRDV4ft8pLsdfgMMZojafLy4sdFDWQk` |
 
 ### Localnet
 
@@ -816,6 +823,7 @@ For the complete deployment guide with all transaction signatures and troublesho
 | SSS             | `DNfk1e2vMJrxHm4BwoRTVqQxcfYjZLHggxr11hMZ5Dyu` |
 | Transfer Hook   | `Gcd58Ng9gqRg1XtiU1i8KopwX1u82Mt9VmxKbLJ8RANH` |
 | Oracle          | `6PHWYPgkVWE7f5Saak4EXVh49rv9ZcXdz7HMfHnQdNLJ` |
+| SSS Privacy     | `Bmyova5VaKqiBRRDV4ft8pLsdfgMMZojafLy4sdFDWQk` |
 
 ---
 
@@ -957,6 +965,44 @@ const tokens = oracle.fiatToTokens(100, 6); // 6 = token decimals
 
 ---
 
+## SSS-3 Privacy Stablecoin (Experimental)
+
+SSS-3 adds Token-2022 confidential transfers to the stablecoin standard. Token balances
+and transfer amounts are encrypted using ElGamal encryption with zero-knowledge range proofs.
+
+A companion Privacy Program manages a scoped allowlist controlling which addresses may use
+confidential transfers -- enabling KYC/AML boundaries around privacy features.
+
+**Note:** Token-2022 confidential transfer tooling is still maturing. SSS-3 is provided as a
+proof-of-concept. See [docs/SSS-3.md](docs/SSS-3.md) for the full specification.
+
+### Programs
+
+| Program | ID |
+|---------|-----|
+| SSS (with CT extension) | `DNfk1e2vMJrxHm4BwoRTVqQxcfYjZLHggxr11hMZ5Dyu` |
+| Privacy Module | `Bmyova5VaKqiBRRDV4ft8pLsdfgMMZojafLy4sdFDWQk` |
+
+### SDK Usage
+
+```typescript
+import { SolanaStablecoin, SSS_3, PrivacyModule } from "@stbr/sss-core-sdk";
+
+// Create SSS-3 stablecoin with confidential transfers
+const { stablecoin } = await SolanaStablecoin.create(connection, {
+  ...SSS_3,
+  name: "Private USD",
+  symbol: "pUSD",
+  decimals: 6,
+  authority: wallet.publicKey,
+});
+
+// Initialize privacy allowlist
+const privacy = await PrivacyModule.load(connection, stablecoin.configAddress);
+```
+
+---
+
 ## Admin TUI Dashboard
 
 An interactive terminal dashboard built with [ratatui](https://ratatui.rs) for real-time monitoring of your stablecoin.
@@ -1052,6 +1098,7 @@ All `/api/v1/*` endpoints require an API key via the `X-API-Key` header. See [do
 | [Architecture](docs/ARCHITECTURE.md)       | System design, PDA layout, security model    |
 | [SSS-1 Spec](docs/SSS-1.md)               | Minimal stablecoin standard specification    |
 | [SSS-2 Spec](docs/SSS-2.md)               | Compliant stablecoin standard specification  |
+| [SSS-3 Spec](docs/SSS-3.md)               | Privacy stablecoin standard specification    |
 | [SDK Reference](docs/SDK.md)              | TypeScript SDK API and usage examples        |
 | [Operations Runbook](docs/OPERATIONS.md)  | Step-by-step guide for every operation       |
 | [Compliance Guide](docs/COMPLIANCE.md)    | Regulatory considerations and audit trail    |

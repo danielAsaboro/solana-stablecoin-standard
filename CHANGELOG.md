@@ -8,7 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] - 2026-02-22
 
 Initial release of the Solana Stablecoin Standard — a modular stablecoin toolkit for Solana
-with two presets: SSS-1 (Minimal Stablecoin) and SSS-2 (Compliant Stablecoin).
+with three presets: SSS-1 (Minimal Stablecoin), SSS-2 (Compliant Stablecoin), and SSS-3 (Privacy Stablecoin).
+
+### SSS-3 Privacy Stablecoin (Experimental)
+
+- Added `enable_confidential_transfer` flag to `StablecoinConfig` (uses 1 byte from `_reserved`)
+- SSS program conditionally enables `ConfidentialTransferMint` Token-2022 extension during initialization
+- New Privacy companion program (`programs/privacy/`) with 4 instructions:
+  - `initialize_privacy` — create privacy config linked to stablecoin
+  - `update_privacy_config` — update auto-approve setting
+  - `add_to_allowlist` — add address to confidential transfer allowlist
+  - `remove_from_allowlist` — remove address from allowlist
+- `PrivacyConfig` PDA: `["privacy_config", stablecoin_config]`
+- `AllowlistEntry` PDA: `["allowlist", privacy_config, address]`
+- New `SSS_3` preset in SDK: confidential transfers enabled, no compliance features
+- New `PrivacyModule` SDK class with read/write methods for allowlist management
+- PDA helpers: `getPrivacyConfigAddress()`, `getAllowlistEntryAddress()`
+- Comprehensive SSS-3 specification in `docs/SSS-3.md`
 
 ### Added
 

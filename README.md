@@ -15,6 +15,9 @@ SSS provides two preset configurations -- **SSS-1** (minimal) and **SSS-2** (com
 - [Prerequisites](#prerequisites)
 - [Quick Start](#quick-start)
 - [Build and Test](#build-and-test)
+- [Tutorial: Launch an SSS-1 Stablecoin](#tutorial-launch-an-sss-1-stablecoin)
+- [Tutorial: Launch an SSS-2 Compliant Stablecoin](#tutorial-launch-an-sss-2-compliant-stablecoin)
+- [Tutorial: TypeScript SDK](#tutorial-typescript-sdk)
 - [Program IDs](#program-ids)
 - [SDK Usage](#sdk-usage)
 - [CLI Reference](#cli-reference)
@@ -230,6 +233,494 @@ The integration test suite covers seven test modules:
 | `roles.ts`          | Role assignment, revocation, multi-role scenarios        |
 | `multi-minter.ts`   | Multiple minters with independent quotas                 |
 | `edge-cases.ts`     | Overflow, unauthorized access, paused state, quota exceeded |
+
+---
+
+## Tutorial: Launch an SSS-1 Stablecoin
+
+This walkthrough takes you from zero to a fully operational SSS-1 stablecoin on a local Solana validator. Every command is copy-pasteable and every step is verified before moving on.
+
+> **Time required:** ~5 minutes. No devnet SOL needed — the local validator gives unlimited airdrop.
+
+### Step 1 — Start a local validator
+
+```bash
+# Start the local validator with both programs deployed
+# (anchor test does this automatically, but for manual CLI usage you need it running)
+solana-test-validator \
+  --bpf-program DNfk1e2vMJrxHm4BwoRTVqQxcfYjZLHggxr11hMZ5Dyu target/deploy/sss.so \
+  --bpf-program Gcd58Ng9gqRg1XtiU1i8KopwX1u82Mt9VmxKbLJ8RANH target/deploy/transfer_hook.so \
+  --reset &
+
+# Wait for the validator to start
+sleep 3
+
+# Point your Solana CLI to localhost
+solana config set --url http://localhost:8899
+```
+
+### Step 2 — Fund your wallet
+
+```bash
+# Use your existing keypair or generate a new one
+solana-keygen new --no-bip39-passphrase --outfile ~/.config/solana/id.json --force
+
+# Airdrop SOL (instant on localnet)
+solana airdrop 100
+solana balance  # Should show 100 SOL
+```
+
+### Step 3 — Initialize the stablecoin
+
+```bash
+# Create an SSS-1 stablecoin with 6 decimals (like USDC)
+npx ts-node cli/bin/sss-token.ts init \
+  --preset sss-1 \
+  --name "Tutorial USD" \
+  --symbol "tUSD" \
+  --decimals 6
+
+# Output:
+#   ℹ Using SSS-1 preset: basic stablecoin (no permanent delegate, no transfer hook)
+#   ℹ Initializing stablecoin "Tutorial USD" (tUSD) with 6 decimals...
+#   ℹ Mint: <MINT_ADDRESS>
+#   ✔ Stablecoin initialized!
+#   ℹ Config saved to .sss-token.json
+```
+
+The CLI saves the mint address and config PDA to `.sss-token.json`, so subsequent commands auto-discover the stablecoin.
+
+### Step 4 — Check the stablecoin status
+
+```bash
+npx ts-node cli/bin/sss-token.ts status
+
+# Output:
+#   ─── Stablecoin Status ────────────────────
+#   Name              Tutorial USD
+#   Symbol            tUSD
+#   Decimals          6
+#   Mint              <MINT_ADDRESS>
+#   Master Authority  <YOUR_PUBKEY>
+#   Paused            NO
+#   Permanent Delegate  Disabled
+#   Transfer Hook       Disabled
+#   Total Minted      0
+#   Total Burned      0
+#   Net Supply        0
+```
+
+### Step 5 — Assign roles and set a minter quota
+
+The master authority (your keypair) must assign roles before anyone can operate. The `minters add` command assigns the minter role **and** sets a quota in one step.
+
+```bash
+# Get your public key
+export MY_PUBKEY=$(solana address)
+
+# Add yourself as a minter with a 1,000,000 tUSD quota (1M * 10^6 = 1_000_000_000_000 base units)
+npx ts-node cli/bin/sss-token.ts minters add $MY_PUBKEY --quota 1000000000000
+
+# Also assign the burner and pauser roles
+npx ts-node cli/bin/sss-token.ts roles add burner $MY_PUBKEY
+npx ts-node cli/bin/sss-token.ts roles add pauser $MY_PUBKEY
+
+# Verify roles
+npx ts-node cli/bin/sss-token.ts roles list $MY_PUBKEY
+
+# Output:
+#   ─── Roles for <YOUR_PUBKEY> ────────────────
+#   Minter       ACTIVE
+#   Burner       ACTIVE
+#   Pauser       NOT ASSIGNED  (pauser role was just assigned, so it shows ACTIVE)
+#   Blacklister  NOT ASSIGNED
+#   Seizer       NOT ASSIGNED
+```
+
+### Step 6 — Mint tokens
+
+```bash
+# Generate a recipient wallet
+solana-keygen new --no-bip39-passphrase --outfile /tmp/recipient.json --force
+export RECIPIENT=$(solana-keygen pubkey /tmp/recipient.json)
+
+# Fund the recipient so they can hold tokens (need SOL for ATA rent)
+solana airdrop 1 $RECIPIENT
+
+# Mint 10,000 tUSD (10_000 * 10^6 = 10_000_000_000 base units)
+npx ts-node cli/bin/sss-token.ts mint $RECIPIENT 10000000000
+
+# Check the updated supply
+npx ts-node cli/bin/sss-token.ts supply
+
+# Output:
+#   ─── Supply Statistics ────────────────────
+#   Total Minted   10000000000
+#   Total Burned   0
+#   Net Supply     10000000000
+```
+
+### Step 7 — Burn tokens
+
+The burner burns from their own token account. Mint some to yourself first, then burn.
+
+```bash
+# Mint to yourself
+npx ts-node cli/bin/sss-token.ts mint $MY_PUBKEY 5000000000
+
+# Burn 1,000 tUSD from your account
+npx ts-node cli/bin/sss-token.ts burn 1000000000
+
+# Verify
+npx ts-node cli/bin/sss-token.ts supply
+# Net Supply should be 14000000000 (15B minted - 1B burned)
+```
+
+### Step 8 — Freeze and thaw an account
+
+```bash
+# Freeze the recipient's token account (blocks all transfers)
+npx ts-node cli/bin/sss-token.ts freeze $RECIPIENT
+
+# Thaw (unfreeze) the account
+npx ts-node cli/bin/sss-token.ts thaw $RECIPIENT
+```
+
+### Step 9 — Pause and unpause
+
+Pausing halts **all** minting and burning system-wide.
+
+```bash
+# Pause the stablecoin
+npx ts-node cli/bin/sss-token.ts pause
+
+# Try to mint — this will fail with "Paused" error
+npx ts-node cli/bin/sss-token.ts mint $RECIPIENT 1000000
+# Error: Paused
+
+# Unpause to resume operations
+npx ts-node cli/bin/sss-token.ts unpause
+```
+
+### Step 10 — Check minter quota usage
+
+```bash
+npx ts-node cli/bin/sss-token.ts minters list $MY_PUBKEY
+
+# Output:
+#   ─── Minter Info ────────────────────
+#   Address    <YOUR_PUBKEY>
+#   Active     YES
+#   Quota      1000000000000
+#   Minted     15000000000
+#   Remaining  985000000000
+```
+
+You now have a fully operational SSS-1 stablecoin with role-based access control, mint quotas, freeze/thaw, and pause/unpause.
+
+---
+
+## Tutorial: Launch an SSS-2 Compliant Stablecoin
+
+SSS-2 adds blacklist enforcement (via transfer hook) and token seizure (via permanent delegate) on top of all SSS-1 features. This tutorial assumes you have completed the prerequisite steps (validator running, wallet funded).
+
+> **Important:** SSS-2 requires the Transfer Hook program to be deployed alongside the SSS program. Both are already loaded by `solana-test-validator` in [Step 1](#step-1--start-a-local-validator) above.
+
+### Step 1 — Initialize SSS-2
+
+```bash
+# Initialize with the sss-2 preset (enables permanent delegate + transfer hook)
+npx ts-node cli/bin/sss-token.ts init \
+  --preset sss-2 \
+  --name "Compliant USD" \
+  --symbol "cUSD" \
+  --decimals 6
+
+# Output:
+#   ℹ Using SSS-2 preset: compliance stablecoin (permanent delegate + transfer hook)
+#   ✔ Stablecoin initialized!
+```
+
+Verify compliance features are enabled:
+
+```bash
+npx ts-node cli/bin/sss-token.ts status
+
+# Output includes:
+#   Permanent Delegate  Enabled
+#   Transfer Hook       Enabled
+#   Hook Program        Gcd58Ng9gqRg1XtiU1i8KopwX1u82Mt9VmxKbLJ8RANH
+```
+
+### Step 2 — Assign compliance roles
+
+SSS-2 adds two extra role types: **Blacklister** and **Seizer**.
+
+```bash
+export MY_PUBKEY=$(solana address)
+
+# Assign all five roles to yourself for this tutorial
+npx ts-node cli/bin/sss-token.ts minters add $MY_PUBKEY --quota 1000000000000
+npx ts-node cli/bin/sss-token.ts roles add burner $MY_PUBKEY
+npx ts-node cli/bin/sss-token.ts roles add pauser $MY_PUBKEY
+npx ts-node cli/bin/sss-token.ts roles add blacklister $MY_PUBKEY
+npx ts-node cli/bin/sss-token.ts roles add seizer $MY_PUBKEY
+```
+
+### Step 3 — Mint and distribute
+
+```bash
+# Create a user wallet
+solana-keygen new --no-bip39-passphrase --outfile /tmp/user.json --force
+export USER=$(solana-keygen pubkey /tmp/user.json)
+solana airdrop 1 $USER
+
+# Mint tokens to yourself and the user
+npx ts-node cli/bin/sss-token.ts mint $MY_PUBKEY 50000000000
+npx ts-node cli/bin/sss-token.ts mint $USER 10000000000
+```
+
+### Step 4 — Blacklist an address
+
+When a wallet is blacklisted, the transfer hook rejects **all** incoming and outgoing transfers for that address at the Token-2022 protocol level.
+
+```bash
+# Blacklist the user (e.g., sanctions match)
+npx ts-node cli/bin/sss-token.ts blacklist add $USER --reason "OFAC SDN match"
+
+# Output:
+#   ✔ Address blacklisted!
+#   Address  <USER_PUBKEY>
+#   Reason   OFAC SDN match
+```
+
+Any `transfer_checked` involving this user's token account will now fail with "BlacklistedAddress" at the transfer hook level.
+
+### Step 5 — Seize tokens
+
+The permanent delegate allows seizing tokens from any account without the holder's signature — required for court-ordered asset recovery.
+
+```bash
+# Create a treasury wallet to receive seized funds
+solana-keygen new --no-bip39-passphrase --outfile /tmp/treasury.json --force
+export TREASURY=$(solana-keygen pubkey /tmp/treasury.json)
+solana airdrop 1 $TREASURY
+
+# Seize all 10,000 cUSD from the blacklisted user
+npx ts-node cli/bin/sss-token.ts seize $USER --to $TREASURY --amount 10000000000
+
+# Output:
+#   ✔ Tokens seized!
+#   From    <USER_PUBKEY>
+#   To      <TREASURY_PUBKEY>
+#   Amount  10000000000
+```
+
+### Step 6 — Remove from blacklist
+
+After compliance review, addresses can be unblocked.
+
+```bash
+npx ts-node cli/bin/sss-token.ts blacklist remove $USER
+```
+
+### Full SSS-2 lifecycle summary
+
+```
+1. init --preset sss-2          Create compliant stablecoin
+2. roles add blacklister/seizer  Assign compliance roles
+3. minters add + mint            Issue tokens
+4. blacklist add <addr>          Block sanctioned address (transfers fail)
+5. seize <addr> --to <treasury>  Recover assets via permanent delegate
+6. blacklist remove <addr>       Unblock after review
+```
+
+---
+
+## Tutorial: TypeScript SDK
+
+For programmatic integration, use the TypeScript SDK directly. This example creates an SSS-1 stablecoin and performs the same operations as the CLI tutorial above.
+
+### Installation
+
+```bash
+yarn add @stbr/sss-core-sdk @stbr/sss-compliance-sdk
+```
+
+### Complete example: SSS-1 lifecycle
+
+```typescript
+import { Connection, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { SolanaStablecoin, Presets } from "@stbr/sss-core-sdk";
+import { sendAndConfirmTransaction, Transaction } from "@solana/web3.js";
+import BN from "bn.js";
+
+async function main() {
+  // 1. Connect to local validator
+  const connection = new Connection("http://localhost:8899", "confirmed");
+  const authority = Keypair.generate();
+
+  // Fund the authority
+  const airdropSig = await connection.requestAirdrop(
+    authority.publicKey,
+    10 * LAMPORTS_PER_SOL
+  );
+  await connection.confirmTransaction(airdropSig);
+
+  // 2. Create an SSS-1 stablecoin
+  const { stablecoin, mintKeypair, instruction } =
+    await SolanaStablecoin.create(connection, {
+      ...Presets.SSS_1,
+      name: "SDK Tutorial USD",
+      symbol: "sUSD",
+      uri: "",
+      decimals: 6,
+      authority: authority.publicKey,
+    });
+
+  const createTx = new Transaction().add(instruction);
+  await sendAndConfirmTransaction(connection, createTx, [
+    authority,
+    mintKeypair,
+  ]);
+  console.log("Stablecoin created! Mint:", mintKeypair.publicKey.toBase58());
+
+  // 3. Load the stablecoin (can also be used to reconnect later)
+  const loaded = await SolanaStablecoin.load(
+    connection,
+    mintKeypair.publicKey
+  );
+  const config = await loaded.getConfig();
+  console.log("Name:", config.name, "| Symbol:", config.symbol);
+
+  // 4. Assign minter role and set quota using the builder API
+  const updateRolesIx = await loaded.updateRoles({
+    roleType: 0, // Minter
+    user: authority.publicKey,
+    active: true,
+    authority: authority.publicKey,
+  });
+  await sendAndConfirmTransaction(
+    connection,
+    new Transaction().add(updateRolesIx),
+    [authority]
+  );
+
+  const updateMinterIx = await loaded.updateMinter({
+    minter: authority.publicKey,
+    quota: new BN("1000000000000"),
+    authority: authority.publicKey,
+  });
+  await sendAndConfirmTransaction(
+    connection,
+    new Transaction().add(updateMinterIx),
+    [authority]
+  );
+
+  // 5. Mint 10,000 tokens using the fluent builder
+  const recipient = Keypair.generate();
+  await connection.confirmTransaction(
+    await connection.requestAirdrop(recipient.publicKey, LAMPORTS_PER_SOL)
+  );
+
+  await loaded
+    .mint(new BN(10_000_000_000))
+    .to(recipient.publicKey)
+    .by(authority)
+    .createAccountIfNeeded()
+    .send(authority);
+  console.log("Minted 10,000 sUSD to", recipient.publicKey.toBase58());
+
+  // 6. Check supply
+  const supply = await loaded.getSupply();
+  console.log("Total supply:", supply.toString());
+
+  // 7. Burn tokens (assign burner role first)
+  const burnerRoleIx = await loaded.updateRoles({
+    roleType: 1, // Burner
+    user: authority.publicKey,
+    active: true,
+    authority: authority.publicKey,
+  });
+  await sendAndConfirmTransaction(
+    connection,
+    new Transaction().add(burnerRoleIx),
+    [authority]
+  );
+
+  // Mint some to ourselves first, then burn
+  await loaded
+    .mint(new BN(5_000_000_000))
+    .to(authority.publicKey)
+    .by(authority)
+    .createAccountIfNeeded()
+    .send(authority);
+
+  await loaded.burn(new BN(1_000_000_000)).by(authority).send(authority);
+  console.log("Burned 1,000 sUSD");
+
+  // 8. Batch operations — mint to multiple recipients at once
+  const recipients = [Keypair.generate(), Keypair.generate()];
+  for (const r of recipients) {
+    await connection.confirmTransaction(
+      await connection.requestAirdrop(r.publicKey, LAMPORTS_PER_SOL)
+    );
+  }
+
+  await loaded
+    .batchMint([
+      { to: recipients[0].publicKey, amount: new BN(1_000_000_000) },
+      { to: recipients[1].publicKey, amount: new BN(2_000_000_000) },
+    ])
+    .by(authority)
+    .createAccountsIfNeeded()
+    .send(authority);
+  console.log("Batch minted to 2 recipients");
+
+  console.log("Tutorial complete!");
+}
+
+main().catch(console.error);
+```
+
+### Using the fluent builder with retry and simulation
+
+```typescript
+// Mint with pre-flight simulation and automatic retry on transient failures
+await stablecoin
+  .mint(new BN(1_000_000))
+  .to(recipient.publicKey)
+  .by(minterKeypair)
+  .withMemo("Monthly distribution")
+  .withComputeBudget(200_000)
+  .withRetry({ maxRetries: 3, initialDelayMs: 500 })
+  .withSimulation()
+  .send(payerKeypair);
+```
+
+### Parsing events from a transaction
+
+```typescript
+import { SSSEventParser, SSSEventName } from "@stbr/sss-core-sdk";
+
+const parser = new SSSEventParser(program);
+
+// Parse events from a transaction signature
+const events = await parser.parseTransaction(connection, txSignature);
+
+// Filter for mint events with full type safety
+const mints = parser.filterEvents(events, SSSEventName.TokensMinted);
+for (const mint of mints) {
+  console.log(`Minted ${mint.data.amount} to config ${mint.data.config}`);
+}
+
+// Real-time WebSocket subscription
+parser.addEventListener(connection, SSSEventName.TokensBurned, (event) => {
+  console.log("Burn detected:", event.data.amount.toString());
+});
+```
+
+For the full SDK API reference with 15 sections and 5 end-to-end workflows, see [docs/SDK.md](docs/SDK.md).
 
 ---
 

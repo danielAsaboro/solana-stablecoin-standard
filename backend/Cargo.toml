@@ -37,3 +37,8 @@ bs58 = "0.4"
 solana-sdk = "1.18"
 solana-client = "1.18"
 solana-transaction-status = "1.18"
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+wiremock = "0.6"

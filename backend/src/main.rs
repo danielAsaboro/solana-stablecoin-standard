@@ -3,11 +3,6 @@
 //! Provides REST endpoints for mint/burn operations, compliance management,
 //! and webhook registration. Connects to Solana RPC for on-chain execution.
 
-mod error;
-mod routes;
-mod services;
-mod solana;
-
 use std::env;
 use std::sync::Arc;
 
@@ -16,30 +11,17 @@ use axum::{
     http::{Method, StatusCode},
     middleware::{self, Next},
     response::Response,
-    Router,
 };
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use crate::services::compliance::ComplianceService;
-use crate::services::indexer::IndexerService;
-use crate::services::mint_burn::MintBurnService;
-use crate::services::webhook::WebhookService;
-use crate::solana::SolanaContext;
-
-/// Shared application state passed to all route handlers via Axum's `State` extractor.
-#[derive(Clone)]
-pub struct AppState {
-    /// MintBurn service — `None` if Solana context is not configured.
-    pub mint_burn: Option<Arc<MintBurnService>>,
-    /// Compliance service — `None` if Solana context is not configured.
-    pub compliance: Option<Arc<ComplianceService>>,
-    /// Indexer service — `None` if Solana context is not configured.
-    pub indexer: Option<Arc<IndexerService>>,
-    /// Webhook service — always available (no Solana dependency).
-    pub webhook: Arc<WebhookService>,
-}
+use sss_backend::services::compliance::ComplianceService;
+use sss_backend::services::indexer::IndexerService;
+use sss_backend::services::mint_burn::MintBurnService;
+use sss_backend::services::webhook::WebhookService;
+use sss_backend::solana::{self, SolanaContext};
+use sss_backend::AppState;
 
 /// API-key authentication middleware.
 ///
@@ -159,11 +141,8 @@ async fn main() {
         .allow_origin(Any)
         .allow_headers(Any);
 
-    // Build the application router
-    let app = Router::new()
-        .merge(routes::health::router())
-        .nest("/api/v1", routes::api_router())
-        .with_state(state)
+    // Build the application router with middleware
+    let app = sss_backend::build_router(state)
         .layer(middleware::from_fn(auth_middleware))
         .layer(cors)
         .layer(TraceLayer::new_for_http());

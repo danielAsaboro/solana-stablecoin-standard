@@ -8,6 +8,7 @@ SSS is a modular stablecoin toolkit for Solana with two presets:
 ## Architecture
 - `programs/sss/` — Main Anchor program (Token-2022)
 - `programs/transfer-hook/` — SPL Transfer Hook for blacklist enforcement
+- `programs/oracle/` — Switchboard V2 price feed integration for non-USD pegs
 - `sdk/core/` — `@stbr/sss-core-sdk` TypeScript SDK
 - `sdk/compliance/` — `@stbr/sss-compliance-sdk` compliance extensions
 - `cli/` — `sss-token` CLI tool (commander.js)
@@ -18,6 +19,7 @@ SSS is a modular stablecoin toolkit for Solana with two presets:
 ## Program IDs (localnet)
 - SSS: `DNfk1e2vMJrxHm4BwoRTVqQxcfYjZLHggxr11hMZ5Dyu`
 - Transfer Hook: `Gcd58Ng9gqRg1XtiU1i8KopwX1u82Mt9VmxKbLJ8RANH`
+- Oracle: `6PHWYPgkVWE7f5Saak4EXVh49rv9ZcXdz7HMfHnQdNLJ`
 
 ## PDA Seeds
 - Config: `["stablecoin", mint]`
@@ -25,6 +27,7 @@ SSS is a modular stablecoin toolkit for Solana with two presets:
 - MinterQuota: `["minter_quota", config, minter]`
 - BlacklistEntry: `["blacklist", config, address]`
 - ExtraAccountMetas: `["extra-account-metas", mint]` (on hook program)
+- OracleConfig: `["oracle_config", stablecoin_config]` (on oracle program)
 
 ## Key Conventions
 - Anchor 0.31.1 (CLI 0.32.1)
@@ -37,7 +40,7 @@ SSS is a modular stablecoin toolkit for Solana with two presets:
 
 ## Build & Test
 ```bash
-anchor build          # Build both programs
+anchor build          # Build all three programs
 anchor test           # Run integration tests
 yarn build            # Build SDK packages
 yarn test:sdk         # Run SDK tests

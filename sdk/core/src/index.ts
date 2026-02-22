@@ -30,6 +30,7 @@
  * - Batch builders — {@link BatchBuilder}, {@link BatchMintBuilder}, etc. for multi-operation transactions
  * - {@link withRetry} — Automatic retry with exponential backoff for transient RPC failures
  * - {@link simulateTransaction} — Pre-flight simulation with human-readable error parsing
+ * - {@link OracleModule} — Switchboard V2 price feed integration for non-USD pegs
  *
  * @module @stbr/sss-core-sdk
  * @packageDocumentation
@@ -155,3 +156,14 @@ export {
   formatSimulationError,
   SSSSimulationError,
 } from "./simulation";
+
+// Oracle Integration Module — Switchboard V2 price feeds for non-USD pegs
+export {
+  ORACLE_PROGRAM_ID,
+  getOracleConfigAddress,
+  OracleModule,
+  type OracleConfigData,
+  type OraclePrice,
+  type InitOracleParams,
+  type UpdateOracleParams,
+} from "./oracle";

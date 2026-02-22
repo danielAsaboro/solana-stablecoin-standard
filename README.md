@@ -21,6 +21,7 @@ SSS provides two preset configurations -- **SSS-1** (minimal) and **SSS-2** (com
 - [Program IDs](#program-ids)
 - [SDK Usage](#sdk-usage)
 - [CLI Reference](#cli-reference)
+- [Oracle Integration Module](#oracle-integration-module)
 - [Admin TUI Dashboard](#admin-tui-dashboard)
 - [Admin Frontend (Next.js)](#admin-frontend-nextjs)
 - [Backend API](#backend-api)
@@ -92,6 +93,7 @@ Layer 1  On-chain Programs  SSS Program (sss)    |   Transfer Hook Program
 | MinterQuota         | `["minter_quota", config, minter]`      | SSS           |
 | BlacklistEntry      | `["blacklist", config, address]`        | SSS           |
 | ExtraAccountMetas   | `["extra-account-metas", mint]`         | Transfer Hook |
+| OracleConfig        | `["oracle_config", stablecoin_config]`  | Oracle        |
 
 ### Data Flow: Mint
 
@@ -128,6 +130,7 @@ solana-stablecoin-standard/
   programs/
     sss/                 Anchor program -- core stablecoin logic
     transfer-hook/       Anchor program -- blacklist enforcement hook
+    oracle/              Anchor program -- Switchboard price feed integration
   sdk/
     core/                TypeScript SDK -- SolanaStablecoin class, presets, PDA helpers
     compliance/          TypeScript SDK -- ComplianceModule, BlacklistManager, AuditLog
@@ -736,6 +739,7 @@ For the full SDK API reference with 15 sections and 5 end-to-end workflows, see 
 | --------------- | ---------------------------------------------- |
 | SSS             | `EaQk4dxh7MmvE3cL57Ns3QFqNKnfoCrxeVzFLSHajWFr` |
 | Transfer Hook   | `EFui8Qo2RuojKfzfPCTzQjiSUAaHpiJ5qKwW6NXLbMAr` |
+| Oracle          | `6PHWYPgkVWE7f5Saak4EXVh49rv9ZcXdz7HMfHnQdNLJ` |
 
 ### Localnet
 
@@ -743,6 +747,7 @@ For the full SDK API reference with 15 sections and 5 end-to-end workflows, see 
 | --------------- | ---------------------------------------------- |
 | SSS             | `DNfk1e2vMJrxHm4BwoRTVqQxcfYjZLHggxr11hMZ5Dyu` |
 | Transfer Hook   | `Gcd58Ng9gqRg1XtiU1i8KopwX1u82Mt9VmxKbLJ8RANH` |
+| Oracle          | `6PHWYPgkVWE7f5Saak4EXVh49rv9ZcXdz7HMfHnQdNLJ` |
 
 ---
 
@@ -829,6 +834,57 @@ sss-token blacklist remove # Remove address from blacklist (SSS-2)
 sss-token seize         # Seize tokens via permanent delegate (SSS-2)
 sss-token status        # Display stablecoin configuration
 sss-token supply        # Display supply information
+```
+
+---
+
+## Oracle Integration Module
+
+The oracle module provides [Switchboard V2](https://switchboard.xyz/) price feed integration for non-USD stablecoin pegs (EUR, BRL, CPI-indexed, etc.). It is a separate Anchor program that reads aggregator accounts and stores verified, bounds-checked prices on-chain.
+
+### Architecture
+
+```
+Switchboard V2           Oracle Program            Backend / SDK
+ Aggregator    ◄──reads── refresh_price ──stores──► OracleConfig PDA
+ (EUR/USD,                                          (last_price,
+  BRL/USD,                                           last_timestamp,
+  CPI index)                                         bounds, staleness)
+```
+
+The oracle does not modify the SSS stablecoin program — it is a companion data provider. The backend or SDK reads the `OracleConfig` PDA to calculate mint/redeem amounts at the correct exchange rate.
+
+### Instructions
+
+| Instruction            | Description                                             | Auth           |
+| ---------------------- | ------------------------------------------------------- | -------------- |
+| `initialize_oracle`    | Create oracle config linked to stablecoin + aggregator  | Authority      |
+| `update_oracle_config` | Update aggregator, thresholds, bounds                   | Authority      |
+| `refresh_price`        | Read Switchboard aggregator, validate, store price      | Permissionless |
+| `push_manual_price`    | Push price manually (testing/backup)                    | Authority      |
+
+### Switchboard Integration
+
+The oracle parses Switchboard V2 aggregator account data at known Borsh serialization offsets, extracting the `latest_confirmed_round.result` (mantissa + scale) and `round_open_timestamp`. This avoids a dependency on the full `switchboard-solana` SDK, keeping the BPF binary small. The program validates:
+
+- **Staleness** — price data must be within the configured `staleness_threshold` seconds
+- **Bounds** — price must fall within `[min_price, max_price]`
+- **Positivity** — negative or zero prices are rejected
+
+### SDK Usage
+
+```typescript
+import { OracleModule } from "@stbr/sss-core-sdk";
+
+// Load oracle for an existing stablecoin
+const oracle = await OracleModule.load(connection, stablecoinConfigAddress);
+
+// Read the latest price
+const price = await oracle.getPrice();
+console.log(`1 token = ${price.formatted} ${price.baseCurrency}`);
+
+// Convert: how many tokens for 100 BRL?
+const tokens = oracle.fiatToTokens(100, 6); // 6 = token decimals
 ```
 
 ---

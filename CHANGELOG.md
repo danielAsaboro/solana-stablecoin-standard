@@ -89,6 +89,22 @@ with two presets: SSS-1 (Minimal Stablecoin) and SSS-2 (Compliant Stablecoin).
 - Tailwind CSS dark theme with professional styling
 - Custom `useStablecoin` React hook encapsulating all program interactions
 
+#### Oracle Integration Module (`programs/oracle/`)
+- Separate Anchor program for Switchboard V2 price feed integration
+- 4 instructions: `initialize_oracle`, `update_oracle_config`, `refresh_price`,
+  `push_manual_price`
+- Direct Switchboard V2 aggregator data parsing at known Borsh byte offsets —
+  no heavy `switchboard-solana` SDK dependency
+- Staleness validation, price bounds checking, positive price enforcement
+- Permissionless cranking for `refresh_price` (any signer can update the price)
+- Manual price override mode for testing, development, and fallback scenarios
+- 4 events: `OracleInitialized`, `OracleConfigUpdated`, `PriceRefreshed`,
+  `ManualPricePushed`
+- SDK `OracleModule` class with price reading, amount conversion (`fiatToTokens`,
+  `tokensToFiat`), and instruction builders
+- `#![deny(clippy::all)]` enforcement with zero warnings
+- Comprehensive `///` doc comments on all public items
+
 #### Interactive Admin TUI (`tui/`)
 - Standalone `sss-admin-tui` binary built with [ratatui](https://ratatui.rs) + crossterm
 - 5-tab terminal dashboard: Dashboard, Roles, Minters, Blacklist, Help

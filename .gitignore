@@ -4,3 +4,4 @@ test-ledger/
 dist/
 .anchor/
 .DS_Store
+proptest-regressions/

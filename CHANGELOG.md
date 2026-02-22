@@ -68,11 +68,16 @@ with three presets: SSS-1 (Minimal Stablecoin), SSS-2 (Compliant Stablecoin), an
 - Full JSDoc documentation on all public interfaces
 
 #### Admin CLI (`@stbr/sss-cli`)
-- 10 subcommands: `init`, `mint`, `burn`, `freeze`, `pause`, `blacklist`, `seize`,
-  `minters`, `roles`, `status`
+- 12 subcommands: `init`, `mint`, `burn`, `freeze`, `pause`, `blacklist`, `seize`,
+  `minters`, `roles`, `status`, `holders`, `audit-log`
 - Preset initialization: `sss-token init --preset sss-1` / `--preset sss-2`
 - Full stablecoin state dashboard via `status` command — supply, authorities, roles,
   minter quotas with usage bars, blacklist count, and preset badge
+- `holders` command — list all token holders with balances, `--min-balance` filter,
+  sorting by balance or address, percentage of total supply per holder
+- `audit-log` command — query on-chain event history with `--action` filter
+  (mint, burn, freeze, blacklist, seize, etc.), Anchor event log parsing,
+  pagination support via `--before` signature
 - Terminal spinners (ora) during all RPC operations
 - Solana Explorer links after every transaction (auto-detects cluster)
 - Formatted output with color-coded status badges
@@ -176,6 +181,7 @@ with three presets: SSS-1 (Minimal Stablecoin), SSS-2 (Compliant Stablecoin), an
 - `docs/COMPLIANCE.md` — Regulatory considerations and audit trail format
 - `docs/API.md` — Backend REST API reference
 - `docs/SECURITY_AUDIT.md` — Comprehensive security audit checklist
+- `docs/TESTING.md` — Test pyramid, categories, fuzz documentation, helper patterns
 - `docs/DEVNET_DEPLOYMENT.md` — Devnet deployment guide with automated scripts,
   example transactions, program IDs, and troubleshooting
 

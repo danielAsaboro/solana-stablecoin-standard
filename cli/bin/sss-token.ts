@@ -11,6 +11,8 @@ import { registerBlacklistCommand } from "../src/commands/blacklist";
 import { registerSeizeCommand } from "../src/commands/seize";
 import { registerMintersCommand } from "../src/commands/minters";
 import { registerRolesCommand } from "../src/commands/roles";
+import { registerHoldersCommand } from "../src/commands/holders";
+import { registerAuditLogCommand } from "../src/commands/audit-log";
 
 const program = new Command();
 
@@ -32,5 +34,7 @@ registerBlacklistCommand(program);
 registerSeizeCommand(program);
 registerMintersCommand(program);
 registerRolesCommand(program);
+registerHoldersCommand(program);
+registerAuditLogCommand(program);
 
 program.parse(process.argv);

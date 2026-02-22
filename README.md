@@ -910,6 +910,8 @@ sss-token blacklist remove # Remove address from blacklist (SSS-2)
 sss-token seize         # Seize tokens via permanent delegate (SSS-2)
 sss-token status        # Display stablecoin configuration
 sss-token supply        # Display supply information
+sss-token holders       # List all token holders with balances
+sss-token audit-log     # Query on-chain event history (audit trail)
 ```
 
 ---
@@ -1105,6 +1107,7 @@ All `/api/v1/*` endpoints require an API key via the `X-API-Key` header. See [do
 | [API Reference](docs/API.md)             | Backend REST API documentation               |
 | [Devnet Deployment](docs/DEVNET_DEPLOYMENT.md) | Deployment guide with scripts and proof |
 | [Security Audit](docs/SECURITY_AUDIT.md) | Comprehensive security audit checklist       |
+| [Testing Guide](docs/TESTING.md)        | Test pyramid, categories, fuzz documentation |
 
 ---
 

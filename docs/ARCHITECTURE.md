@@ -8,6 +8,35 @@ Layer 2: TypeScript SDK (@stbr/sss-core-sdk, @stbr/sss-compliance-sdk)
 Layer 1: On-chain Programs (sss, transfer-hook)
 ```
 
+```mermaid
+graph TD
+    subgraph L3["Layer 3 — Applications"]
+        CLI["CLI (sss-token)"]
+        FE["Frontend (Next.js)"]
+        BE["Backend API (Rust/Axum)"]
+    end
+    subgraph L2["Layer 2 — TypeScript SDK"]
+        CORE["@stbr/sss-core-sdk"]
+        COMP["@stbr/sss-compliance-sdk"]
+    end
+    subgraph L1["Layer 1 — On-Chain Programs"]
+        SSS["SSS Program"]
+        HOOK["Transfer Hook Program"]
+        ORACLE["Oracle Program"]
+        PRIVACY["Privacy Program"]
+    end
+
+    CLI --> CORE
+    FE --> CORE
+    BE --> L1
+    CORE --> SSS
+    COMP --> CORE
+    COMP --> SSS
+    SSS -->|"CPI on every transfer"| HOOK
+    SSS -->|"price feed"| ORACLE
+    SSS -->|"confidential transfers"| PRIVACY
+```
+
 ### Layer 1 — On-Chain Programs
 
 Two Anchor programs deployed on Solana:
@@ -51,6 +80,23 @@ Minter → SDK.mint() → SSS Program
   6. Emit TokensMinted event
 ```
 
+```mermaid
+sequenceDiagram
+    participant M as Minter
+    participant SDK as SDK.mint()
+    participant SSS as SSS Program
+    participant T22 as Token-2022
+
+    M->>SDK: mint(amount, recipient)
+    SDK->>SSS: MintTokens instruction
+    SSS->>SSS: Verify RoleAccount PDA (Minter)
+    SSS->>SSS: Check MinterQuota PDA
+    SSS->>SSS: Check StablecoinConfig.paused
+    SSS->>T22: CPI mint_to(config PDA signer)
+    SSS->>SSS: Update total_minted + quota.minted
+    SSS-->>M: Emit TokensMinted event
+```
+
 ### Transfer with Blacklist (SSS-2)
 ```
 User → transfer_checked (Token-2022)
@@ -60,6 +106,16 @@ User → transfer_checked (Token-2022)
   4. Hook checks BlacklistEntry PDAs for source & dest owners
   5. If blacklisted → error, transfer rolled back
   6. If not → transfer completes
+```
+
+```mermaid
+flowchart TD
+    U["User"] -->|transfer_checked| T22["Token-2022"]
+    T22 -->|reads TransferHook extension| T22
+    T22 -->|resolves ExtraAccountMetas PDA| HOOK["Transfer Hook Program"]
+    HOOK --> CHECK{"BlacklistEntry PDA\nexists for source\nor destination?"}
+    CHECK -->|Yes| ERR["Error: transfer rejected\n(rolled back)"]
+    CHECK -->|No| OK["Transfer completes"]
 ```
 
 ### Seize Flow

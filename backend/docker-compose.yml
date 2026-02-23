@@ -5,7 +5,7 @@ services:
       - "3001:3001"
     environment:
       - SSS_API_KEY=dev-api-key
-      - DATABASE_URL=postgres://sss:sss@postgres:5432/sss
+      # DATABASE_URL: not used — backend uses in-memory storage
       - RPC_URL=https://api.devnet.solana.com
       # Required for Solana operations — set to your deployed stablecoin mint:
       # - SSS_MINT_ADDRESS=<your-mint-address>
@@ -14,21 +14,4 @@ services:
       # Optional — defaults to ~/.config/solana/id.json:
       # - SSS_KEYPAIR_PATH=/app/keypair.json
       - RUST_LOG=sss_backend=info,tower_http=info
-    depends_on:
-      - postgres
     restart: unless-stopped
-
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: sss
-      POSTGRES_PASSWORD: sss
-      POSTGRES_DB: sss
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-    restart: unless-stopped
-
-volumes:
-  pgdata:

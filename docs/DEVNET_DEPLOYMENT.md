@@ -250,7 +250,7 @@ Final State:
 
 ## Localnet Deployment Proof
 
-The programs have been verified on a local Solana validator (`solana-test-validator`) with all three programs deployed and exercised through 81 integration tests covering:
+The programs have been verified on a local Solana validator (`solana-test-validator`) with all three programs deployed and exercised through 96 integration tests covering:
 
 - **SSS-1 lifecycle**: initialize, roles, quotas, mint, burn, freeze, thaw, pause, unpause, authority transfer
 - **SSS-2 compliance**: blacklist add/remove, seize via permanent delegate, transfer hook enforcement
@@ -261,11 +261,11 @@ The programs have been verified on a local Solana validator (`solana-test-valida
 ### Test Results
 
 ```
-  81 passing (integration tests)
+  96 passing (integration tests)
   53 passing (backend integration tests)
   21 passing (fuzz tests — ~11,800 randomized cases)
   ---
-  155 total tests passing
+  170 total tests passing
 ```
 
 ### Reproducing Locally

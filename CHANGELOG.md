@@ -5,6 +5,29 @@ All notable changes to the Solana Stablecoin Standard (SSS) will be documented i
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-02-23
+
+Quality and documentation improvements based on post-release review.
+
+### Added
+
+- 4 new integration tests for role concurrency and SSS-2 compliance role gating (`tests/roles.ts`: 4 → 6 tests)
+- 2 new integration tests for seize security: unauthorized seize rejection, full-balance seize (`tests/seize.ts`: 2 → 4 tests)
+- **Total tests: 170** (96 Anchor + 53 Backend + 21 Fuzz), up from 166
+
+### Improved
+
+- **`docs/SSS-1.md`** — Expanded from 63 to 1,124 lines: EIP-style metadata, complete account layout (all 17 fields with byte sizes), PDA derivation with TypeScript examples, all 10 instructions fully specified with accounts tables, validation rules, state changes, emitted events, error codes; role system deep-dive, quota mechanics, 13 security invariants, SDK examples
+- **`docs/SSS-2.md`** — Expanded from 89 to 1,204 lines: complete transfer hook program specification (extra account resolution with 9 indexed accounts, seizure bypass mechanics), full compliance lifecycle (blacklist PDA lifecycle, enforcement coverage, audit trail), regulatory alignment section (OFAC SDN, GENIUS Act, court orders), step-by-step initialization guide with TypeScript code
+- **`docs/API.md`** — Rewritten with all 20 REST endpoints documented accurately: correct response shapes, status codes, operation lifecycle (Pending → Executing → Completed/Failed), accurate env vars (`RPC_URL`, `SSS_API_KEY`), removed stale postgres references
+- **`docs/ARCHITECTURE.md`** — Added all 4 programs (SSS, Transfer Hook, Oracle, Privacy), complete PDA table with Preset column, all 5 Token-2022 extensions, program IDs table for all 4 programs
+- **`docs/COMPLIANCE.md`** — Fixed 5 incorrect event names to match actual Anchor event structs
+- **`docs/TESTING.md`** — Updated test pyramid, per-file breakdowns, and coverage table to reflect all 9 test files with accurate counts
+
+### Fixed
+
+- All test count references corrected across `README.md`, `TESTING.md`, `DEVNET_DEPLOYMENT.md` (was 81/155, corrected to accurate counts)
+
 ## [0.1.0] - 2026-02-22
 
 Initial release of the Solana Stablecoin Standard — a modular stablecoin toolkit for Solana

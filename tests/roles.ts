@@ -155,4 +155,84 @@ describe("Roles", () => {
       expect(err.toString()).to.include("ComplianceNotEnabled");
     }
   });
+
+  it("multiple users can hold the same role concurrently", async () => {
+    // Each user gets their own RoleAccount PDA (keyed by user pubkey)
+    const user1 = Keypair.generate();
+    const user2 = Keypair.generate();
+
+    for (const user of [user1, user2]) {
+      const [rolePda] = PublicKey.findProgramAddressSync(
+        [ROLE_SEED, configPda.toBuffer(), Buffer.from([1]), user.publicKey.toBuffer()],
+        program.programId
+      );
+      await program.methods
+        .updateRoles(1, user.publicKey, true)
+        .accountsStrict({
+          authority: authority.publicKey,
+          config: configPda,
+          roleAccount: rolePda,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      const role = await program.account.roleAccount.fetch(rolePda);
+      expect(role.active).to.equal(true);
+      expect(role.roleType).to.equal(1);
+      expect(role.user.toBase58()).to.equal(user.publicKey.toBase58());
+    }
+  });
+
+  it("assigns SSS-2 compliance roles on SSS-2 config", async () => {
+    const sss2Mint = Keypair.generate();
+    const [sss2Config] = PublicKey.findProgramAddressSync(
+      [STABLECOIN_SEED, sss2Mint.publicKey.toBuffer()],
+      program.programId
+    );
+
+    await program.methods
+      .initialize({
+        name: "Roles SSS2",
+        symbol: "RS2",
+        uri: "https://test.com",
+        decimals: 6,
+        enablePermanentDelegate: true,
+        enableTransferHook: false,
+        defaultAccountFrozen: false,
+        enableConfidentialTransfer: false,
+        transferHookProgramId: null,
+      })
+      .accountsStrict({
+        authority: authority.publicKey,
+        config: sss2Config,
+        mint: sss2Mint.publicKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        rent: SYSVAR_RENT_PUBKEY,
+      })
+      .signers([sss2Mint])
+      .rpc();
+
+    // Blacklister (3) and Seizer (4) are only valid on SSS-2
+    for (const roleType of [3, 4]) {
+      const [rolePda] = PublicKey.findProgramAddressSync(
+        [ROLE_SEED, sss2Config.toBuffer(), Buffer.from([roleType]), authority.publicKey.toBuffer()],
+        program.programId
+      );
+      await program.methods
+        .updateRoles(roleType, authority.publicKey, true)
+        .accountsStrict({
+          authority: authority.publicKey,
+          config: sss2Config,
+          roleAccount: rolePda,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      const role = await program.account.roleAccount.fetch(rolePda);
+      expect(role.active).to.equal(true);
+      expect(role.roleType).to.equal(roleType);
+    }
+  });
 });

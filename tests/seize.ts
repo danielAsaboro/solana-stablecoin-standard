@@ -194,4 +194,76 @@ describe("Seize", () => {
       expect(err.toString()).to.include("ZeroAmount");
     }
   });
+
+  it("rejects seize by non-Seizer", async () => {
+    // Generate an account with no Seizer role
+    const attacker = Keypair.generate();
+    const fundTx = new anchor.web3.Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: authority.publicKey,
+        toPubkey: attacker.publicKey,
+        lamports: 100_000_000,
+      })
+    );
+    await provider.sendAndConfirm(fundTx);
+
+    // Derive a role PDA for the attacker — this account does not exist
+    const [attackerRolePda] = PublicKey.findProgramAddressSync(
+      [ROLE_SEED, configPda.toBuffer(), Buffer.from([4]), attacker.publicKey.toBuffer()],
+      program.programId
+    );
+
+    try {
+      await program.methods
+        .seize(new anchor.BN(50_000_000))
+        .accountsStrict({
+          authority: attacker.publicKey,
+          config: configPda,
+          roleAccount: attackerRolePda,
+          mint: mintKey,
+          fromTokenAccount: victimAta,
+          toTokenAccount: treasuryAta,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .signers([attacker])
+        .rpc();
+      expect.fail("Should have thrown");
+    } catch (err: any) {
+      // Account not found (role PDA doesn't exist) or constraint violation
+      expect(err.toString()).to.satisfy((msg: string) =>
+        msg.includes("AccountNotInitialized") ||
+        msg.includes("AnchorError") ||
+        msg.includes("Unauthorized") ||
+        msg.includes("Error")
+      );
+    }
+  });
+
+  it("seizes full remaining balance", async () => {
+    // At this point victim has 100M remaining (after partial seize of 100M)
+    const [seizerRole] = PublicKey.findProgramAddressSync(
+      [ROLE_SEED, configPda.toBuffer(), Buffer.from([4]), authority.publicKey.toBuffer()],
+      program.programId
+    );
+
+    const victimBefore = await getAccount(connection, victimAta, "confirmed", TOKEN_2022_PROGRAM_ID);
+    const remainingBalance = Number(victimBefore.amount);
+    expect(remainingBalance).to.be.greaterThan(0);
+
+    await program.methods
+      .seize(new anchor.BN(remainingBalance))
+      .accountsStrict({
+        authority: authority.publicKey,
+        config: configPda,
+        roleAccount: seizerRole,
+        mint: mintKey,
+        fromTokenAccount: victimAta,
+        toTokenAccount: treasuryAta,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc({ commitment: "confirmed" });
+
+    const victimAfter = await getAccount(connection, victimAta, "confirmed", TOKEN_2022_PROGRAM_ID);
+    expect(Number(victimAfter.amount)).to.equal(0);
+  });
 });

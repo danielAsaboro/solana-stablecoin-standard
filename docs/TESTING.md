@@ -10,7 +10,7 @@ Comprehensive testing documentation for the Solana Stablecoin Standard (SSS).
                 │  (Property-Based)│  Pure-Rust state machine
                 └────────┬────────┘
                 ┌────────┴────────┐
-                │  Integration    │  81 tests
+                │  Integration    │  96 tests
                 │  (Anchor/Solana)│  On-chain program + SDK
                 └────────┬────────┘
            ┌─────────────┴─────────────┐
@@ -19,7 +19,7 @@ Comprehensive testing documentation for the Solana Stablecoin Standard (SSS).
            └───────────────────────────┘
 ```
 
-**Total: 155 tests** (81 Anchor + 53 Backend + 21 Fuzz)
+**Total: 170 tests** (96 Anchor + 53 Backend + 21 Fuzz)
 
 ---
 
@@ -46,27 +46,95 @@ anchor build && yarn build
 
 ## Test Categories
 
-### 1. Anchor Integration Tests (81 tests)
+### 1. Anchor Integration Tests (96 tests)
 
 Located in `tests/`. Run with `anchor test --skip-lint`.
 
-#### Core Tests — `tests/sss.ts` (34 tests)
+#### SSS-1 Preset — `tests/sss-1.ts` (13 tests)
 
-Full instruction coverage for both SSS-1 and SSS-2 presets:
+Core SSS-1 lifecycle covering all 10 instructions:
 
-| Section | Tests | Description |
-|---------|-------|-------------|
-| SSS-1 Initialization | 3 | Create stablecoin, verify config, check token metadata |
-| Role Management | 4 | Assign minter/burner/pauser, verify PDAs, test unauthorized access |
-| Minter Quota | 3 | Set quota, verify limits, update quota |
-| Mint Operations | 3 | Mint tokens, verify supply, check quota tracking |
-| Burn Operations | 3 | Burn tokens, verify supply decrease, check total burned |
-| Freeze/Thaw | 4 | Freeze account, verify blocked, thaw, verify restored |
-| Pause/Unpause | 4 | Pause stablecoin, verify operations blocked, unpause |
-| SSS-2 Initialization | 2 | Create compliant stablecoin with permanent delegate + transfer hook |
-| Blacklist | 3 | Add to blacklist, verify PDA, remove from blacklist |
-| Seize | 3 | Seize tokens via permanent delegate, verify balances |
-| Transfer Authority | 2 | Transfer master authority, verify access control |
+| Test | Description |
+|------|-------------|
+| creates an SSS-1 stablecoin | Initialize, verify config PDA, check Token-2022 metadata |
+| assigns Minter role | Update roles, verify RoleAccount PDA |
+| assigns Burner role | Update roles, verify PDA |
+| assigns Pauser role | Update roles, verify PDA |
+| sets minter quota | Update minter quota, verify MinterQuota PDA |
+| mints tokens to recipient | Mint, verify supply, check quota tracking |
+| freezes a token account | Freeze via Token-2022, verify account state |
+| thaws a frozen token account | Thaw, verify account restored |
+| pauses the stablecoin | Set paused=true, verify config |
+| blocks minting when paused | Mint while paused → Paused error |
+| unpauses the stablecoin | Unpause, verify config |
+| burns tokens | Burn, verify supply decreases, total_burned increments |
+| transfers master authority | TransferAuthority, verify new authority controls config |
+
+#### SSS-2 Preset — `tests/sss-2.ts` (8 tests)
+
+Compliance-specific instructions on top of SSS-1:
+
+| Test | Description |
+|------|-------------|
+| creates stablecoin with permanent delegate and transfer hook | Init with both SSS-2 flags, verify mint extensions |
+| assigns all 5 role types | All roles including Blacklister (3) and Seizer (4) |
+| sets minter quota | Quota for SSS-2 minter |
+| initializes extra account metas for the transfer hook | Hook ExtraAccountMetas PDA creation |
+| mints tokens | Mint through SSS-2 config |
+| blacklists an address | Add BlacklistEntry PDA, verify on-chain state |
+| removes from blacklist | Close BlacklistEntry, verify rent returned |
+| seizes tokens from an account using permanent delegate | Seize via config PDA permanent delegate |
+
+#### Role Management — `tests/roles.ts` (6 tests)
+
+| Test | Description |
+|------|-------------|
+| assigns all SSS-1 role types | All three SSS-1 roles in one test |
+| revokes a role | Deactivate role, verify blocked |
+| rejects unauthorized role assignment | Non-authority role assign → ConstraintHasOne |
+| rejects SSS-2 roles on SSS-1 config | Blacklister/Seizer on SSS-1 → ComplianceNotEnabled |
+| multiple users can hold the same role concurrently | Two users each with Burner role, independent PDAs |
+| assigns SSS-2 compliance roles on SSS-2 config | Blacklister (3) + Seizer (4) valid on SSS-2 |
+
+#### Token Transfers — `tests/transfers.ts` (11 tests)
+
+Transfer behavior with freeze and blacklist enforcement:
+
+| Test | Description |
+|------|-------------|
+| transfers tokens between users via transfer_checked | Basic transfer flow |
+| Alice transfers tokens to Bob | Named transfer, verify balances |
+| frozen account cannot send tokens | Frozen sender → Token error |
+| frozen account cannot receive tokens | Frozen receiver → Token error |
+| thawed account can transfer again | Thaw restores transfer capability |
+| transfer succeeds with transfer hook resolved | Transfer on SSS-2 with extra account metas |
+| transfer between non-blacklisted users succeeds | Hook passes for clean addresses |
+| blacklisted sender cannot transfer | Hook rejects blacklisted sender |
+| blacklisted receiver cannot receive transfers | Hook rejects blacklisted receiver |
+| un-blacklisted user can transfer again | After removal, transfers succeed |
+| seize tokens from blacklisted account | Permanent delegate bypasses hook |
+
+#### Seize Operations — `tests/seize.ts` (4 tests)
+
+| Test | Description |
+|------|-------------|
+| seizes tokens to treasury | Full seize flow, verify balances |
+| rejects zero amount seize | Zero seize → ZeroAmount error |
+| rejects seize by non-Seizer | Attacker without Seizer role → account not found |
+| seizes full remaining balance | Seize all tokens, verify zero balance |
+
+#### Multi-Minter — `tests/multi-minter.ts` (2 tests)
+
+| Test | Description |
+|------|-------------|
+| minters have independent quotas | Two minters, independent quota tracking |
+| quota can be reset by updating | Update quota resets cumulative counter |
+
+#### Transfer Hook — `tests/transfer-hook.ts` (1 test)
+
+| Test | Description |
+|------|-------------|
+| initializes the extra account metas PDA | Hook program ExtraAccountMetas creation |
 
 #### Edge Case Tests — `tests/edge-cases.ts` (20 tests)
 
@@ -262,9 +330,9 @@ cd trident-tests && cargo test -- --nocapture
 
 | Category | Files | Tests | Cases | Coverage |
 |----------|-------|-------|-------|----------|
-| Anchor Integration | 3 | 81 | 81 | All 13 instructions, both presets, all error paths |
+| Anchor Integration | 9 | 96 | 96 | All 13 instructions, both presets, all error paths |
 | Backend Integration | 1 | 53 | 53 | All HTTP routes, services, webhooks, PDA derivation |
 | Property-Based Fuzz | 1 | 21 | ~11,800 | State machine model, overflow, access control, invariants |
-| **Total** | **5** | **155** | **~11,934** | **Full instruction + error + boundary coverage** |
+| **Total** | **11** | **170** | **~11,949** | **Full instruction + error + boundary coverage** |
 
 All tests pass with zero warnings on `anchor build`, `yarn build`, `cargo build`, and `cargo clippy`.

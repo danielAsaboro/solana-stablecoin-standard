@@ -740,7 +740,7 @@ For the full SDK API reference with 15 sections and 5 end-to-end workflows, see 
 
 ## Devnet Deployment
 
-All three SSS programs can be deployed to Solana devnet using the automated deployment script or manually. The programs have been fully verified on a local validator with 155 passing tests (81 integration + 53 backend + 21 fuzz).
+All three SSS programs can be deployed to Solana devnet using the automated deployment script or manually. The programs have been fully verified on a local validator with 170 passing tests (96 integration + 53 backend + 21 fuzz).
 
 ### Quick Deploy
 

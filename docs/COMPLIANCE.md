@@ -89,18 +89,19 @@ All operations emit on-chain events that can be queried for compliance reporting
 
 | Event | Fields |
 |-------|--------|
-| `StablecoinInitialized` | mint, authority, config details |
-| `TokensMinted` | mint, recipient, amount, minter, total_minted |
-| `TokensBurned` | mint, from, amount, burner, total_burned |
-| `AccountFrozen` | mint, token_account, authority |
-| `AccountThawed` | mint, token_account, authority |
-| `Paused` | mint, authority |
-| `Unpaused` | mint, authority |
-| `RoleUpdated` | mint, user, role_type, active, authority |
-| `MinterQuotaUpdated` | mint, minter, quota, authority |
-| `AddedToBlacklist` | mint, address, reason, authority |
-| `RemovedFromBlacklist` | mint, address, authority |
-| `TokensSeized` | mint, from, to, amount, authority |
+| `StablecoinInitialized` | config, name, symbol, decimals, authority, feature flags |
+| `TokensMinted` | config, recipient, amount, minter, total_minted |
+| `TokensBurned` | config, from, amount, burner, total_burned |
+| `AccountFrozen` | config, token_account, authority |
+| `AccountThawed` | config, token_account, authority |
+| `StablecoinPaused` | config, authority |
+| `StablecoinUnpaused` | config, authority |
+| `RoleUpdated` | config, user, role_type, active, authority |
+| `MinterUpdated` | config, minter, quota, authority |
+| `AuthorityTransferred` | config, old_authority, new_authority |
+| `AccountBlacklisted` | config, address, reason, authority |
+| `AccountUnblacklisted` | config, address, authority |
+| `TokensSeized` | config, from, to, amount, authority |
 
 **Querying events:**
 

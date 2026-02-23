@@ -558,14 +558,16 @@ For programmatic integration, use the TypeScript SDK directly. This example crea
 ### Installation
 
 ```bash
-yarn add @stbr/sss-core-sdk @stbr/sss-compliance-sdk
+yarn add @stbr/sss-token
 ```
+
+> `@stbr/sss-token` is the canonical consumer entrypoint. It re-exports everything from `@stbr/sss-core-sdk` and `@stbr/sss-compliance-sdk`.
 
 ### Complete example: SSS-1 lifecycle
 
 ```typescript
 import { Connection, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
-import { SolanaStablecoin, Presets } from "@stbr/sss-core-sdk";
+import { SolanaStablecoin, Presets } from "@stbr/sss-token";
 import { sendAndConfirmTransaction, Transaction } from "@solana/web3.js";
 import BN from "bn.js";
 

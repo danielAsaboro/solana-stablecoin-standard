@@ -5,3 +5,16 @@ dist/
 .anchor/
 .DS_Store
 proptest-regressions/
+# Compiled TypeScript artifacts (these belong in dist/, which is already ignored above)
+sdk/core/src/*.js
+sdk/core/src/*.js.map
+sdk/core/src/*.d.ts
+sdk/core/src/*.d.ts.map
+sdk/compliance/src/*.js
+sdk/compliance/src/*.js.map
+sdk/compliance/src/*.d.ts
+sdk/compliance/src/*.d.ts.map
+sdk/token/src/*.js
+sdk/token/src/*.js.map
+sdk/token/src/*.d.ts
+sdk/token/src/*.d.ts.map

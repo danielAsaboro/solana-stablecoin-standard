@@ -36,7 +36,8 @@ Both packages depend on `@coral-xyz/anchor`, `@solana/web3.js`, and `@solana/spl
 
 ```typescript
 import { Connection, Keypair } from "@solana/web3.js";
-import { SolanaStablecoin, Presets, RoleType } from "@stbr/sss-core-sdk";
+import { SolanaStablecoin, Presets, RoleType } from "@stbr/sss-token";
+// or: @stbr/sss-core-sdk (underlying implementation)
 import { Transaction, sendAndConfirmTransaction } from "@solana/web3.js";
 import BN from "bn.js";
 

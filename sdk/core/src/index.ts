@@ -181,3 +181,10 @@ export {
   type AllowlistEntryData,
   type InitPrivacyParams,
 } from "./privacy";
+
+// ─── Convenience re-exports ────────────────────────────────────────────────
+// Re-export commonly needed Solana/Anchor primitives so consumers don't need
+// to add separate dependencies just for `PublicKey`, `BN`, or `Keypair`.
+// Pattern follows @stbr/solana-vault (Solana Vault Standard reference repo).
+export { BN } from "@coral-xyz/anchor";
+export { PublicKey, Keypair } from "@solana/web3.js";

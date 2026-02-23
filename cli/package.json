@@ -1,6 +1,7 @@
 {
   "name": "@stbr/sss-cli",
   "version": "0.1.0",
+  "license": "MIT",
   "bin": {
     "sss-token": "./bin/sss-token.ts"
   },

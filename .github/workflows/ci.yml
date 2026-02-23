@@ -1,0 +1,143 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────
+  # 1. TypeScript — SDK + CLI
+  # ─────────────────────────────────────────────────────────────────────────
+  typescript:
+    name: TypeScript (SDK + CLI)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build SDK and CLI
+        run: yarn build
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 2. Backend — Rust/Axum REST API
+  # ─────────────────────────────────────────────────────────────────────────
+  backend:
+    name: Backend (Rust/Axum)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./backend
+
+      - name: Build backend
+        working-directory: backend
+        run: cargo build --locked
+
+      - name: Run backend integration tests (53 tests)
+        working-directory: backend
+        run: cargo test --locked
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 3. Fuzz Tests — Property-based state machine (pure Rust, no Solana dep)
+  # ─────────────────────────────────────────────────────────────────────────
+  fuzz-tests:
+    name: Fuzz Tests (proptest, ~11,800 cases)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./trident-tests
+
+      - name: Run fuzz tests (21 tests)
+        working-directory: trident-tests
+        run: cargo test --locked
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 4. Anchor Programs — requires Solana toolchain (separate slow job)
+  # ─────────────────────────────────────────────────────────────────────────
+  anchor-build:
+    name: Anchor Programs Build (4 programs)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.82.0
+
+      - name: Rust cache (programs)
+        uses: swatinem/rust-cache@v2
+
+      - name: Install Solana CLI v1.18.26
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/v1.18.26/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+
+      - name: Install Anchor AVM + Anchor CLI v0.32.1
+        run: |
+          cargo install --git https://github.com/coral-xyz/anchor avm --locked --force
+          avm install 0.32.1
+          avm use 0.32.1
+
+      - name: Verify toolchain versions
+        run: |
+          solana --version
+          anchor --version
+          rustc --version
+
+      - name: Build all 4 Anchor programs
+        run: anchor build
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 5. Lint — Clippy for non-Solana Rust crates
+  # ─────────────────────────────────────────────────────────────────────────
+  lint:
+    name: Clippy Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain with clippy
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./backend -> target
+
+      - name: Clippy — backend
+        working-directory: backend
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Clippy — fuzz tests
+        working-directory: trident-tests
+        run: cargo clippy --locked --all-targets -- -D warnings

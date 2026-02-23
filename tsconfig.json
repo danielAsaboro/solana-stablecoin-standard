@@ -14,7 +14,8 @@
     "baseUrl": ".",
     "paths": {
       "@stbr/sss-core-sdk": ["sdk/core/src"],
-      "@stbr/sss-compliance-sdk": ["sdk/compliance/src"]
+      "@stbr/sss-compliance-sdk": ["sdk/compliance/src"],
+      "@stbr/sss-token": ["sdk/token/src"]
     }
   },
   "include": ["tests/**/*.ts", "scripts/**/*.ts"]

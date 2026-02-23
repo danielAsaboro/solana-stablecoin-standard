@@ -5,6 +5,7 @@
   "workspaces": [
     "sdk/core",
     "sdk/compliance",
+    "sdk/token",
     "cli"
   ],
   "scripts": {

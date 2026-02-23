@@ -5,6 +5,27 @@ All notable changes to the Solana Stablecoin Standard (SSS) will be documented i
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-02-23
+
+SDK polish, CI/CD, and bounty spec alignment.
+
+### Added
+
+- **`@stbr/sss-token` package** (`sdk/token/`) — canonical consumer entrypoint matching the bounty specification. Thin wrapper that re-exports everything from `@stbr/sss-core-sdk`. Allows `import { SolanaStablecoin, Presets } from "@stbr/sss-token"` to work exactly as shown in the bounty spec.
+- **GitHub Actions CI** (`.github/workflows/ci.yml`) — 5-job CI pipeline:
+  - `typescript`: `yarn build` (SDK + CLI) on Node 20
+  - `backend`: `cargo build && cargo test` (53 integration tests)
+  - `fuzz-tests`: `cargo test` (21 proptest cases, ~11,800 randomized checks)
+  - `anchor-build`: Full Anchor programs build (Solana v1.18.26 + Anchor v0.32.1)
+  - `lint`: Clippy on backend and trident-tests with `-D warnings`
+- **Convenience re-exports** in `@stbr/sss-core-sdk` — `BN` (from `@coral-xyz/anchor`) and `PublicKey`, `Keypair` (from `@solana/web3.js`) re-exported from the SDK index. Pattern follows the Solana Vault Standard (SVS) reference repo. Consumers no longer need separate imports for these primitives.
+- `"license": "MIT"` field added to all `package.json` files (zero `yarn build` warnings now)
+
+### Improved
+
+- `README.md` — Updated TypeScript SDK install example to use `@stbr/sss-token`; added `@stbr/sss-token` install command with explanation note
+- `docs/SDK.md` — Updated Quick Start import to `@stbr/sss-token` with `// or: @stbr/sss-core-sdk (underlying implementation)` comment
+
 ## [0.2.0] - 2026-02-23
 
 Quality and documentation improvements based on post-release review.

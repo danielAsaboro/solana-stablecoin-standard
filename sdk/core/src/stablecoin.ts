@@ -41,6 +41,7 @@ import {
   SeizeParams,
   BlacklistEntry,
   MinterQuota as MinterQuotaType,
+  ExtensionsConfig,
 } from "./types";
 import {
   getAssociatedTokenAddress,
@@ -120,9 +121,15 @@ export class ComplianceModule {
    * **Overloaded:**
    * - `blacklistAdd(params)` — returns a TransactionInstruction (original API)
    * - `blacklistAdd(address)` — returns a {@link BlacklistAddBuilder} (fluent API)
+   * - `blacklistAdd(address, reason)` — returns a {@link BlacklistAddBuilder} with reason pre-set
    *
    * @example
    * ```ts
+   * // Shorthand (matches bounty spec example)
+   * await stable.compliance.blacklistAdd(address, "Sanctions match")
+   *   .by(blacklisterKeypair)
+   *   .send(payerKeypair);
+   *
    * // Fluent API
    * await stablecoin.compliance.blacklistAdd(suspectAddress)
    *   .reason("OFAC SDN match")
@@ -136,12 +143,14 @@ export class ComplianceModule {
    * ```
    */
   blacklistAdd(params: BlacklistAddParams): Promise<TransactionInstruction>;
-  blacklistAdd(address: PublicKey): BlacklistAddBuilder;
+  blacklistAdd(address: PublicKey, reason?: string): BlacklistAddBuilder;
   blacklistAdd(
-    paramsOrAddress: BlacklistAddParams | PublicKey
+    paramsOrAddress: BlacklistAddParams | PublicKey,
+    reason?: string
   ): Promise<TransactionInstruction> | BlacklistAddBuilder {
     if (paramsOrAddress instanceof PublicKey) {
-      return new BlacklistAddBuilder(this.builderCtx(), paramsOrAddress);
+      const builder = new BlacklistAddBuilder(this.builderCtx(), paramsOrAddress);
+      return reason !== undefined ? builder.reason(reason) : builder;
     }
     return this._blacklistAddImpl(paramsOrAddress);
   }
@@ -223,9 +232,17 @@ export class ComplianceModule {
    * **Overloaded:**
    * - `seize(params)` — returns a TransactionInstruction
    * - `seize(amount)` — returns a {@link SeizeBuilder}
+   * - `seize(fromWallet, toWallet)` — returns a {@link SeizeBuilder} with source and destination pre-set
    *
    * @example
    * ```ts
+   * // Shorthand (matches bounty spec example)
+   * await stable.compliance.seize(frozenAccount, treasury)
+   *   .amount(1_000_000)
+   *   .by(seizerKeypair)
+   *   .send(payerKeypair);
+   *
+   * // Fluent API (specify amount first)
    * await stablecoin.compliance.seize(1_000_000)
    *   .from(blacklistedWallet)
    *   .to(treasuryWallet)
@@ -235,16 +252,24 @@ export class ComplianceModule {
    */
   seize(params: SeizeParams): Promise<TransactionInstruction>;
   seize(amount: number | BN): SeizeBuilder;
+  seize(fromWallet: PublicKey, toWallet: PublicKey): SeizeBuilder;
   seize(
-    paramsOrAmount: SeizeParams | number | BN
+    paramsOrAmountOrFrom: SeizeParams | number | BN | PublicKey,
+    toWallet?: PublicKey
   ): Promise<TransactionInstruction> | SeizeBuilder {
-    if (typeof paramsOrAmount === "number" || BN.isBN(paramsOrAmount)) {
+    if (paramsOrAmountOrFrom instanceof PublicKey && toWallet !== undefined) {
+      // seize(fromWallet, toWallet) shorthand — returns builder with from/to pre-set
+      return new SeizeBuilder(this.builderCtx(), new BN(0))
+        .from(paramsOrAmountOrFrom)
+        .to(toWallet);
+    }
+    if (typeof paramsOrAmountOrFrom === "number" || BN.isBN(paramsOrAmountOrFrom)) {
       return new SeizeBuilder(
         this.builderCtx(),
-        new BN(paramsOrAmount.toString())
+        new BN(paramsOrAmountOrFrom.toString())
       );
     }
-    return this._seizeImpl(paramsOrAmount);
+    return this._seizeImpl(paramsOrAmountOrFrom as SeizeParams);
   }
 
   private async _seizeImpl(
@@ -472,24 +497,41 @@ export class SolanaStablecoin {
       mint
     );
 
-    // Resolve feature flags: preset → individual overrides → defaults
+    // Extract authority PublicKey (accept both PublicKey and Keypair)
+    const authorityPubkey =
+      params.authority instanceof PublicKey
+        ? params.authority
+        : params.authority.publicKey;
+
+    // Resolve feature flags: preset → individual flags → extensions → defaults
     const preset = params.preset;
+    const ext: ExtensionsConfig = params.extensions ?? {};
     const enablePermanentDelegate =
-      params.enablePermanentDelegate ?? preset?.permanentDelegate ?? false;
+      params.enablePermanentDelegate ??
+      preset?.permanentDelegate ??
+      ext.permanentDelegate ??
+      false;
     const enableTransferHook =
-      params.enableTransferHook ?? preset?.transferHook ?? false;
+      params.enableTransferHook ??
+      preset?.transferHook ??
+      ext.transferHook ??
+      false;
     const defaultAccountFrozen =
-      params.defaultAccountFrozen ?? preset?.defaultAccountFrozen ?? false;
+      params.defaultAccountFrozen ??
+      preset?.defaultAccountFrozen ??
+      ext.defaultFrozen ??
+      false;
     const enableConfidentialTransfer =
       params.enableConfidentialTransfer ??
       preset?.confidentialTransfer ??
+      ext.confidentialTransfer ??
       false;
 
     const initParams = {
       name: params.name,
       symbol: params.symbol,
-      uri: params.uri,
-      decimals: params.decimals,
+      uri: params.uri ?? "",
+      decimals: params.decimals ?? 6,
       enablePermanentDelegate,
       enableTransferHook,
       defaultAccountFrozen,
@@ -500,7 +542,7 @@ export class SolanaStablecoin {
     const instruction = await program.methods
       .initialize(initParams)
       .accountsStrict({
-        authority: params.authority,
+        authority: authorityPubkey,
         config: configAddress,
         mint: mint,
         tokenProgram: TOKEN_2022_PROGRAM_ID,
@@ -689,6 +731,18 @@ export class SolanaStablecoin {
   private async _mintImpl(
     params: MintParams
   ): Promise<TransactionInstruction> {
+    // Resolve recipient: wallet address → ATA, or use direct token account
+    const recipientTokenAccount = params.recipientTokenAccount
+      ? params.recipientTokenAccount
+      : params.recipient
+        ? getAssociatedTokenAddress(this.mintAddress, params.recipient)
+        : (() => { throw new Error("MintParams requires either `recipient` (wallet) or `recipientTokenAccount`"); })();
+
+    // Normalize amount to BN
+    const amount = BN.isBN(params.amount)
+      ? params.amount
+      : new BN(params.amount.toString());
+
     const [roleAccount] = getRoleAddress(
       this.program.programId,
       this.configAddress,
@@ -702,14 +756,14 @@ export class SolanaStablecoin {
     );
 
     return await this.program.methods
-      .mintTokens(params.amount)
+      .mintTokens(amount)
       .accountsStrict({
         minter: params.minter,
         config: this.configAddress,
         roleAccount,
         minterQuota,
         mint: this.mintAddress,
-        recipientTokenAccount: params.recipientTokenAccount,
+        recipientTokenAccount,
         tokenProgram: TOKEN_2022_PROGRAM_ID,
       })
       .instruction();

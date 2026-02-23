@@ -12,7 +12,7 @@
  * @packageDocumentation
  */
 
-import { PublicKey } from "@solana/web3.js";
+import { Keypair, PublicKey } from "@solana/web3.js";
 import { BN } from "@coral-xyz/anchor";
 
 // ---------------------------------------------------------------------------
@@ -158,18 +158,43 @@ export interface PresetConfig {
 // Parameter types for SDK methods
 // ---------------------------------------------------------------------------
 
+/**
+ * Extension flags for custom stablecoin configuration.
+ * Used with the `extensions` field on {@link CreateStablecoinParams}
+ * as an alternative to individual `enable*` flags.
+ *
+ * @example
+ * ```ts
+ * const { stablecoin } = await SolanaStablecoin.create(connection, {
+ *   name: "Custom Stable",
+ *   symbol: "CUSD",
+ *   extensions: { permanentDelegate: true, transferHook: false },
+ * });
+ * ```
+ */
+export interface ExtensionsConfig {
+  /** Whether to enable permanent delegate (for seize capability) */
+  permanentDelegate?: boolean;
+  /** Whether to enable transfer hook (for blacklist enforcement) */
+  transferHook?: boolean;
+  /** Whether new token accounts default to frozen */
+  defaultFrozen?: boolean;
+  /** Whether to enable confidential transfers (SSS-3 privacy preset) */
+  confidentialTransfer?: boolean;
+}
+
 /** Parameters for creating a new stablecoin. */
 export interface CreateStablecoinParams {
   /** Human-readable name (max 32 chars) */
   name: string;
   /** Token symbol (max 10 chars) */
   symbol: string;
-  /** Metadata URI (max 200 chars) */
-  uri: string;
-  /** Token decimals (0-9) */
-  decimals: number;
-  /** The authority (payer + master authority) */
-  authority: PublicKey;
+  /** Metadata URI (max 200 chars, default: "") */
+  uri?: string;
+  /** Token decimals (0-9, default: 6) */
+  decimals?: number;
+  /** The authority (payer + master authority). Accepts PublicKey or Keypair. */
+  authority: PublicKey | Keypair;
   /**
    * Optional preset to derive feature flags from. When provided,
    * individual feature flags (`enablePermanentDelegate`, etc.) become
@@ -177,6 +202,17 @@ export interface CreateStablecoinParams {
    * the preset.
    */
   preset?: PresetConfig;
+  /**
+   * Shorthand for enabling Token-2022 extensions.
+   * Alternative to individual `enable*` flags. Individual flags take
+   * priority over `extensions`, and both are overridden by `preset`.
+   *
+   * @example
+   * ```ts
+   * extensions: { permanentDelegate: true, transferHook: false }
+   * ```
+   */
+  extensions?: ExtensionsConfig;
   /** Whether to enable permanent delegate (default: false) */
   enablePermanentDelegate?: boolean;
   /** Whether to enable transfer hook (default: false) */
@@ -191,10 +227,15 @@ export interface CreateStablecoinParams {
 
 /** Parameters for minting tokens. */
 export interface MintParams {
-  /** Amount to mint (in smallest unit) */
-  amount: BN;
-  /** Recipient token account */
-  recipientTokenAccount: PublicKey;
+  /** Amount to mint (in smallest unit). Accepts number or BN. */
+  amount: number | BN;
+  /**
+   * Recipient wallet address (ATA derived automatically).
+   * Alternative to `recipientTokenAccount`.
+   */
+  recipient?: PublicKey;
+  /** Recipient token account (direct account address). */
+  recipientTokenAccount?: PublicKey;
   /** The minter keypair (must have Minter role) */
   minter: PublicKey;
 }

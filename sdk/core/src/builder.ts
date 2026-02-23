@@ -1261,7 +1261,7 @@ export class BlacklistRemoveBuilder extends OperationBuilder {
  * ```
  */
 export class SeizeBuilder extends OperationBuilder {
-  private readonly _amount: BN;
+  private _amount: BN;
   private _fromTokenAccount?: PublicKey;
   private _toTokenAccount?: PublicKey;
   private _authority?: PublicKey;
@@ -1270,6 +1270,16 @@ export class SeizeBuilder extends OperationBuilder {
   constructor(ctx: BuilderContext, amount: BN) {
     super(ctx);
     this._amount = amount;
+  }
+
+  /**
+   * Set the amount of tokens to seize.
+   * Used with the `seize(fromWallet, toWallet)` shorthand to set amount after construction.
+   * @param amount - Number of raw token units to seize
+   */
+  amount(amount: number | BN): this {
+    this._amount = new BN(amount.toString());
+    return this;
   }
 
   /**

@@ -55,6 +55,7 @@ export {
   type MinterQuota,
   type BlacklistEntry,
   type PresetConfig,
+  type ExtensionsConfig,
   type CreateStablecoinParams,
   type MintParams,
   type BurnParams,

@@ -1,0 +1,10 @@
+{
+  "_comment": "Custom SSS stablecoin configuration in JSON format (alternative to TOML)",
+  "name": "My Custom Stablecoin",
+  "symbol": "MCUSD",
+  "uri": "https://my-project.com/token-metadata.json",
+  "decimals": 6,
+  "enable_permanent_delegate": false,
+  "enable_transfer_hook": false,
+  "default_account_frozen": false
+}

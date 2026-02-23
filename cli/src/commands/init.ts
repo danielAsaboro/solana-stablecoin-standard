@@ -36,6 +36,47 @@ interface CustomConfig {
   transfer_hook_program_id?: string;
 }
 
+/**
+ * Minimal TOML parser for simple stablecoin config files.
+ * Handles key = value pairs with string, integer, and boolean values.
+ * Supports inline comments (#). Does not support tables or arrays.
+ */
+function parseTomlConfig(content: string): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const raw of content.split("\n")) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const eqIdx = line.indexOf("=");
+    if (eqIdx === -1) continue;
+    const key = line.slice(0, eqIdx).trim();
+    const valRaw = line.slice(eqIdx + 1).trim().replace(/#.*$/, "").trim();
+    if (valRaw === "true") {
+      result[key] = true;
+    } else if (valRaw === "false") {
+      result[key] = false;
+    } else if ((valRaw.startsWith('"') && valRaw.endsWith('"')) ||
+               (valRaw.startsWith("'") && valRaw.endsWith("'"))) {
+      result[key] = valRaw.slice(1, -1);
+    } else if (/^\d+$/.test(valRaw)) {
+      result[key] = parseInt(valRaw, 10);
+    } else {
+      result[key] = valRaw;
+    }
+  }
+  return result;
+}
+
+/**
+ * Load a custom config file in JSON or TOML format.
+ * Format is determined by file extension (.toml → TOML, otherwise → JSON).
+ */
+function loadCustomConfig(filePath: string): CustomConfig {
+  const content = fs.readFileSync(filePath, "utf-8");
+  const isToml = filePath.toLowerCase().endsWith(".toml");
+  const raw = isToml ? parseTomlConfig(content) : JSON.parse(content) as Record<string, unknown>;
+  return raw as unknown as CustomConfig;
+}
+
 export function registerInitCommand(program: Command): void {
   program
     .command("init")
@@ -74,12 +115,14 @@ async function handleInit(opts: InitOptions, globalOpts: any): Promise<void> {
   let presetLabel = "custom";
 
   if (opts.custom) {
-    // Load custom config from JSON file
+    // Load custom config from TOML or JSON file
     if (!fs.existsSync(opts.custom)) {
       errorMsg(`Custom config file not found: ${opts.custom}`);
       return;
     }
-    const customConfig: CustomConfig = JSON.parse(fs.readFileSync(opts.custom, "utf-8"));
+    const isToml = opts.custom.toLowerCase().endsWith(".toml");
+    infoMsg(`Loading custom config from ${chalk.bold(opts.custom)} (${isToml ? "TOML" : "JSON"} format)`);
+    const customConfig: CustomConfig = loadCustomConfig(opts.custom);
     name = customConfig.name;
     symbol = customConfig.symbol;
     uri = customConfig.uri;

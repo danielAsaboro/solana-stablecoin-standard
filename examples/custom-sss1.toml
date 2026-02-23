@@ -1,0 +1,13 @@
+# Custom SSS-1 stablecoin configuration
+# Usage: sss-token init --custom examples/custom-sss1.toml
+#
+# SSS-1: Minimal stablecoin — mint authority + freeze authority + metadata
+# No permanent delegate, no transfer hook (compliance managed off-chain via freeze)
+
+name = "My Custom Stablecoin"
+symbol = "MCUSD"
+uri = "https://my-project.com/token-metadata.json"
+decimals = 6
+enable_permanent_delegate = false
+enable_transfer_hook = false
+default_account_frozen = false

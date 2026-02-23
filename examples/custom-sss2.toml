@@ -1,0 +1,17 @@
+# Custom SSS-2 stablecoin configuration
+# Usage: sss-token init --custom examples/custom-sss2.toml
+#
+# SSS-2: Compliant stablecoin — adds permanent delegate + transfer hook + blacklist
+# Every transfer is checked against the on-chain blacklist via the transfer hook.
+# The permanent delegate enables token seizure from blacklisted accounts.
+
+name = "My Compliant Stablecoin"
+symbol = "MRUSD"
+uri = "https://my-project.com/token-metadata.json"
+decimals = 6
+enable_permanent_delegate = true
+enable_transfer_hook = true
+default_account_frozen = false
+
+# Optional: specify a custom transfer hook program ID
+# transfer_hook_program_id = "Gcd58Ng9gqRg1XtiU1i8KopwX1u82Mt9VmxKbLJ8RANH"

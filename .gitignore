@@ -5,6 +5,16 @@ dist/
 .anchor/
 .DS_Store
 proptest-regressions/
+
+# Surfpool logs (debug artifacts)
+.surfpool/
+
+# Environment files (credentials)
+backend/.env
+
+# Internal analysis (not for submission)
+CRITICAL_EVALUATION.md
+
 # Compiled TypeScript artifacts (these belong in dist/, which is already ignored above)
 sdk/core/src/*.js
 sdk/core/src/*.js.map

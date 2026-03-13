@@ -24,13 +24,19 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'yarn'
+          cache: 'npm'
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: npm install
 
       - name: Build SDK and CLI
-        run: yarn build
+        run: npm run build:packages
+
+      - name: Run SDK tests
+        run: npm run test:sdk
+
+      - name: Run CLI tests
+        run: npm run test:cli
 
   # ─────────────────────────────────────────────────────────────────────────
   # 2. Backend — Rust/Axum REST API
@@ -79,13 +85,22 @@ jobs:
         run: cargo test --locked
 
   # ─────────────────────────────────────────────────────────────────────────
-  # 4. Anchor Programs — requires Solana toolchain (separate slow job)
+  # 4. Anchor Programs — build + test (requires Solana toolchain)
   # ─────────────────────────────────────────────────────────────────────────
-  anchor-build:
-    name: Anchor Programs Build (4 programs)
+  anchor:
+    name: Anchor Programs (build + test)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -112,8 +127,15 @@ jobs:
           anchor --version
           rustc --version
 
+      - name: Generate test validator keypair
+        run: solana-keygen new --no-bip39-passphrase --silent
+
       - name: Build all 4 Anchor programs
-        run: anchor build
+        run: npm run build:programs
+
+      - name: Run Anchor integration tests (126+ tests)
+        run: anchor test --skip-build
+        timeout-minutes: 15
 
   # ─────────────────────────────────────────────────────────────────────────
   # 5. Lint — Clippy for non-Solana Rust crates

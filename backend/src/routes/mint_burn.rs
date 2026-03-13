@@ -36,6 +36,7 @@ pub struct OpResponse {
     pub operation_type: String,
     pub amount: u64,
     pub target: String,
+    pub authority: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub signature: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -59,6 +60,7 @@ impl From<MintBurnOperation> for OpResponse {
             operation_type: op.operation_type,
             amount: op.amount,
             target: op.target,
+            authority: op.authority,
             signature: op.signature,
             error: op.error,
             created_at: op.created_at,

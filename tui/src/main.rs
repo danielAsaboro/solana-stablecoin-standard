@@ -61,6 +61,10 @@ struct Cli {
     /// Auto-refresh interval in seconds (0 to disable).
     #[arg(long, default_value = "5")]
     refresh_interval: u64,
+
+    /// Optional backend URL for operator incident telemetry.
+    #[arg(long, env = "SSS_BACKEND_URL")]
+    backend_url: Option<String>,
 }
 
 /// Auto-refresh interval for data polling.
@@ -82,11 +86,14 @@ fn main() -> Result<()> {
 
     // Flag to stop the background thread on exit
     let running = Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let refresh_requested = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
     // Spawn background data fetcher thread
     let fetcher_data = Arc::clone(&shared_data);
     let fetcher_running = Arc::clone(&running);
+    let fetcher_refresh_requested = Arc::clone(&refresh_requested);
     let rpc_url = cli.rpc.clone();
+    let backend_url = cli.backend_url.clone();
     let fetcher = thread::spawn(move || {
         let rpc = RpcClient::new_with_commitment(
             &rpc_url,
@@ -94,26 +101,37 @@ fn main() -> Result<()> {
         );
 
         // Initial fetch immediately
-        let result = data::fetch_all_data(&rpc, &program_id, &mint);
+        let result = data::fetch_all_data_with_backend(&rpc, &program_id, &mint, backend_url.as_deref());
         if let Ok(mut data) = fetcher_data.lock() {
             *data = result;
         }
 
         // Periodic refresh
         while fetcher_running.load(std::sync::atomic::Ordering::Relaxed) {
-            if let Some(interval) = refresh_interval {
-                thread::sleep(interval);
-            } else {
-                // No auto-refresh; sleep and check running flag
-                thread::sleep(Duration::from_secs(1));
-                continue;
+            let mut waited = Duration::ZERO;
+            loop {
+                if !fetcher_running.load(std::sync::atomic::Ordering::Relaxed) {
+                    return;
+                }
+
+                if fetcher_refresh_requested.swap(false, std::sync::atomic::Ordering::Relaxed) {
+                    break;
+                }
+
+                let Some(interval) = refresh_interval else {
+                    thread::sleep(Duration::from_millis(200));
+                    continue;
+                };
+
+                if waited >= interval {
+                    break;
+                }
+
+                thread::sleep(Duration::from_millis(200));
+                waited += Duration::from_millis(200);
             }
 
-            if !fetcher_running.load(std::sync::atomic::Ordering::Relaxed) {
-                break;
-            }
-
-            let result = data::fetch_all_data(&rpc, &program_id, &mint);
+            let result = data::fetch_all_data_with_backend(&rpc, &program_id, &mint, backend_url.as_deref());
             if let Ok(mut data) = fetcher_data.lock() {
                 *data = result;
             }
@@ -134,7 +152,7 @@ fn main() -> Result<()> {
     let mut app = App::new();
 
     // Main event loop
-    let result = run_loop(&mut terminal, &mut app, &shared_data);
+    let result = run_loop(&mut terminal, &mut app, &shared_data, &refresh_requested);
 
     // Cleanup: stop fetcher, restore terminal
     running.store(false, std::sync::atomic::Ordering::Relaxed);
@@ -155,18 +173,17 @@ fn run_loop(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     app: &mut App,
     shared_data: &Arc<Mutex<StablecoinData>>,
+    refresh_requested: &Arc<std::sync::atomic::AtomicBool>,
 ) -> Result<()> {
     let mut last_status_clear = Instant::now();
 
     loop {
         // Read current data snapshot
-        let current_data = shared_data
-            .lock()
-            .map(|d| d.clone())
-            .unwrap_or_default();
+        let current_data = shared_data.lock().map(|d| d.clone()).unwrap_or_default();
 
         // Clamp selected index based on current tab's data
         let max_items = match app.tab {
+            app::Tab::Incidents => current_data.incidents.len(),
             app::Tab::Roles => current_data.roles.len(),
             app::Tab::Minters => current_data.minters.len(),
             app::Tab::Blacklist => current_data.blacklist.len(),
@@ -190,6 +207,7 @@ fn run_loop(
                     match app.handle_key(key) {
                         AppAction::Quit => break,
                         AppAction::Refresh => {
+                            refresh_requested.store(true, std::sync::atomic::Ordering::Relaxed);
                             last_status_clear = Instant::now();
                         }
                         AppAction::None => {}

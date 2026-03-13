@@ -3,7 +3,7 @@
 # Solana Stablecoin Standard — Devnet Deployment Script
 # =============================================================================
 #
-# Automates the full deployment of all three SSS programs to Solana devnet,
+# Automates the full deployment of all four SSS programs to Solana devnet,
 # then runs example transactions demonstrating both SSS-1 and SSS-2 presets.
 #
 # Usage:
@@ -15,12 +15,12 @@
 #   - Node.js + Yarn installed
 #   - Programs built: `anchor build`
 #   - SDK built: `yarn build`
-#   - Devnet SOL: the wallet at ~/.config/solana/id.json needs ~7 SOL
+#   - Devnet SOL: the wallet at ~/.config/solana/id.json needs ~10 SOL
 #
 # What this script does:
 #   1. Switches Solana CLI config to devnet
-#   2. Checks wallet balance (needs ~7 SOL for 3 program deploys)
-#   3. Deploys all 3 programs (SSS, Transfer Hook, Oracle)
+#   2. Checks wallet balance (needs ~10 SOL for 4 program deploys)
+#   3. Deploys all 4 programs (SSS, Transfer Hook, Oracle, Privacy)
 #   4. Runs the SSS-1 demo (init, roles, mint, burn, freeze, thaw, pause, unpause)
 #   5. Runs the SSS-2 demo (init, hook, roles, mint, blacklist, seize, unblacklist)
 #   6. Outputs all program IDs, transaction signatures, and Solana Explorer links
@@ -82,7 +82,7 @@ if ! command -v npx &> /dev/null; then
 fi
 
 # Check programs are built
-for prog in sss transfer_hook sss_oracle; do
+for prog in sss transfer_hook sss_oracle sss_privacy; do
     if [[ ! -f "target/deploy/${prog}.so" ]]; then
         log_error "Program binary not found: target/deploy/${prog}.so"
         log_error "Run 'anchor build' first."
@@ -129,11 +129,13 @@ log_info "Configuring Anchor for devnet deployment..."
 SSS_PROGRAM_ID=$(solana address -k target/deploy/sss-keypair.json)
 HOOK_PROGRAM_ID=$(solana address -k target/deploy/transfer_hook-keypair.json)
 ORACLE_PROGRAM_ID=$(solana address -k target/deploy/sss_oracle-keypair.json)
+PRIVACY_PROGRAM_ID=$(solana address -k target/deploy/sss_privacy-keypair.json)
 
 log_info "Program IDs:"
 log_info "  SSS:           $SSS_PROGRAM_ID"
 log_info "  Transfer Hook: $HOOK_PROGRAM_ID"
 log_info "  Oracle:        $ORACLE_PROGRAM_ID"
+log_info "  Privacy:       $PRIVACY_PROGRAM_ID"
 
 # Update Anchor.toml for devnet
 sed -i.bak 's/cluster = "localnet"/cluster = "devnet"/' Anchor.toml
@@ -158,7 +160,7 @@ echo ""
 log_info "Deploying programs to devnet..."
 echo ""
 
-for prog in sss transfer_hook sss_oracle; do
+for prog in sss transfer_hook sss_oracle sss_privacy; do
     log_info "Deploying $prog..."
     if anchor deploy --program-name "$prog" --provider.cluster devnet 2>&1; then
         log_ok "$prog deployed successfully"
@@ -195,12 +197,14 @@ echo "Program IDs (Devnet):"
 echo "  SSS:           $SSS_PROGRAM_ID"
 echo "  Transfer Hook: $HOOK_PROGRAM_ID"
 echo "  Oracle:        $ORACLE_PROGRAM_ID"
+echo "  Privacy:       $PRIVACY_PROGRAM_ID"
 echo ""
 echo "Wallet: $WALLET_ADDRESS"
 echo ""
 echo "Explorer:"
-echo "  SSS:  https://explorer.solana.com/address/${SSS_PROGRAM_ID}?cluster=devnet"
-echo "  Hook: https://explorer.solana.com/address/${HOOK_PROGRAM_ID}?cluster=devnet"
-echo "  Oracle: https://explorer.solana.com/address/${ORACLE_PROGRAM_ID}?cluster=devnet"
+echo "  SSS:     https://explorer.solana.com/address/${SSS_PROGRAM_ID}?cluster=devnet"
+echo "  Hook:    https://explorer.solana.com/address/${HOOK_PROGRAM_ID}?cluster=devnet"
+echo "  Oracle:  https://explorer.solana.com/address/${ORACLE_PROGRAM_ID}?cluster=devnet"
+echo "  Privacy: https://explorer.solana.com/address/${PRIVACY_PROGRAM_ID}?cluster=devnet"
 echo ""
 log_ok "All done! Check docs/DEVNET_DEPLOYMENT.md for full deployment proof."

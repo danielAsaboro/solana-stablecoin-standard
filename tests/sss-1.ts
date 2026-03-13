@@ -335,6 +335,141 @@ describe("SSS-1: Minimal Stablecoin Lifecycle", () => {
     });
   });
 
+  describe("Quota Enforcement", () => {
+    it("rejects minting over quota", async () => {
+      // quota = 1_000_000_000, already minted = 100_000_000 → remaining = 900_000_000
+      // Attempt to mint 901_000_000 (1M over remaining quota)
+      try {
+        await program.methods
+          .mintTokens(new anchor.BN(901_000_000))
+          .accountsStrict({
+            minter: authority.publicKey,
+            config: configPda,
+            roleAccount: minterRolePda,
+            minterQuota: minterQuotaPda,
+            mint: mintKey,
+            recipientTokenAccount: authorityAta,
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .rpc({ commitment: "confirmed" });
+        expect.fail("Should have thrown QuotaExceeded");
+      } catch (err: any) {
+        expect(err.toString()).to.include("QuotaExceeded");
+      }
+    });
+  });
+
+  describe("Role Removal", () => {
+    it("deactivates a role", async () => {
+      const testUser = Keypair.generate();
+      const [testUserMinterRole] = PublicKey.findProgramAddressSync(
+        [ROLE_SEED, configPda.toBuffer(), Buffer.from([ROLE_MINTER]), testUser.publicKey.toBuffer()],
+        program.programId
+      );
+
+      // Assign the role
+      await program.methods
+        .updateRoles(ROLE_MINTER, testUser.publicKey, true)
+        .accountsStrict({
+          authority: authority.publicKey,
+          config: configPda,
+          roleAccount: testUserMinterRole,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc({ commitment: "confirmed" });
+
+      let role = await program.account.roleAccount.fetch(testUserMinterRole);
+      expect(role.active).to.equal(true);
+
+      // Deactivate the role
+      await program.methods
+        .updateRoles(ROLE_MINTER, testUser.publicKey, false)
+        .accountsStrict({
+          authority: authority.publicKey,
+          config: configPda,
+          roleAccount: testUserMinterRole,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc({ commitment: "confirmed" });
+
+      role = await program.account.roleAccount.fetch(testUserMinterRole);
+      expect(role.active).to.equal(false);
+    });
+
+    it("deactivated minter cannot mint", async () => {
+      const testUser = Keypair.generate();
+      const [testUserMinterRole] = PublicKey.findProgramAddressSync(
+        [ROLE_SEED, configPda.toBuffer(), Buffer.from([ROLE_MINTER]), testUser.publicKey.toBuffer()],
+        program.programId
+      );
+      const [testUserQuotaPda] = PublicKey.findProgramAddressSync(
+        [MINTER_QUOTA_SEED, configPda.toBuffer(), testUser.publicKey.toBuffer()],
+        program.programId
+      );
+
+      // Fund test user so they can sign
+      const fundTx = new anchor.web3.Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: authority.publicKey,
+          toPubkey: testUser.publicKey,
+          lamports: 100_000_000,
+        })
+      );
+      await provider.sendAndConfirm(fundTx);
+
+      // Assign role + quota
+      await program.methods
+        .updateRoles(ROLE_MINTER, testUser.publicKey, true)
+        .accountsStrict({
+          authority: authority.publicKey,
+          config: configPda,
+          roleAccount: testUserMinterRole,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc({ commitment: "confirmed" });
+      await program.methods
+        .updateMinter(testUser.publicKey, new anchor.BN(500_000_000))
+        .accountsStrict({
+          authority: authority.publicKey,
+          config: configPda,
+          minterQuota: testUserQuotaPda,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc({ commitment: "confirmed" });
+
+      // Deactivate role
+      await program.methods
+        .updateRoles(ROLE_MINTER, testUser.publicKey, false)
+        .accountsStrict({
+          authority: authority.publicKey,
+          config: configPda,
+          roleAccount: testUserMinterRole,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc({ commitment: "confirmed" });
+
+      // Try to mint with deactivated role — should fail
+      try {
+        await program.methods
+          .mintTokens(new anchor.BN(1_000_000))
+          .accountsStrict({
+            minter: testUser.publicKey,
+            config: configPda,
+            roleAccount: testUserMinterRole,
+            minterQuota: testUserQuotaPda,
+            mint: mintKey,
+            recipientTokenAccount: authorityAta,
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .signers([testUser])
+          .rpc({ commitment: "confirmed" });
+        expect.fail("Should have thrown Unauthorized");
+      } catch (err: any) {
+        expect(err.toString()).to.include("Unauthorized");
+      }
+    });
+  });
+
   describe("Transfer Authority", () => {
     it("transfers master authority", async () => {
       const newAuthority = Keypair.generate();

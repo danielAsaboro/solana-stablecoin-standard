@@ -61,4 +61,19 @@ pub enum StablecoinError {
 
     #[msg("Invalid decimals - must be between 0 and 9")]
     InvalidDecimals,
+
+    #[msg("Invalid configuration: transfer hook requires a valid program ID")]
+    InvalidConfig,
+
+    #[msg("Global supply cap would be exceeded by this mint")]
+    SupplyCapExceeded,
+
+    #[msg("An authority transfer is already in progress — cancel or accept first")]
+    PendingTransferExists,
+
+    #[msg("No authority transfer is in progress")]
+    NoPendingTransfer,
+
+    #[msg("Only the proposed pending authority may accept the transfer")]
+    InvalidPendingAuthority,
 }

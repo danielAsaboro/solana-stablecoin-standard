@@ -5,6 +5,7 @@
 //! currently blacklisted. All operations are tracked in an in-memory audit log.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use chrono::Utc;
@@ -14,6 +15,7 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::error::AppError;
+use crate::persistence::JsonFileStore;
 use crate::solana::{
     build_add_to_blacklist_instruction, build_remove_from_blacklist_instruction,
     derive_blacklist_pda, parse_pubkey, SolanaContext,
@@ -83,6 +85,12 @@ pub struct ComplianceOperation {
 pub struct ComplianceService {
     ctx: Arc<SolanaContext>,
     operations: RwLock<HashMap<String, ComplianceOperation>>,
+    store: Option<JsonFileStore>,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct PersistedComplianceState {
+    operations: HashMap<String, ComplianceOperation>,
 }
 
 impl ComplianceService {
@@ -91,7 +99,22 @@ impl ComplianceService {
         Self {
             ctx,
             operations: RwLock::new(HashMap::new()),
+            store: None,
         }
+    }
+
+    /// Create a new compliance service backed by a local JSON persistence file.
+    pub fn with_persistence(
+        ctx: Arc<SolanaContext>,
+        path: impl Into<PathBuf>,
+    ) -> Result<Self, AppError> {
+        let store = JsonFileStore::new(path)?;
+        let persisted: PersistedComplianceState = store.load_or_default()?;
+        Ok(Self {
+            ctx,
+            operations: RwLock::new(persisted.operations),
+            store: Some(store),
+        })
     }
 
     /// Add an address to the on-chain blacklist.
@@ -128,6 +151,7 @@ impl ComplianceService {
         };
 
         self.operations.write().await.insert(id.clone(), op.clone());
+        self.persist_state().await;
 
         tracing::info!(
             op_id = %id,
@@ -153,11 +177,13 @@ impl ComplianceService {
                 op.error = Some(e.to_string());
                 op.completed_at = Some(Utc::now().to_rfc3339());
                 self.operations.write().await.insert(id, op.clone());
+                self.persist_state().await;
                 return Err(e);
             }
         }
 
         self.operations.write().await.insert(id, op.clone());
+        self.persist_state().await;
         Ok(op)
     }
 
@@ -188,6 +214,7 @@ impl ComplianceService {
         };
 
         self.operations.write().await.insert(id.clone(), op.clone());
+        self.persist_state().await;
 
         tracing::info!(
             op_id = %id,
@@ -212,11 +239,13 @@ impl ComplianceService {
                 op.error = Some(e.to_string());
                 op.completed_at = Some(Utc::now().to_rfc3339());
                 self.operations.write().await.insert(id, op.clone());
+                self.persist_state().await;
                 return Err(e);
             }
         }
 
         self.operations.write().await.insert(id, op.clone());
+        self.persist_state().await;
         Ok(op)
     }
 
@@ -264,6 +293,7 @@ impl ComplianceService {
             authority,
         };
         self.operations.write().await.insert(id, op);
+        self.persist_state().await;
 
         tracing::info!(
             address = %address,
@@ -314,5 +344,26 @@ impl ComplianceService {
     /// Returns the SSS program ID.
     pub fn program_id(&self) -> String {
         self.ctx.program_id.to_string()
+    }
+
+    async fn persist_state(&self) {
+        let Some(store) = &self.store else {
+            return;
+        };
+
+        let snapshot = {
+            let operations = self.operations.read().await;
+            PersistedComplianceState {
+                operations: operations.clone(),
+            }
+        };
+
+        if let Err(e) = store.save(&snapshot) {
+            tracing::error!(
+                error = %e,
+                path = %store.path().display(),
+                "Failed to persist compliance state"
+            );
+        }
     }
 }

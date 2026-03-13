@@ -5,6 +5,7 @@
 
 use anyhow::{Context, Result};
 use borsh::BorshDeserialize;
+use serde::Deserialize;
 use solana_client::rpc_client::RpcClient;
 use solana_client::rpc_config::{RpcAccountInfoConfig, RpcProgramAccountsConfig};
 use solana_client::rpc_filter::{Memcmp, RpcFilterType};
@@ -138,6 +139,59 @@ pub struct StablecoinData {
     pub error: Option<String>,
     /// Timestamp of last successful fetch.
     pub last_fetched: Option<chrono::DateTime<chrono::Local>>,
+    /// Optional backend incident stream for operator visibility.
+    pub incidents: Vec<OperatorIncident>,
+    /// Optional backend URL used for incident telemetry.
+    pub backend_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct OperatorIncident {
+    pub id: String,
+    pub occurred_at: String,
+    pub action: String,
+    pub severity: String,
+    pub status: String,
+    pub summary: String,
+    pub related_count: usize,
+}
+
+/// Freshness classification for the current snapshot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FetchFreshness {
+    Connecting,
+    Fresh,
+    Stale,
+    Error,
+}
+
+const STALE_AFTER_SECS: i64 = 15;
+
+impl StablecoinData {
+    /// Classify the current snapshot as fresh, stale, connecting, or error.
+    pub fn freshness_at(&self, now: chrono::DateTime<chrono::Local>) -> FetchFreshness {
+        if self.error.is_some() {
+            return FetchFreshness::Error;
+        }
+
+        let Some(last_fetched) = self.last_fetched else {
+            return FetchFreshness::Connecting;
+        };
+
+        if (now - last_fetched) > chrono::Duration::seconds(STALE_AFTER_SECS) {
+            FetchFreshness::Stale
+        } else {
+            FetchFreshness::Fresh
+        }
+    }
+
+    /// Human-readable age since the last successful refresh.
+    pub fn age_label(&self, now: chrono::DateTime<chrono::Local>) -> Option<String> {
+        self.last_fetched.map(|last_fetched| {
+            let seconds = (now - last_fetched).num_seconds().max(0);
+            format!("{seconds}s ago")
+        })
+    }
 }
 
 // ── PDA derivation ──────────────────────────────────────────────────────────
@@ -173,15 +227,22 @@ fn deserialize_anchor_account<T: BorshDeserialize>(
 /// 3. All role accounts (via `getProgramAccounts` with memcmp filter)
 /// 4. All minter quota accounts
 /// 5. All blacklist entries
-pub fn fetch_all_data(
+#[allow(dead_code)]
+pub fn fetch_all_data(rpc: &RpcClient, program_id: &Pubkey, mint: &Pubkey) -> StablecoinData {
+    fetch_all_data_with_backend(rpc, program_id, mint, None)
+}
+
+pub fn fetch_all_data_with_backend(
     rpc: &RpcClient,
     program_id: &Pubkey,
     mint: &Pubkey,
+    backend_url: Option<&str>,
 ) -> StablecoinData {
     let (config_pda, _) = derive_config_pda(program_id, mint);
     let mut data = StablecoinData {
         config_pda,
         mint: *mint,
+        backend_url: backend_url.map(str::to_string),
         ..Default::default()
     };
 
@@ -229,6 +290,20 @@ pub fn fetch_all_data(
     }
 
     data.last_fetched = Some(chrono::Local::now());
+    if let Some(url) = backend_url {
+        let incident_url = format!(
+            "{}/api/v1/operator-timeline?limit=20",
+            url.trim_end_matches('/')
+        );
+        match reqwest::blocking::get(&incident_url) {
+            Ok(response) if response.status().is_success() => {
+                if let Ok(incidents) = response.json::<Vec<OperatorIncident>>() {
+                    data.incidents = incidents;
+                }
+            }
+            Ok(_) | Err(_) => {}
+        }
+    }
     if data.error.is_none() {
         data.error = None; // clear any partial errors
     }
@@ -276,6 +351,96 @@ fn fetch_mint_supply(rpc: &RpcClient, mint: &Pubkey) -> Result<u64> {
     Ok(u64::from_le_bytes(supply_bytes))
 }
 
+#[cfg(test)]
+mod tests {
+    use super::{
+        account_discriminator, derive_config_pda, deserialize_anchor_account, role_name,
+        FetchFreshness, StablecoinData, ROLE_BLACKLISTER, ROLE_BURNER, ROLE_MINTER, ROLE_PAUSER,
+        ROLE_SEIZER,
+    };
+    use borsh::{BorshDeserialize, BorshSerialize};
+    use chrono::{Duration, Local};
+    use solana_sdk::pubkey::Pubkey;
+
+    #[derive(BorshDeserialize, BorshSerialize)]
+    struct TestAccount {
+        value: u64,
+    }
+
+    #[test]
+    fn role_names_match_expected_labels() {
+        assert_eq!(role_name(ROLE_MINTER), "Minter");
+        assert_eq!(role_name(ROLE_BURNER), "Burner");
+        assert_eq!(role_name(ROLE_PAUSER), "Pauser");
+        assert_eq!(role_name(ROLE_BLACKLISTER), "Blacklister");
+        assert_eq!(role_name(ROLE_SEIZER), "Seizer");
+        assert_eq!(role_name(99), "Unknown");
+    }
+
+    #[test]
+    fn config_pda_derivation_is_deterministic() {
+        let program_id = Pubkey::new_unique();
+        let mint = Pubkey::new_unique();
+        let first = derive_config_pda(&program_id, &mint);
+        let second = derive_config_pda(&program_id, &mint);
+        assert_eq!(first, second);
+    }
+
+    #[test]
+    fn account_discriminator_is_stable_for_same_name() {
+        let first = account_discriminator("StablecoinConfig");
+        let second = account_discriminator("StablecoinConfig");
+        let different = account_discriminator("RoleAccount");
+        assert_eq!(first, second);
+        assert_ne!(first, different);
+    }
+
+    #[test]
+    fn deserialize_anchor_account_rejects_wrong_discriminator() {
+        let mut data = Vec::from([0u8; 8]);
+        data.extend(TestAccount { value: 42 }.try_to_vec().unwrap());
+        let expected = account_discriminator("StablecoinConfig");
+        let result = deserialize_anchor_account::<TestAccount>(&data, &expected);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn deserialize_anchor_account_reads_payload_after_discriminator() {
+        let expected = account_discriminator("TestAccount");
+        let mut data = Vec::from(expected);
+        data.extend(TestAccount { value: 42 }.try_to_vec().unwrap());
+        let decoded = deserialize_anchor_account::<TestAccount>(&data, &expected).unwrap();
+        assert_eq!(decoded.value, 42);
+    }
+
+    #[test]
+    fn freshness_distinguishes_connecting_fresh_stale_and_error() {
+        let now = Local::now();
+
+        let connecting = StablecoinData::default();
+        assert_eq!(connecting.freshness_at(now), FetchFreshness::Connecting);
+
+        let fresh = StablecoinData {
+            last_fetched: Some(now - Duration::seconds(5)),
+            ..StablecoinData::default()
+        };
+        assert_eq!(fresh.freshness_at(now), FetchFreshness::Fresh);
+
+        let stale = StablecoinData {
+            last_fetched: Some(now - Duration::seconds(30)),
+            ..StablecoinData::default()
+        };
+        assert_eq!(stale.freshness_at(now), FetchFreshness::Stale);
+
+        let errored = StablecoinData {
+            error: Some("rpc failed".to_string()),
+            last_fetched: Some(now - Duration::seconds(5)),
+            ..StablecoinData::default()
+        };
+        assert_eq!(errored.freshness_at(now), FetchFreshness::Error);
+    }
+}
+
 /// Fetch all RoleAccount PDAs for this stablecoin via memcmp filter.
 fn fetch_roles(
     rpc: &RpcClient,
@@ -305,9 +470,7 @@ fn fetch_minter_quotas(
 
     let mut minters = Vec::new();
     for (_, account) in &accounts {
-        if let Ok(minter) =
-            deserialize_anchor_account::<MinterQuotaData>(&account.data, &disc)
-        {
+        if let Ok(minter) = deserialize_anchor_account::<MinterQuotaData>(&account.data, &disc) {
             minters.push(minter);
         }
     }
@@ -325,9 +488,7 @@ fn fetch_blacklist(
 
     let mut entries = Vec::new();
     for (_, account) in &accounts {
-        if let Ok(entry) =
-            deserialize_anchor_account::<BlacklistEntryData>(&account.data, &disc)
-        {
+        if let Ok(entry) = deserialize_anchor_account::<BlacklistEntryData>(&account.data, &disc) {
             entries.push(entry);
         }
     }

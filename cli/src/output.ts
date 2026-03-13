@@ -8,6 +8,15 @@
 import ora, { Ora } from "ora";
 import chalk from "chalk";
 
+export type OutputFormat = "table" | "json" | "csv";
+
+type Primitive = string | number | boolean | null | undefined;
+
+export interface CsvColumn<T> {
+  header: string;
+  value: (row: T) => Primitive;
+}
+
 // ─── Symbols ────────────────────────────────────────────────────────
 
 const SYMBOLS = {
@@ -245,4 +254,76 @@ export function printPresetBadge(
     return chalk.bgGreen.white(" SSS-1 ") + " " + chalk.gray("Minimal Stablecoin");
   }
   return chalk.bgYellow.black(" CUSTOM ") + " " + chalk.gray("Custom Configuration");
+}
+
+function escapeCsv(value: Primitive): string {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  const rendered = String(value);
+  if (/[",\n]/.test(rendered)) {
+    return `"${rendered.replace(/"/g, "\"\"")}"`;
+  }
+
+  return rendered;
+}
+
+export function getOutputFormat(globalOpts: Record<string, unknown>): OutputFormat {
+  const candidate = String(globalOpts.output ?? "table").toLowerCase();
+  if (candidate === "json" || candidate === "csv") {
+    return candidate;
+  }
+  return "table";
+}
+
+export function isDryRun(globalOpts: Record<string, unknown>): boolean {
+  return Boolean(globalOpts.dryRun);
+}
+
+export function printJson(payload: unknown): void {
+  console.log(JSON.stringify(payload, null, 2));
+}
+
+export function printCsv<T>(rows: Array<T>, columns: Array<CsvColumn<T>>): void {
+  const header = columns.map((column) => escapeCsv(column.header)).join(",");
+  const lines = rows.map((row) =>
+    columns.map((column) => escapeCsv(column.value(row))).join(",")
+  );
+  console.log([header, ...lines].join("\n"));
+}
+
+export function printDryRunPlan(
+  globalOpts: Record<string, unknown>,
+  action: string,
+  details: Record<string, Primitive>
+): void {
+  const format = getOutputFormat(globalOpts);
+  const payload = {
+    mode: "dry-run",
+    action,
+    details,
+  };
+
+  if (format === "json") {
+    printJson(payload);
+    return;
+  }
+
+  if (format === "csv") {
+    printCsv(
+      [details],
+      Object.keys(details).map((key) => ({
+        header: key,
+        value: (row: Record<string, Primitive>) => row[key],
+      }))
+    );
+    return;
+  }
+
+  printHeader(`Dry Run: ${action}`);
+  for (const [label, value] of Object.entries(details)) {
+    printField(label, String(value ?? ""));
+  }
+  console.log();
 }

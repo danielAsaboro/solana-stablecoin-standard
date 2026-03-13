@@ -5,6 +5,7 @@
 //! failed deliveries with exponential backoff.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -16,12 +17,19 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::error::AppError;
+use crate::persistence::JsonFileStore;
 
 /// HMAC-SHA256 type alias used for payload signing.
 type HmacSha256 = Hmac<Sha256>;
 
 /// Maximum number of delivery retries for transient failures.
-const MAX_RETRIES: u32 = 3;
+pub const MAX_RETRIES: u32 = 3;
+
+/// Header name carrying the HMAC signature for signed webhook deliveries.
+pub const SIGNATURE_HEADER_NAME: &str = "X-SSS-Signature";
+
+/// Human-readable algorithm label for signed webhook deliveries.
+pub const SIGNATURE_ALGORITHM: &str = "HMAC-SHA256";
 
 /// Base backoff duration in seconds (doubles each retry: 1s, 2s, 4s).
 const BASE_BACKOFF_SECS: u64 = 1;
@@ -56,6 +64,27 @@ pub struct WebhookRegistration {
     pub failure_count: u64,
 }
 
+impl WebhookRegistration {
+    /// Whether this registration signs outgoing payloads.
+    pub fn signing_enabled(&self) -> bool {
+        self.secret.is_some()
+    }
+}
+
+/// Non-secret correlation metadata attached to webhook payloads and delivery logs.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct DispatchMetadata {
+    /// Stable incident correlation key for operator tooling.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub correlation_id: Option<String>,
+    /// On-chain transaction signature that originated the event, when known.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transaction_signature: Option<String>,
+    /// Indexed event identifier, when the event came from the backend indexer.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event_id: Option<String>,
+}
+
 /// Payload sent to webhook endpoints via HTTP POST.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WebhookPayload {
@@ -65,6 +94,15 @@ pub struct WebhookPayload {
     pub event_type: String,
     /// ISO 8601 timestamp of the event.
     pub timestamp: String,
+    /// Stable incident correlation key for operator tooling.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub correlation_id: Option<String>,
+    /// On-chain transaction signature that originated the event, when known.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transaction_signature: Option<String>,
+    /// Indexed event identifier, when the event came from the backend indexer.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event_id: Option<String>,
     /// Event-specific data.
     pub data: serde_json::Value,
 }
@@ -90,6 +128,18 @@ pub struct DeliveryRecord {
     pub webhook_id: String,
     /// The event type that triggered this delivery.
     pub event_type: String,
+    /// Stable incident correlation key for operator tooling.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub correlation_id: Option<String>,
+    /// On-chain transaction signature that originated the event, when known.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transaction_signature: Option<String>,
+    /// Indexed event identifier, when the event came from the backend indexer.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event_id: Option<String>,
+    /// Replay relationship for operator-triggered redelivery attempts.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub replayed_from: Option<String>,
     /// Current delivery status.
     pub status: DeliveryStatus,
     /// Number of delivery attempts made.
@@ -105,6 +155,8 @@ pub struct DeliveryRecord {
     pub error: Option<String>,
     /// ISO 8601 timestamp when this delivery was created.
     pub created_at: String,
+    /// Payload snapshot used for delivery and replay.
+    pub payload: WebhookPayload,
 }
 
 // ── Service ──────────────────────────────────────────────────────────────────
@@ -121,6 +173,14 @@ pub struct WebhookService {
     delivery_log: RwLock<HashMap<String, DeliveryRecord>>,
     /// Shared HTTP client reused across all deliveries.
     http_client: reqwest::Client,
+    /// Optional local JSON persistence store.
+    store: Option<JsonFileStore>,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct PersistedWebhookState {
+    registrations: HashMap<String, WebhookRegistration>,
+    delivery_log: HashMap<String, DeliveryRecord>,
 }
 
 impl WebhookService {
@@ -135,7 +195,25 @@ impl WebhookService {
             registrations: RwLock::new(HashMap::new()),
             delivery_log: RwLock::new(HashMap::new()),
             http_client,
+            store: None,
         }
+    }
+
+    /// Create a new webhook service backed by a local JSON persistence file.
+    pub fn with_persistence(path: impl Into<PathBuf>) -> Result<Self, AppError> {
+        let http_client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(10))
+            .build()
+            .unwrap_or_default();
+        let store = JsonFileStore::new(path)?;
+        let persisted: PersistedWebhookState = store.load_or_default()?;
+
+        Ok(Self {
+            registrations: RwLock::new(persisted.registrations),
+            delivery_log: RwLock::new(persisted.delivery_log),
+            http_client,
+            store: Some(store),
+        })
     }
 
     /// Register a new webhook endpoint.
@@ -170,6 +248,7 @@ impl WebhookService {
             .write()
             .await
             .insert(id.clone(), registration.clone());
+        self.persist_state().await;
 
         tracing::info!(
             webhook_id = %id,
@@ -190,6 +269,7 @@ impl WebhookService {
         match removed {
             Some(reg) => {
                 tracing::info!(webhook_id = %id, url = %reg.url, "Webhook unregistered");
+                self.persist_state().await;
                 Ok(())
             }
             None => Err(AppError::NotFound(format!(
@@ -220,6 +300,17 @@ impl WebhookService {
     /// Deliveries run concurrently in the background with automatic retry
     /// on transient failures (5xx or network errors).
     pub async fn dispatch_event(self: &Arc<Self>, event_type: &str, data: serde_json::Value) {
+        self.dispatch_event_with_context(event_type, data, DispatchMetadata::default())
+            .await;
+    }
+
+    /// Dispatch an event with correlation metadata for operator tooling.
+    pub async fn dispatch_event_with_context(
+        self: &Arc<Self>,
+        event_type: &str,
+        data: serde_json::Value,
+        metadata: DispatchMetadata,
+    ) {
         let registrations = self.registrations.read().await;
         let matching: Vec<WebhookRegistration> = registrations
             .values()
@@ -237,6 +328,8 @@ impl WebhookService {
         tracing::info!(
             event_type = %event_type,
             webhook_count = matching.len(),
+            correlation_id = metadata.correlation_id.as_deref().unwrap_or("none"),
+            transaction_signature = metadata.transaction_signature.as_deref().unwrap_or("none"),
             "Dispatching event to webhooks"
         );
 
@@ -245,6 +338,9 @@ impl WebhookService {
                 id: Uuid::new_v4().to_string(),
                 event_type: event_type.to_string(),
                 timestamp: Utc::now().to_rfc3339(),
+                correlation_id: metadata.correlation_id.clone(),
+                transaction_signature: metadata.transaction_signature.clone(),
+                event_id: metadata.event_id.clone(),
                 data: data.clone(),
             };
 
@@ -253,12 +349,17 @@ impl WebhookService {
                 id: delivery_id.clone(),
                 webhook_id: registration.id.clone(),
                 event_type: event_type.to_string(),
+                correlation_id: metadata.correlation_id.clone(),
+                transaction_signature: metadata.transaction_signature.clone(),
+                event_id: metadata.event_id.clone(),
+                replayed_from: None,
                 status: DeliveryStatus::Pending,
                 attempts: 0,
                 last_attempt_at: None,
                 response_code: None,
                 error: None,
                 created_at: Utc::now().to_rfc3339(),
+                payload: payload.clone(),
             };
 
             self.delivery_log
@@ -268,6 +369,7 @@ impl WebhookService {
 
             // Trim the delivery log if it exceeds the maximum size
             self.trim_delivery_log().await;
+            self.persist_state().await;
 
             let service = Arc::clone(self);
             tokio::spawn(async move {
@@ -288,6 +390,73 @@ impl WebhookService {
         list.sort_by(|a, b| b.created_at.cmp(&a.created_at));
         list.truncate(limit);
         list
+    }
+
+    /// Get a single delivery record by ID.
+    pub async fn get_delivery(&self, id: &str) -> Option<DeliveryRecord> {
+        self.delivery_log.read().await.get(id).cloned()
+    }
+
+    /// Redeliver a recorded payload to the original webhook registration.
+    pub async fn redeliver(self: &Arc<Self>, id: &str) -> Result<DeliveryRecord, AppError> {
+        let original = self
+            .delivery_log
+            .read()
+            .await
+            .get(id)
+            .cloned()
+            .ok_or_else(|| AppError::NotFound(format!("Delivery '{id}' not found")))?;
+
+        let registration = self
+            .registrations
+            .read()
+            .await
+            .get(&original.webhook_id)
+            .cloned()
+            .ok_or_else(|| {
+                AppError::NotFound(format!(
+                    "Webhook registration '{}' not found for delivery '{}'",
+                    original.webhook_id, id
+                ))
+            })?;
+
+        let payload = WebhookPayload {
+            id: Uuid::new_v4().to_string(),
+            ..original.payload.clone()
+        };
+        let delivery_id = payload.id.clone();
+        let record = DeliveryRecord {
+            id: delivery_id.clone(),
+            webhook_id: registration.id.clone(),
+            event_type: original.event_type.clone(),
+            correlation_id: original.correlation_id.clone(),
+            transaction_signature: original.transaction_signature.clone(),
+            event_id: original.event_id.clone(),
+            replayed_from: Some(original.id),
+            status: DeliveryStatus::Pending,
+            attempts: 0,
+            last_attempt_at: None,
+            response_code: None,
+            error: None,
+            created_at: Utc::now().to_rfc3339(),
+            payload: payload.clone(),
+        };
+
+        self.delivery_log
+            .write()
+            .await
+            .insert(delivery_id.clone(), record.clone());
+        self.trim_delivery_log().await;
+        self.persist_state().await;
+
+        let service = Arc::clone(self);
+        tokio::spawn(async move {
+            service
+                .deliver_with_retry(registration, payload, delivery_id)
+                .await;
+        });
+
+        Ok(record)
     }
 
     /// Attempt to deliver a payload to a webhook with retry logic.
@@ -337,7 +506,7 @@ impl WebhookService {
             // Compute HMAC-SHA256 signature if secret is configured
             if let Some(ref secret) = registration.secret {
                 if let Ok(signature) = compute_hmac_signature(secret, &payload_json) {
-                    request = request.header("X-SSS-Signature", signature);
+                    request = request.header(SIGNATURE_HEADER_NAME, signature);
                 }
             }
 
@@ -526,6 +695,8 @@ impl WebhookService {
             record.response_code = response_code;
             record.error = error;
         }
+        drop(log);
+        self.persist_state().await;
     }
 
     /// Increment the success counter and update last_delivery_at for a registration.
@@ -535,6 +706,8 @@ impl WebhookService {
             reg.delivery_count = reg.delivery_count.saturating_add(1);
             reg.last_delivery_at = Some(timestamp.to_string());
         }
+        drop(regs);
+        self.persist_state().await;
     }
 
     /// Increment the failure counter for a registration.
@@ -544,6 +717,8 @@ impl WebhookService {
             reg.failure_count = reg.failure_count.saturating_add(1);
             reg.last_delivery_at = Some(Utc::now().to_rfc3339());
         }
+        drop(regs);
+        self.persist_state().await;
     }
 
     /// Trim the delivery log to prevent unbounded memory growth.
@@ -561,6 +736,31 @@ impl WebhookService {
             for (id, _) in entries.into_iter().take(to_remove) {
                 log.remove(&id);
             }
+        }
+        drop(log);
+        self.persist_state().await;
+    }
+
+    async fn persist_state(&self) {
+        let Some(store) = &self.store else {
+            return;
+        };
+
+        let snapshot = {
+            let registrations = self.registrations.read().await;
+            let delivery_log = self.delivery_log.read().await;
+            PersistedWebhookState {
+                registrations: registrations.clone(),
+                delivery_log: delivery_log.clone(),
+            }
+        };
+
+        if let Err(e) = store.save(&snapshot) {
+            tracing::error!(
+                error = %e,
+                path = %store.path().display(),
+                "Failed to persist webhook state"
+            );
         }
     }
 }

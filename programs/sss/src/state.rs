@@ -49,10 +49,20 @@ pub struct StablecoinConfig {
     /// Transfer hook program ID (if enabled)
     pub transfer_hook_program: Pubkey,
 
+    /// Global supply cap in base units (0 = unlimited).
+    /// Once total_minted reaches this value no further minting is allowed.
+    pub supply_cap: u64,
+
+    /// Pending authority in a 2-step authority transfer (Pubkey::default() = no transfer in flight).
+    pub pending_authority: Pubkey,
+
+    /// Unix timestamp when the authority transfer was proposed (0 = no transfer in flight).
+    pub authority_transfer_at: i64,
+
     /// PDA bump seed
     pub bump: u8,
     /// Reserved for future use
-    pub _reserved: [u8; 63],
+    pub _reserved: [u8; 15],
 }
 
 impl StablecoinConfig {
@@ -71,8 +81,11 @@ impl StablecoinConfig {
         + 8                // total_minted
         + 8                // total_burned
         + 32               // transfer_hook_program
+        + 8                // supply_cap
+        + 32               // pending_authority
+        + 8                // authority_transfer_at
         + 1                // bump
-        + 63;              // _reserved
+        + 15;              // _reserved
 
     pub const SEED_PREFIX: &'static [u8] = STABLECOIN_SEED;
 }

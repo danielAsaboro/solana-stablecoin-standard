@@ -8,8 +8,10 @@ import {
   loadKeypair,
   getConnection,
   deriveConfigPDA,
+  deriveExtraAccountMetasPDA,
+  loadSssProgram,
+  loadTransferHookProgram,
   saveConfig,
-  SSS_PROGRAM_ID,
   TRANSFER_HOOK_PROGRAM_ID,
 } from "../helpers";
 import { spin, infoMsg, errorMsg, printTxResult, printDetail } from "../output";
@@ -67,6 +69,44 @@ function parseTomlConfig(content: string): Record<string, unknown> {
 }
 
 /**
+ * Validates a parsed custom config object, throwing with a descriptive error
+ * for any missing or malformed field before we attempt an on-chain transaction.
+ */
+function validateCustomConfig(raw: Record<string, unknown>): CustomConfig {
+  const required: (keyof CustomConfig)[] = ["name", "symbol", "uri", "decimals", "enable_permanent_delegate", "enable_transfer_hook", "default_account_frozen"];
+  for (const field of required) {
+    if (raw[field] === undefined || raw[field] === null) {
+      throw new Error(`Custom config missing required field: "${field}"`);
+    }
+  }
+  if (typeof raw.name !== "string" || raw.name.length === 0 || raw.name.length > 32) {
+    throw new Error(`Custom config "name" must be a non-empty string of at most 32 characters`);
+  }
+  if (typeof raw.symbol !== "string" || raw.symbol.length === 0 || raw.symbol.length > 10) {
+    throw new Error(`Custom config "symbol" must be a non-empty string of at most 10 characters`);
+  }
+  if (typeof raw.uri !== "string" || raw.uri.length > 200) {
+    throw new Error(`Custom config "uri" must be a string of at most 200 characters`);
+  }
+  if (typeof raw.decimals !== "number" || !Number.isInteger(raw.decimals) || raw.decimals < 0 || raw.decimals > 9) {
+    throw new Error(`Custom config "decimals" must be an integer between 0 and 9`);
+  }
+  if (typeof raw.enable_transfer_hook !== "boolean") {
+    throw new Error(`Custom config "enable_transfer_hook" must be a boolean`);
+  }
+  if (raw.enable_transfer_hook && !raw.transfer_hook_program_id) {
+    throw new Error(`Custom config "transfer_hook_program_id" is required when "enable_transfer_hook" is true`);
+  }
+  if (typeof raw.enable_permanent_delegate !== "boolean") {
+    throw new Error(`Custom config "enable_permanent_delegate" must be a boolean`);
+  }
+  if (typeof raw.default_account_frozen !== "boolean") {
+    throw new Error(`Custom config "default_account_frozen" must be a boolean`);
+  }
+  return raw as unknown as CustomConfig;
+}
+
+/**
  * Load a custom config file in JSON or TOML format.
  * Format is determined by file extension (.toml → TOML, otherwise → JSON).
  */
@@ -74,7 +114,7 @@ function loadCustomConfig(filePath: string): CustomConfig {
   const content = fs.readFileSync(filePath, "utf-8");
   const isToml = filePath.toLowerCase().endsWith(".toml");
   const raw = isToml ? parseTomlConfig(content) : JSON.parse(content) as Record<string, unknown>;
-  return raw as unknown as CustomConfig;
+  return validateCustomConfig(raw);
 }
 
 export function registerInitCommand(program: Command): void {
@@ -168,13 +208,7 @@ async function handleInit(opts: InitOptions, globalOpts: any): Promise<void> {
   // Build the initialize instruction
   // Note: In a full implementation this would use the IDL-generated program client.
   // For now we construct the transaction manually using anchor Program with IDL.
-  const idl = await anchor.Program.fetchIdl(SSS_PROGRAM_ID, provider);
-  if (!idl) {
-    errorMsg("Could not fetch IDL for the SSS program. Make sure the program is deployed.");
-    return;
-  }
-
-  const program = new anchor.Program(idl, provider);
+  const program = await loadSssProgram(provider);
 
   const spinner = spin("Submitting initialize transaction...");
 
@@ -208,6 +242,33 @@ async function handleInit(opts: InitOptions, globalOpts: any): Promise<void> {
     throw err;
   }
 
+  let hookTx: string | undefined;
+  if (enableTransferHook) {
+    const [extraAccountMetas] = deriveExtraAccountMetasPDA(mintKeypair.publicKey);
+    const hookProgram = await loadTransferHookProgram(provider);
+    const hookSpinner = spin("Initializing transfer hook accounts...");
+
+    try {
+      hookTx = await hookProgram.methods
+        .initializeExtraAccountMetas()
+        .accounts({
+          payer: keypair.publicKey,
+          extraAccountMetas,
+          mint: mintKeypair.publicKey,
+          sssProgram: program.programId,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+      hookSpinner.succeed("Transfer hook accounts initialized!");
+    } catch (err) {
+      hookSpinner.fail("Transfer hook setup failed");
+      throw err;
+    }
+
+    printDetail("Transfer Hook", hookTx);
+    printDetail("ExtraAccountMetas", extraAccountMetas.toBase58());
+  }
+
   printTxResult(tx, connection.rpcEndpoint, [
     ["Transaction", tx],
     ["Config PDA", configPDA.toBase58()],
@@ -221,7 +282,7 @@ async function handleInit(opts: InitOptions, globalOpts: any): Promise<void> {
     mintAddress: mintKeypair.publicKey.toBase58(),
     rpcUrl: connection.rpcEndpoint,
     preset: presetLabel,
-  });
+  }, globalOpts.config, globalOpts.profile);
 
-  infoMsg(`Config saved to ${chalk.bold(".sss-token.json")}`);
+  infoMsg(`Config saved to ${chalk.bold(globalOpts.config || ".sss-token.json")}`);
 }

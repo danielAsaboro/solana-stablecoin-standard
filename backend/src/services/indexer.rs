@@ -4,6 +4,7 @@
 //! parses Anchor event logs, and maintains an in-memory event index.
 
 use std::sync::Arc;
+use std::path::PathBuf;
 
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
@@ -21,6 +22,8 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::error::AppError;
+use crate::persistence::JsonFileStore;
+use crate::services::webhook::{DispatchMetadata, WebhookService};
 use crate::solana::SolanaContext;
 
 // ── Event Type Constants ─────────────────────────────────────────────────
@@ -120,6 +123,14 @@ pub struct IndexerService {
     last_signature: RwLock<Option<Signature>>,
     /// Pre-computed event discriminators for fast matching.
     discriminators: Vec<EventDiscriminator>,
+    /// Optional local JSON persistence store.
+    store: Option<JsonFileStore>,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct PersistedIndexerState {
+    events: Vec<IndexedEvent>,
+    last_signature: Option<String>,
 }
 
 impl IndexerService {
@@ -130,7 +141,33 @@ impl IndexerService {
             events: RwLock::new(Vec::new()),
             last_signature: RwLock::new(None),
             discriminators: build_discriminators(),
+            store: None,
         }
+    }
+
+    /// Create a new indexer backed by a local JSON persistence file.
+    pub fn with_persistence(
+        ctx: Arc<SolanaContext>,
+        path: impl Into<PathBuf>,
+    ) -> Result<Self, AppError> {
+        let store = JsonFileStore::new(path)?;
+        let persisted: PersistedIndexerState = store.load_or_default()?;
+        let last_signature = match persisted.last_signature {
+            Some(signature) => Some(Signature::from_str(&signature).map_err(|e| {
+                AppError::Internal(format!(
+                    "Invalid persisted indexer cursor '{signature}': {e}"
+                ))
+            })?),
+            None => None,
+        };
+
+        Ok(Self {
+            ctx,
+            events: RwLock::new(persisted.events),
+            last_signature: RwLock::new(last_signature),
+            discriminators: build_discriminators(),
+            store: Some(store),
+        })
     }
 
     /// Poll for new on-chain events since the last indexed signature.
@@ -141,6 +178,34 @@ impl IndexerService {
     ///
     /// Returns the number of newly indexed events.
     pub async fn poll_new_events(&self) -> Result<usize, AppError> {
+        Ok(self.poll_new_events_internal().await?.len())
+    }
+
+    /// Poll for new on-chain events and dispatch exact-correlation webhooks.
+    pub async fn poll_new_events_with_webhooks(
+        &self,
+        webhook: &Arc<WebhookService>,
+    ) -> Result<usize, AppError> {
+        let new_events = self.poll_new_events_internal().await?;
+
+        for event in &new_events {
+            webhook
+                .dispatch_event_with_context(
+                    &event.event_type,
+                    event.data.clone(),
+                    DispatchMetadata {
+                        correlation_id: Some(format!("tx:{}", event.signature)),
+                        transaction_signature: Some(event.signature.clone()),
+                        event_id: Some(event.id.clone()),
+                    },
+                )
+                .await;
+        }
+
+        Ok(new_events.len())
+    }
+
+    async fn poll_new_events_internal(&self) -> Result<Vec<IndexedEvent>, AppError> {
         let until = self.last_signature.read().await.as_ref().cloned();
 
         let config = GetConfirmedSignaturesForAddress2Config {
@@ -158,7 +223,7 @@ impl IndexerService {
             .map_err(|e| AppError::SolanaRpc(format!("Failed to get signatures: {e}")))?;
 
         if signatures.is_empty() {
-            return Ok(0);
+            return Ok(Vec::new());
         }
 
         tracing::info!(
@@ -226,7 +291,8 @@ impl IndexerService {
             new_events.extend(parsed);
         }
 
-        let new_count = new_events.len();
+        let indexed_events = new_events.clone();
+        let new_count = indexed_events.len();
 
         if new_count > 0 {
             // Update last_signature to the newest processed signature (last in
@@ -253,6 +319,8 @@ impl IndexerService {
                 total_events = events.len(),
                 "Indexed new events"
             );
+            drop(events);
+            self.persist_state().await;
         } else if let Some(newest) = sig_list.last() {
             // Even if no events were parsed, update cursor so we don't re-scan
             // the same transactions.
@@ -263,9 +331,10 @@ impl IndexerService {
                 ))
             })?;
             *self.last_signature.write().await = Some(sig);
+            self.persist_state().await;
         }
 
-        Ok(new_count)
+        Ok(indexed_events)
     }
 
     /// Parse Anchor event logs from a transaction's log messages.
@@ -455,6 +524,46 @@ impl IndexerService {
         });
     }
 
+    /// Start a background polling loop that indexes events and dispatches webhooks.
+    pub fn start_polling_with_webhooks(
+        self: Arc<Self>,
+        webhook: Arc<WebhookService>,
+        interval_secs: u64,
+    ) {
+        tracing::info!(
+            interval_secs = interval_secs,
+            config_pda = %self.ctx.config_pda,
+            "Starting indexer background polling with webhook dispatch"
+        );
+
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(
+                std::time::Duration::from_secs(interval_secs),
+            );
+
+            loop {
+                interval.tick().await;
+
+                match self.poll_new_events_with_webhooks(&webhook).await {
+                    Ok(count) => {
+                        if count > 0 {
+                            tracing::info!(
+                                new_events = count,
+                                "Indexer poll completed"
+                            );
+                        }
+                    }
+                    Err(error) => {
+                        tracing::error!(
+                            error = %error,
+                            "Indexer poll failed"
+                        );
+                    }
+                }
+            }
+        });
+    }
+
     /// Returns the config PDA address being indexed.
     pub fn config_address(&self) -> String {
         self.ctx.config_pda.to_string()
@@ -463,6 +572,34 @@ impl IndexerService {
     /// Returns the SSS program ID.
     pub fn program_id(&self) -> String {
         self.ctx.program_id.to_string()
+    }
+
+    async fn persist_state(&self) {
+        let Some(store) = &self.store else {
+            return;
+        };
+
+        let snapshot = {
+            let events = self.events.read().await;
+            let last_signature = self
+                .last_signature
+                .read()
+                .await
+                .as_ref()
+                .map(ToString::to_string);
+            PersistedIndexerState {
+                events: events.clone(),
+                last_signature,
+            }
+        };
+
+        if let Err(e) = store.save(&snapshot) {
+            tracing::error!(
+                error = %e,
+                path = %store.path().display(),
+                "Failed to persist indexer state"
+            );
+        }
     }
 }
 

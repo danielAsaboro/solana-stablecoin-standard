@@ -13,6 +13,8 @@ import { registerMintersCommand } from "../src/commands/minters";
 import { registerRolesCommand } from "../src/commands/roles";
 import { registerHoldersCommand } from "../src/commands/holders";
 import { registerAuditLogCommand } from "../src/commands/audit-log";
+import { registerConfigCommand } from "../src/commands/config";
+import { registerWebhookCommand } from "../src/commands/webhook";
 
 const program = new Command();
 
@@ -22,8 +24,18 @@ program
   .version("0.1.0")
   .option("-k, --keypair <path>", "Path to keypair file", "~/.config/solana/id.json")
   .option("-u, --rpc <url>", "RPC URL", "http://localhost:8899")
-  .option("-c, --config <address>", "Stablecoin config address (overrides .sss-token.json)");
+  .option("-c, --config <path>", "Path to the CLI config file (defaults to .sss-token.json)")
+  .option("-p, --profile <name>", "Named config profile to use")
+  .option(
+    "-o, --output <format>",
+    "Output format: table, json, csv (audit-log also accepts jsonl)",
+    "table"
+  )
+  .option("--dry-run", "Preview the action without submitting a transaction")
+  .option("-y, --yes", "Skip interactive confirmations when supported");
 
+registerConfigCommand(program);
+registerWebhookCommand(program);
 registerInitCommand(program);
 registerMintCommand(program);
 registerBurnCommand(program);

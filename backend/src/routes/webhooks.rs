@@ -4,6 +4,8 @@
 //! inspecting delivery history. The [`WebhookService`] is always available
 //! (not gated behind Solana configuration).
 
+use std::sync::Arc;
+
 use axum::{
     extract::{Json, Path, Query, State},
     http::StatusCode,
@@ -13,7 +15,10 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
-use crate::services::webhook::{DeliveryRecord, DeliveryStatus, WebhookRegistration};
+use crate::services::webhook::{
+    DeliveryRecord, DeliveryStatus, WebhookRegistration, MAX_RETRIES, SIGNATURE_ALGORITHM,
+    SIGNATURE_HEADER_NAME,
+};
 use crate::AppState;
 
 // ── Request / Response Types ─────────────────────────────────────────────────
@@ -50,10 +55,22 @@ pub struct WebhookResponse {
     pub delivery_count: u64,
     /// Total failed deliveries.
     pub failure_count: u64,
+    /// Whether outgoing deliveries are HMAC-signed.
+    pub signing_enabled: bool,
+    /// Signature header name when signing is enabled.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub signature_header: Option<&'static str>,
+    /// Signature algorithm label when signing is enabled.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub signature_algorithm: Option<&'static str>,
+    /// Short verification description for operators.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub signature_verification: Option<&'static str>,
 }
 
 impl From<WebhookRegistration> for WebhookResponse {
     fn from(reg: WebhookRegistration) -> Self {
+        let signing_enabled = reg.signing_enabled();
         Self {
             id: reg.id,
             url: reg.url,
@@ -63,6 +80,11 @@ impl From<WebhookRegistration> for WebhookResponse {
             last_delivery_at: reg.last_delivery_at,
             delivery_count: reg.delivery_count,
             failure_count: reg.failure_count,
+            signing_enabled,
+            signature_header: signing_enabled.then_some(SIGNATURE_HEADER_NAME),
+            signature_algorithm: signing_enabled.then_some(SIGNATURE_ALGORITHM),
+            signature_verification: signing_enabled
+                .then_some("HMAC-SHA256(secret, raw_request_body_bytes)"),
         }
     }
 }
@@ -76,6 +98,18 @@ pub struct DeliveryResponse {
     pub webhook_id: String,
     /// The event type that triggered this delivery.
     pub event_type: String,
+    /// Stable incident correlation key for operator tooling.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub correlation_id: Option<String>,
+    /// On-chain transaction signature that originated the event, when known.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transaction_signature: Option<String>,
+    /// Indexed event identifier, when the event came from the backend indexer.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event_id: Option<String>,
+    /// Prior delivery ID if this record was created by a replay.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub replayed_from: Option<String>,
     /// Current delivery status.
     pub status: String,
     /// Number of delivery attempts made.
@@ -91,14 +125,26 @@ pub struct DeliveryResponse {
     pub error: Option<String>,
     /// ISO 8601 creation timestamp.
     pub created_at: String,
+    /// Whether this delivery has reached a terminal state.
+    pub finalized: bool,
+    /// Whether the delivery is still eligible for another retry.
+    pub retry_scheduled: bool,
+    /// Maximum number of delivery attempts allowed by the service.
+    pub max_attempts: u32,
 }
 
 impl From<DeliveryRecord> for DeliveryResponse {
     fn from(rec: DeliveryRecord) -> Self {
+        let finalized = rec.status != DeliveryStatus::Pending;
+        let retry_scheduled = rec.status == DeliveryStatus::Pending && rec.attempts < MAX_RETRIES;
         Self {
             id: rec.id,
             webhook_id: rec.webhook_id,
             event_type: rec.event_type,
+            correlation_id: rec.correlation_id,
+            transaction_signature: rec.transaction_signature,
+            event_id: rec.event_id,
+            replayed_from: rec.replayed_from,
             status: match rec.status {
                 DeliveryStatus::Pending => "pending",
                 DeliveryStatus::Delivered => "delivered",
@@ -110,6 +156,9 @@ impl From<DeliveryRecord> for DeliveryResponse {
             response_code: rec.response_code,
             error: rec.error,
             created_at: rec.created_at,
+            finalized,
+            retry_scheduled,
+            max_attempts: MAX_RETRIES,
         }
     }
 }
@@ -181,6 +230,15 @@ async fn list_deliveries(
     ))
 }
 
+/// POST /webhooks/deliveries/:id/redeliver — replay a recorded payload.
+async fn redeliver_delivery(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<(StatusCode, Json<DeliveryResponse>), AppError> {
+    let record = Arc::clone(&state.webhook).redeliver(&id).await?;
+    Ok((StatusCode::ACCEPTED, Json(DeliveryResponse::from(record))))
+}
+
 /// GET /webhooks/:id — Get a specific webhook registration.
 async fn get_webhook(
     State(state): State<AppState>,
@@ -220,6 +278,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/webhooks", post(register_webhook).get(list_webhooks))
         .route("/webhooks/deliveries", get(list_deliveries))
+        .route("/webhooks/deliveries/{id}/redeliver", post(redeliver_delivery))
         .route(
             "/webhooks/{id}",
             get(get_webhook).delete(unregister_webhook),

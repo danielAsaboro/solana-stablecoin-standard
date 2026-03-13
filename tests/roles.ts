@@ -18,6 +18,7 @@ describe("Roles", () => {
   );
   anchor.setProvider(provider);
   const program = anchor.workspace.Sss as Program<Sss>;
+  const hookProgram = anchor.workspace.TransferHook as Program;
   const authority = provider.wallet;
 
   let mintKeypair: Keypair;
@@ -197,10 +198,10 @@ describe("Roles", () => {
         uri: "https://test.com",
         decimals: 6,
         enablePermanentDelegate: true,
-        enableTransferHook: false,
+        enableTransferHook: true,
         defaultAccountFrozen: false,
         enableConfidentialTransfer: false,
-        transferHookProgramId: null,
+        transferHookProgramId: hookProgram.programId,
       })
       .accountsStrict({
         authority: authority.publicKey,

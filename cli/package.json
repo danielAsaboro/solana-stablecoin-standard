@@ -3,10 +3,11 @@
   "version": "0.1.0",
   "license": "MIT",
   "bin": {
-    "sss-token": "./bin/sss-token.ts"
+    "sss-token": "./dist/bin/sss-token.js"
   },
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "test": "npm run build && mocha --require ts-node/register 'tests/**/*.test.ts' --timeout 30000"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.31.1",

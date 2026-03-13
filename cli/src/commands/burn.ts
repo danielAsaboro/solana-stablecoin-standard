@@ -6,12 +6,20 @@ import {
   loadKeypair,
   getConnection,
   loadConfig,
+  loadSssProgram,
   deriveRolePDA,
   getATA,
   SSS_PROGRAM_ID,
   ROLE_BURNER,
 } from "../helpers";
-import { spin, infoMsg, errorMsg, printTxResult } from "../output";
+import {
+  spin,
+  infoMsg,
+  errorMsg,
+  isDryRun,
+  printDryRunPlan,
+  printTxResult,
+} from "../output";
 
 export function registerBurnCommand(program: Command): void {
   program
@@ -28,27 +36,28 @@ export function registerBurnCommand(program: Command): void {
 }
 
 async function handleBurn(amountStr: string, globalOpts: any): Promise<void> {
-  const sssConfig = loadConfig(globalOpts.config);
-  const keypair = loadKeypair(globalOpts.keypair);
-  const connection = getConnection(globalOpts.rpc || sssConfig.rpcUrl);
-  const wallet = new anchor.Wallet(keypair);
-  const provider = new anchor.AnchorProvider(connection, wallet, { commitment: "confirmed" });
-
+  const sssConfig = loadConfig(globalOpts.config, globalOpts.profile);
   const configPDA = new PublicKey(sssConfig.configAddress);
   const mintPubkey = new PublicKey(sssConfig.mintAddress);
   const amount = new anchor.BN(amountStr);
 
-  const [rolePDA] = deriveRolePDA(configPDA, ROLE_BURNER, keypair.publicKey);
-  const fromATA = getATA(mintPubkey, keypair.publicKey);
-
-  infoMsg(`Burning ${amountStr} tokens from ${fromATA.toBase58()}...`);
-
-  const idl = await anchor.Program.fetchIdl(SSS_PROGRAM_ID, provider);
-  if (!idl) {
-    errorMsg("Could not fetch IDL.");
+  if (isDryRun(globalOpts)) {
+    printDryRunPlan(globalOpts, "burn", {
+      amount: amountStr,
+      config: configPDA.toBase58(),
+    });
     return;
   }
-  const program = new anchor.Program(idl, provider);
+
+  const keypair = loadKeypair(globalOpts.keypair);
+  const connection = getConnection(globalOpts.rpc || sssConfig.rpcUrl);
+  const wallet = new anchor.Wallet(keypair);
+  const provider = new anchor.AnchorProvider(connection, wallet, { commitment: "confirmed" });
+  const [rolePDA] = deriveRolePDA(configPDA, ROLE_BURNER, keypair.publicKey);
+  const fromATA = getATA(mintPubkey, keypair.publicKey);
+  infoMsg(`Burning ${amountStr} tokens from ${fromATA.toBase58()}...`);
+
+  const program = await loadSssProgram(provider);
 
   const spinner = spin("Sending burn transaction...");
 

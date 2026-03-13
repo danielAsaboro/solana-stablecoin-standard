@@ -6,13 +6,21 @@ import {
   loadKeypair,
   getConnection,
   loadConfig,
+  loadSssProgram,
   deriveRolePDA,
   deriveMinterQuotaPDA,
   getATA,
   SSS_PROGRAM_ID,
   ROLE_MINTER,
 } from "../helpers";
-import { spin, infoMsg, errorMsg, printTxResult } from "../output";
+import {
+  spin,
+  infoMsg,
+  errorMsg,
+  isDryRun,
+  printDryRunPlan,
+  printTxResult,
+} from "../output";
 
 export function registerMintCommand(program: Command): void {
   program
@@ -30,30 +38,33 @@ export function registerMintCommand(program: Command): void {
 }
 
 async function handleMint(recipientStr: string, amountStr: string, globalOpts: any): Promise<void> {
-  const sssConfig = loadConfig(globalOpts.config);
-  const keypair = loadKeypair(globalOpts.keypair);
-  const connection = getConnection(globalOpts.rpc || sssConfig.rpcUrl);
-  const wallet = new anchor.Wallet(keypair);
-  const provider = new anchor.AnchorProvider(connection, wallet, { commitment: "confirmed" });
-
+  const sssConfig = loadConfig(globalOpts.config, globalOpts.profile);
   const configPDA = new PublicKey(sssConfig.configAddress);
   const mintPubkey = new PublicKey(sssConfig.mintAddress);
   const recipientPubkey = new PublicKey(recipientStr);
   const amount = new anchor.BN(amountStr);
-
-  const [rolePDA] = deriveRolePDA(configPDA, ROLE_MINTER, keypair.publicKey);
-  const [quotaPDA] = deriveMinterQuotaPDA(configPDA, keypair.publicKey);
   const recipientATA = getATA(mintPubkey, recipientPubkey);
 
+  if (isDryRun(globalOpts)) {
+    printDryRunPlan(globalOpts, "mint", {
+      recipient: recipientPubkey.toBase58(),
+      recipientTokenAccount: recipientATA.toBase58(),
+      amount: amountStr,
+      config: configPDA.toBase58(),
+    });
+    return;
+  }
+
+  const keypair = loadKeypair(globalOpts.keypair);
+  const connection = getConnection(globalOpts.rpc || sssConfig.rpcUrl);
+  const wallet = new anchor.Wallet(keypair);
+  const provider = new anchor.AnchorProvider(connection, wallet, { commitment: "confirmed" });
+  const [rolePDA] = deriveRolePDA(configPDA, ROLE_MINTER, keypair.publicKey);
+  const [quotaPDA] = deriveMinterQuotaPDA(configPDA, keypair.publicKey);
   infoMsg(`Minting ${amountStr} tokens to ${recipientPubkey.toBase58()}...`);
   infoMsg(`Recipient ATA: ${recipientATA.toBase58()}`);
 
-  const idl = await anchor.Program.fetchIdl(SSS_PROGRAM_ID, provider);
-  if (!idl) {
-    errorMsg("Could not fetch IDL.");
-    return;
-  }
-  const program = new anchor.Program(idl, provider);
+  const program = await loadSssProgram(provider);
 
   const spinner = spin("Sending mint transaction...");
 

@@ -98,9 +98,34 @@ pub mod sss {
         instructions::update_minter::handler(ctx, minter, quota)
     }
 
-    /// Transfer master authority to a new address.
+    /// Reset a minter's cumulative `minted` counter to zero.
+    /// Allows the minter to issue up to their full quota again. Master authority only.
+    pub fn reset_minter_quota(ctx: Context<ResetMinterQuota>, minter: Pubkey) -> Result<()> {
+        instructions::reset_minter_quota::handler(ctx, minter)
+    }
+
+    /// Transfer master authority to a new address (immediate, emergency path).
     pub fn transfer_authority(ctx: Context<TransferAuthority>, new_authority: Pubkey) -> Result<()> {
         instructions::transfer_authority::handler(ctx, new_authority)
+    }
+
+    /// Propose a 2-step authority transfer. The new authority must call
+    /// `accept_authority_transfer` to complete the handoff.
+    pub fn propose_authority_transfer(
+        ctx: Context<ProposeAuthorityTransfer>,
+        new_authority: Pubkey,
+    ) -> Result<()> {
+        instructions::propose_authority::handler(ctx, new_authority)
+    }
+
+    /// Accept a pending authority transfer. Must be signed by the proposed new authority.
+    pub fn accept_authority_transfer(ctx: Context<AcceptAuthorityTransfer>) -> Result<()> {
+        instructions::accept_authority::handler(ctx)
+    }
+
+    /// Cancel a pending authority transfer. Master authority only.
+    pub fn cancel_authority_transfer(ctx: Context<CancelAuthorityTransfer>) -> Result<()> {
+        instructions::cancel_authority::handler(ctx)
     }
 
     // --- SSS-2 Compliance Instructions ---
@@ -128,5 +153,32 @@ pub mod sss {
     /// Requires Seizer role and permanent delegate enabled.
     pub fn seize<'info>(ctx: Context<'_, '_, 'info, 'info, Seize<'info>>, amount: u64) -> Result<()> {
         instructions::seize::handler(ctx, amount)
+    }
+
+    // --- View / Read-only Instructions ---
+
+    /// Return supply statistics: total_minted, total_burned, current_supply, supply_cap.
+    pub fn get_supply_info(ctx: Context<GetSupplyInfo>) -> Result<SupplyInfo> {
+        instructions::view::get_supply_info(ctx)
+    }
+
+    /// Return quota statistics for a specific minter: quota, minted, remaining.
+    pub fn get_minter_info(ctx: Context<GetMinterInfo>, minter: Pubkey) -> Result<MinterInfo> {
+        instructions::view::get_minter_info(ctx, minter)
+    }
+
+    /// Simulate whether a mint of `amount` would succeed, without modifying state.
+    pub fn preview_mint(ctx: Context<PreviewMint>, minter: Pubkey, amount: u64) -> Result<PreviewMintResult> {
+        instructions::view::preview_mint(ctx, minter, amount)
+    }
+
+    /// Return whether an address is on the blacklist.
+    pub fn is_blacklisted(ctx: Context<IsBlacklisted>, address: Pubkey) -> Result<bool> {
+        instructions::view::is_blacklisted(ctx, address)
+    }
+
+    /// Return the full stablecoin configuration.
+    pub fn get_config(ctx: Context<GetConfig>) -> Result<ConfigInfo> {
+        instructions::view::get_config(ctx)
     }
 }

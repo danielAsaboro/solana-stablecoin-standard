@@ -5,7 +5,11 @@
 
 use axum::{
     extract::{Json, Path, Query, State},
-    http::StatusCode,
+    http::{
+        header::{self, HeaderMap, HeaderValue},
+        StatusCode,
+    },
+    response::{IntoResponse, Response},
     routing::{delete, get, post},
     Router,
 };
@@ -78,7 +82,10 @@ pub struct BlacklistCheckResponse {
 pub struct AuditEntry {
     pub id: String,
     pub action: String,
-    pub address: String,
+    pub event_type: String,
+    pub severity: String,
+    pub target_type: String,
+    pub target_address: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
     pub status: String,
@@ -86,29 +93,43 @@ pub struct AuditEntry {
     pub signature: Option<String>,
     pub authority: String,
     pub timestamp: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 impl From<ComplianceOperation> for AuditEntry {
     fn from(op: ComplianceOperation) -> Self {
+        let action = match op.action {
+            ComplianceAction::Blacklist => "blacklist",
+            ComplianceAction::Unblacklist => "unblacklist",
+            ComplianceAction::Check => "check",
+        }
+        .to_string();
+        let status = match op.status {
+            ComplianceStatus::Executing => "executing",
+            ComplianceStatus::Completed => "completed",
+            ComplianceStatus::Failed => "failed",
+        }
+        .to_string();
+        let severity = match op.status {
+            ComplianceStatus::Failed => "error",
+            ComplianceStatus::Executing => "warning",
+            ComplianceStatus::Completed => "info",
+        }
+        .to_string();
         Self {
             id: op.id,
-            action: match op.action {
-                ComplianceAction::Blacklist => "blacklist",
-                ComplianceAction::Unblacklist => "unblacklist",
-                ComplianceAction::Check => "check",
-            }
-            .to_string(),
-            address: op.address,
+            event_type: format!("compliance.{action}"),
+            action,
+            severity,
+            target_type: "wallet".to_string(),
+            target_address: op.address,
             reason: op.reason,
-            status: match op.status {
-                ComplianceStatus::Executing => "executing",
-                ComplianceStatus::Completed => "completed",
-                ComplianceStatus::Failed => "failed",
-            }
-            .to_string(),
+            status,
             signature: op.signature,
             authority: op.authority,
             timestamp: op.completed_at.unwrap_or(op.created_at),
+            error: op.error,
         }
     }
 }
@@ -116,6 +137,44 @@ impl From<ComplianceOperation> for AuditEntry {
 #[derive(Deserialize)]
 pub struct AuditQuery {
     pub limit: Option<usize>,
+    pub format: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AuditFormat {
+    Json,
+    Jsonl,
+}
+
+impl AuditFormat {
+    fn from_request(query: &AuditQuery, headers: &HeaderMap) -> Self {
+        if matches!(
+            query.format.as_deref(),
+            Some("jsonl" | "ndjson" | "application/x-ndjson")
+        ) {
+            return Self::Jsonl;
+        }
+
+        let accepts_ndjson = headers
+            .get(header::ACCEPT)
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| value.contains("application/x-ndjson"));
+
+        if accepts_ndjson {
+            Self::Jsonl
+        } else {
+            Self::Json
+        }
+    }
+}
+
+fn render_jsonl(entries: &[AuditEntry]) -> Result<String, AppError> {
+    let lines = entries
+        .iter()
+        .map(serde_json::to_string)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| AppError::Internal(format!("Failed to serialize audit log: {error}")))?;
+    Ok(lines.join("\n"))
 }
 
 // ── Helper ─────────────────────────────────────────────────────────────────
@@ -170,12 +229,22 @@ async fn get_blacklist_operations(
 
 async fn get_audit(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Query(query): Query<AuditQuery>,
-) -> Result<Json<Vec<AuditEntry>>, AppError> {
+) -> Result<Response, AppError> {
     let service = get_service(&state)?;
     let limit = query.limit.unwrap_or(100).min(1000);
     let ops = service.list_audit_log(limit).await;
-    Ok(Json(ops.into_iter().map(AuditEntry::from).collect()))
+    let entries = ops.into_iter().map(AuditEntry::from).collect::<Vec<_>>();
+
+    match AuditFormat::from_request(&query, &headers) {
+        AuditFormat::Json => Ok(Json(entries).into_response()),
+        AuditFormat::Jsonl => Ok((
+            [(header::CONTENT_TYPE, HeaderValue::from_static("application/x-ndjson"))],
+            render_jsonl(&entries)?,
+        )
+            .into_response()),
+    }
 }
 
 pub fn router() -> Router<AppState> {

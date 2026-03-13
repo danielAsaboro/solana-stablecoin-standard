@@ -1,0 +1,10 @@
+[network]
+slot_time = 200
+
+[programs]
+deploy = [
+  "./target/deploy/sss.so",
+  "./target/deploy/transfer_hook.so",
+  "./target/deploy/sss_oracle.so",
+  "./target/deploy/sss_privacy.so",
+]

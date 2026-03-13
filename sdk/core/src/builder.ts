@@ -37,7 +37,11 @@ import {
   ComputeBudgetProgram,
 } from "@solana/web3.js";
 import { BN, Program } from "@coral-xyz/anchor";
-import { TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
+import {
+  TOKEN_2022_PROGRAM_ID,
+  addExtraAccountMetasForExecute,
+  createTransferCheckedInstruction,
+} from "@solana/spl-token";
 import {
   getRoleAddress,
   getMinterQuotaAddress,
@@ -1357,7 +1361,11 @@ export class SeizeBuilder extends OperationBuilder {
       this._authority
     );
 
-    const ix = await this.ctx.program.methods
+    const stablecoinConfig =
+      await (this.ctx.program.account as any).stablecoinConfig.fetch(
+        this.ctx.configAddress
+      );
+    const seizeBuilder = this.ctx.program.methods
       .seize(this._amount)
       .accountsStrict({
         authority: this._authority,
@@ -1367,7 +1375,38 @@ export class SeizeBuilder extends OperationBuilder {
         fromTokenAccount: this._fromTokenAccount,
         toTokenAccount: this._toTokenAccount,
         tokenProgram: TOKEN_2022_PROGRAM_ID,
-      })
+      });
+
+    if (!stablecoinConfig.enableTransferHook) {
+      return [await seizeBuilder.instruction()];
+    }
+
+    const connection = (this.ctx.program.provider as any).connection;
+    const dummyIx = createTransferCheckedInstruction(
+      this._fromTokenAccount,
+      this.ctx.mintAddress,
+      this._toTokenAccount,
+      this.ctx.configAddress,
+      BigInt(this._amount.toString()),
+      stablecoinConfig.decimals,
+      [],
+      TOKEN_2022_PROGRAM_ID
+    );
+
+    await addExtraAccountMetasForExecute(
+      connection,
+      dummyIx,
+      stablecoinConfig.transferHookProgram,
+      this._fromTokenAccount,
+      this.ctx.mintAddress,
+      this._toTokenAccount,
+      this.ctx.configAddress,
+      BigInt(this._amount.toString()),
+      "confirmed"
+    );
+
+    const ix = await seizeBuilder
+      .remainingAccounts(dummyIx.keys.slice(4))
       .instruction();
 
     return [ix];

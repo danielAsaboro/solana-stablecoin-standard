@@ -7,8 +7,8 @@ import * as path from "path";
 import chalk from "chalk";
 
 // Program IDs
-export const SSS_PROGRAM_ID = new PublicKey("7CPH4PAWa9n4rizL8UGDi7h361NU5jMWGX7VjSBydgjd");
-export const TRANSFER_HOOK_PROGRAM_ID = new PublicKey("5UNDXpv8wM8beDKhW7Q7nTX7jtpVvTS5ECLxGHiYX4oV");
+export const SSS_PROGRAM_ID = new PublicKey("DNfk1e2vMJrxHm4BwoRTVqQxcfYjZLHggxr11hMZ5Dyu");
+export const TRANSFER_HOOK_PROGRAM_ID = new PublicKey("Gcd58Ng9gqRg1XtiU1i8KopwX1u82Mt9VmxKbLJ8RANH");
 
 // Seeds
 export const STABLECOIN_SEED = Buffer.from("stablecoin");
@@ -39,6 +39,87 @@ export interface SssTokenConfig {
   mintAddress: string;
   rpcUrl: string;
   preset: string;
+}
+
+export interface SssTokenProfileStore {
+  version: 1;
+  activeProfile?: string;
+  profiles: Record<string, SssTokenConfig>;
+}
+
+export function resolveConfigPath(configPath?: string): string {
+  return configPath || CONFIG_FILE;
+}
+
+function isProfileStore(value: unknown): value is SssTokenProfileStore {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Partial<SssTokenProfileStore>;
+  return candidate.version === 1 && typeof candidate.profiles === "object" && candidate.profiles !== null;
+}
+
+function readConfigFile(configPath?: string): SssTokenConfig | SssTokenProfileStore {
+  return JSON.parse(fs.readFileSync(resolveConfigPath(configPath), "utf-8")) as
+    | SssTokenConfig
+    | SssTokenProfileStore;
+}
+
+function selectProfileName(
+  store: SssTokenProfileStore,
+  requestedProfile?: string
+): string {
+  if (requestedProfile) {
+    if (!store.profiles[requestedProfile]) {
+      throw new Error(`Config profile not found: ${requestedProfile}`);
+    }
+    return requestedProfile;
+  }
+
+  if (store.activeProfile && store.profiles[store.activeProfile]) {
+    return store.activeProfile;
+  }
+
+  const firstProfile = Object.keys(store.profiles)[0];
+  if (!firstProfile) {
+    throw new Error("No config profiles found.");
+  }
+
+  return firstProfile;
+}
+
+function upsertProfile(
+  existing: SssTokenConfig | SssTokenProfileStore | null,
+  config: SssTokenConfig,
+  profileName?: string
+): SssTokenConfig | SssTokenProfileStore {
+  if (!profileName) {
+    if (existing && isProfileStore(existing)) {
+      const activeProfile = existing.activeProfile || Object.keys(existing.profiles)[0] || "default";
+      return {
+        version: 1,
+        activeProfile,
+        profiles: {
+          ...existing.profiles,
+          [activeProfile]: config,
+        },
+      };
+    }
+    return config;
+  }
+
+  const profiles = existing && isProfileStore(existing)
+    ? { ...existing.profiles, [profileName]: config }
+    : { [profileName]: config };
+
+  return {
+    version: 1,
+    activeProfile: existing && isProfileStore(existing)
+      ? existing.activeProfile || profileName
+      : profileName,
+    profiles,
+  };
 }
 
 /**
@@ -118,21 +199,79 @@ export function getATA(mint: PublicKey, owner: PublicKey): PublicKey {
 /**
  * Save the SSS token config to .sss-token.json in the current directory.
  */
-export function saveConfig(config: SssTokenConfig): void {
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
+export function saveConfig(config: SssTokenConfig, configPath?: string, profileName?: string): void {
+  const resolvedPath = resolveConfigPath(configPath);
+  const existing = fs.existsSync(resolvedPath)
+    ? readConfigFile(resolvedPath)
+    : null;
+  const next = upsertProfile(existing, config, profileName);
+  fs.writeFileSync(resolvedPath, JSON.stringify(next, null, 2));
 }
 
 /**
  * Load the SSS token config from .sss-token.json.
  */
-export function loadConfig(configPath?: string): SssTokenConfig {
-  const file = configPath || CONFIG_FILE;
+export function loadConfig(configPath?: string, profileName?: string): SssTokenConfig {
+  const file = resolveConfigPath(configPath);
   if (!fs.existsSync(file)) {
     console.error(chalk.red(`Config file not found: ${file}`));
     console.error(chalk.yellow('Run "sss-token init" first to initialize a stablecoin.'));
     process.exit(1);
   }
-  return JSON.parse(fs.readFileSync(file, "utf-8"));
+  const parsed = readConfigFile(file);
+  if (isProfileStore(parsed)) {
+    return parsed.profiles[selectProfileName(parsed, profileName)];
+  }
+  return parsed;
+}
+
+export function configExists(configPath?: string): boolean {
+  return fs.existsSync(resolveConfigPath(configPath));
+}
+
+export function listConfigProfiles(configPath?: string): {
+  path: string;
+  activeProfile?: string;
+  profiles: Record<string, SssTokenConfig>;
+} {
+  const file = resolveConfigPath(configPath);
+  if (!fs.existsSync(file)) {
+    throw new Error(`Config file not found: ${file}`);
+  }
+
+  const parsed = readConfigFile(file);
+  if (isProfileStore(parsed)) {
+    return {
+      path: file,
+      activeProfile: parsed.activeProfile,
+      profiles: parsed.profiles,
+    };
+  }
+
+  return {
+    path: file,
+    activeProfile: "default",
+    profiles: {
+      default: parsed,
+    },
+  };
+}
+
+export function setActiveProfile(configPath: string | undefined, profileName: string): void {
+  const file = resolveConfigPath(configPath);
+  const parsed = readConfigFile(file);
+  if (!isProfileStore(parsed)) {
+    throw new Error("Config file does not contain named profiles yet.");
+  }
+  if (!parsed.profiles[profileName]) {
+    throw new Error(`Config profile not found: ${profileName}`);
+  }
+
+  const next: SssTokenProfileStore = {
+    ...parsed,
+    activeProfile: profileName,
+  };
+  fs.writeFileSync(file, JSON.stringify(next, null, 2));
 }
 
 /**
@@ -190,4 +329,37 @@ export function parseRoleType(role: string): number {
     default:
       throw new Error(`Unknown role type: ${role}. Valid roles: minter, burner, pauser, blacklister, seizer`);
   }
+}
+
+export async function loadSssProgram(
+  provider: anchor.AnchorProvider
+): Promise<anchor.Program> {
+  const idl =
+    (await anchor.Program.fetchIdl(SSS_PROGRAM_ID, provider)) ??
+    loadLocalIdl("sss");
+  return new anchor.Program(idl, provider);
+}
+
+export async function loadTransferHookProgram(
+  provider: anchor.AnchorProvider
+): Promise<anchor.Program> {
+  const idl =
+    (await anchor.Program.fetchIdl(TRANSFER_HOOK_PROGRAM_ID, provider)) ??
+    loadLocalIdl("transfer_hook");
+  return new anchor.Program(idl, provider);
+}
+
+function loadLocalIdl(name: string): anchor.Idl {
+  const candidatePaths = [
+    path.resolve(__dirname, `../../target/idl/${name}.json`),
+    path.resolve(__dirname, `../../../target/idl/${name}.json`),
+  ];
+
+  for (const candidatePath of candidatePaths) {
+    if (fs.existsSync(candidatePath)) {
+      return JSON.parse(fs.readFileSync(candidatePath, "utf-8")) as anchor.Idl;
+    }
+  }
+
+  throw new Error(`Could not find local ${name} IDL in target/idl/${name}.json`);
 }

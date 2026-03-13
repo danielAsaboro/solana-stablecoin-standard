@@ -84,10 +84,10 @@ import sssIdl from "../../../target/idl/sss.json";
 // Program IDs
 // ---------------------------------------------------------------------------
 const SSS_PROGRAM_ID = new PublicKey(
-  "7CPH4PAWa9n4rizL8UGDi7h361NU5jMWGX7VjSBydgjd"
+  "DNfk1e2vMJrxHm4BwoRTVqQxcfYjZLHggxr11hMZ5Dyu"
 );
 const TRANSFER_HOOK_PROGRAM_ID = new PublicKey(
-  "5UNDXpv8wM8beDKhW7Q7nTX7jtpVvTS5ECLxGHiYX4oV"
+  "Gcd58Ng9gqRg1XtiU1i8KopwX1u82Mt9VmxKbLJ8RANH"
 );
 
 // ---------------------------------------------------------------------------

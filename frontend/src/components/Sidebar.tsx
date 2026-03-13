@@ -4,11 +4,8 @@ import { FC } from "react";
 import dynamic from "next/dynamic";
 
 const WalletMultiButton = dynamic(
-  () =>
-    import("@solana/wallet-adapter-react-ui").then(
-      (mod) => mod.WalletMultiButton,
-    ),
-  { ssr: false },
+  () => import("@solana/wallet-adapter-react-ui").then((mod) => mod.WalletMultiButton),
+  { ssr: false }
 );
 
 interface NavItem {
@@ -20,20 +17,17 @@ interface NavItem {
 interface SidebarProps {
   activeView: string;
   onViewChange: (view: string) => void;
+  statusLabel: string;
+  symbol: string | null;
+  paused: boolean;
 }
 
-const navItems: NavItem[] = [
+const navItems: Array<NavItem> = [
   {
     key: "dashboard",
-    label: "Dashboard",
+    label: "Overview",
     icon: (
-      <svg
-        className="h-5 w-5"
-        fill="none"
-        viewBox="0 0 24 24"
-        strokeWidth={1.5}
-        stroke="currentColor"
-      >
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
         <path
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -46,13 +40,7 @@ const navItems: NavItem[] = [
     key: "mint-burn",
     label: "Mint & Burn",
     icon: (
-      <svg
-        className="h-5 w-5"
-        fill="none"
-        viewBox="0 0 24 24"
-        strokeWidth={1.5}
-        stroke="currentColor"
-      >
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
         <path
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -65,13 +53,7 @@ const navItems: NavItem[] = [
     key: "roles",
     label: "Roles",
     icon: (
-      <svg
-        className="h-5 w-5"
-        fill="none"
-        viewBox="0 0 24 24"
-        strokeWidth={1.5}
-        stroke="currentColor"
-      >
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
         <path
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -84,13 +66,7 @@ const navItems: NavItem[] = [
     key: "freeze-thaw",
     label: "Freeze & Thaw",
     icon: (
-      <svg
-        className="h-5 w-5"
-        fill="none"
-        viewBox="0 0 24 24"
-        strokeWidth={1.5}
-        stroke="currentColor"
-      >
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
         <path
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -103,13 +79,7 @@ const navItems: NavItem[] = [
     key: "blacklist",
     label: "Blacklist",
     icon: (
-      <svg
-        className="h-5 w-5"
-        fill="none"
-        viewBox="0 0 24 24"
-        strokeWidth={1.5}
-        stroke="currentColor"
-      >
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
         <path
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -120,52 +90,72 @@ const navItems: NavItem[] = [
   },
   {
     key: "pause",
-    label: "Pause Control",
+    label: "Pause",
     icon: (
-      <svg
-        className="h-5 w-5"
-        fill="none"
-        viewBox="0 0 24 24"
-        strokeWidth={1.5}
-        stroke="currentColor"
-      >
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
+      </svg>
+    ),
+  },
+  {
+    key: "seize",
+    label: "Seize",
+    icon: (
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
         <path
           strokeLinecap="round"
           strokeLinejoin="round"
-          d="M15.75 5.25v13.5m-7.5-13.5v13.5"
+          d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"
         />
       </svg>
     ),
   },
 ];
 
-const Sidebar: FC<SidebarProps> = ({ activeView, onViewChange }) => {
+const Sidebar: FC<SidebarProps> = ({
+  activeView,
+  onViewChange,
+  statusLabel,
+  symbol,
+  paused,
+}) => {
   return (
-    <aside className="flex h-screen w-64 flex-col border-r border-gray-800 bg-gray-900">
-      {/* Logo / Title */}
-      <div className="border-b border-gray-800 px-6 py-5">
+    <aside className="hidden h-screen w-72 flex-col border-r border-slate-800 bg-slate-950/95 lg:flex">
+      <div className="border-b border-slate-800 px-6 py-6">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-600 text-sm font-semibold text-white shadow-lg shadow-brand-900/30">
             SSS
           </div>
           <div>
-            <h1 className="text-base font-semibold text-white">SSS Admin</h1>
-            <p className="text-xs text-gray-500">
-              Solana Stablecoin Standard
-            </p>
+            <p className="eyebrow">Operator Surface</p>
+            <h1 className="text-lg font-semibold text-white">Stablecoin Console</h1>
+          </div>
+        </div>
+
+        <div className="mt-5 space-y-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+          <div className="flex items-center justify-between">
+            <span className="text-xs uppercase tracking-[0.2em] text-slate-500">Mode</span>
+            <span className="badge-blue">{statusLabel}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-slate-400">Loaded asset</span>
+            <span className="text-sm font-medium text-white">{symbol ?? "None"}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-slate-400">Runtime state</span>
+            <span className={paused ? "badge-red" : "badge-green"}>
+              {paused ? "Paused" : "Active"}
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+      <nav className="flex-1 space-y-2 overflow-y-auto px-4 py-5">
         {navItems.map((item) => (
           <button
             key={item.key}
             onClick={() => onViewChange(item.key)}
-            className={
-              activeView === item.key ? "sidebar-link-active w-full" : "sidebar-link w-full"
-            }
+            className={activeView === item.key ? "sidebar-link-active w-full" : "sidebar-link w-full"}
           >
             {item.icon}
             <span>{item.label}</span>
@@ -173,8 +163,7 @@ const Sidebar: FC<SidebarProps> = ({ activeView, onViewChange }) => {
         ))}
       </nav>
 
-      {/* Wallet Connect */}
-      <div className="border-t border-gray-800 p-4">
+      <div className="border-t border-slate-800 p-4">
         <WalletMultiButton
           style={{
             width: "100%",

@@ -5,6 +5,24 @@ All notable changes to the Solana Stablecoin Standard (SSS) will be documented i
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-03-01
+
+Polish pass ahead of bounty submission: CLI fix, frontend feature, and documentation improvements.
+
+### Fixed
+
+- **`sss-token minters list`** — address argument is now optional. Calling `minters list` with no argument enumerates all `MinterQuota` PDAs for the stablecoin via `getProgramAccounts` and prints a quota table. Passing an address still shows info for that specific minter.
+
+### Added
+
+- **Seize component** (`frontend/src/components/Seize.tsx`) — New admin UI panel for SSS-2 token seizure. Form accepts target wallet, treasury wallet, and amount; gates on `enablePermanentDelegate`; emits a compliance notice.
+- **`seizeTokens` hook method** (`frontend/src/hooks/useStablecoin.ts`) — Exposes the on-chain `seize` instruction through the React hook, computing ATAs from owner addresses automatically.
+
+### Documentation
+
+- `docs/API.md` — Added Storage Model section explaining that the backend is stateless by design; on-chain events are the authoritative audit trail.
+- `README.md` — Added CI badge at the top; added Localnet Testing Note under Oracle Integration explaining that `push_manual_price` is the localnet test path and documenting how to use a real Switchboard aggregator on devnet/mainnet.
+
 ## [0.3.0] - 2026-02-23
 
 SDK polish, CI/CD, and bounty spec alignment.
@@ -231,7 +249,7 @@ with three presets: SSS-1 (Minimal Stablecoin), SSS-2 (Compliant Stablecoin), an
 
 #### Deployment Automation
 - `scripts/deploy-devnet.sh` — Automated shell script for full devnet deployment
-  (builds, deploys 3 programs, runs demos, captures tx signatures, Explorer links)
+  (builds, deploys 4 programs, runs demos, captures tx signatures, Explorer links)
 - `scripts/deploy-devnet.ts` — SSS-1 demo script exercising all 8 core operations
   (init, roles, quota, mint, burn, freeze/thaw, pause/unpause) with tx signatures
   and Explorer links output

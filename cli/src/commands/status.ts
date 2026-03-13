@@ -7,20 +7,25 @@ import {
   loadKeypair,
   getConnection,
   loadConfig,
+  loadSssProgram,
   SSS_PROGRAM_ID,
   ROLE_NAMES,
 } from "../helpers";
 import {
   spin,
   errorMsg,
+  getOutputFormat,
+  printCsv,
   printHeader,
   printField,
   printDivider,
+  printJson,
   printSection,
   printSubField,
   printMinterEntry,
   printPresetBadge,
   explorerAccountUrl,
+  type CsvColumn,
 } from "../output";
 
 export function registerStatusCommand(program: Command): void {
@@ -68,7 +73,7 @@ function formatAmount(raw: string, decimals: number): string {
 }
 
 async function handleStatus(globalOpts: Record<string, string>): Promise<void> {
-  const sssConfig = loadConfig(globalOpts.config);
+  const sssConfig = loadConfig(globalOpts.config, globalOpts.profile);
   const keypair = loadKeypair(globalOpts.keypair);
   const connection = getConnection(globalOpts.rpc || sssConfig.rpcUrl);
   const wallet = new anchor.Wallet(keypair);
@@ -77,12 +82,7 @@ async function handleStatus(globalOpts: Record<string, string>): Promise<void> {
 
   const configPDA = new PublicKey(sssConfig.configAddress);
 
-  const idl = await anchor.Program.fetchIdl(SSS_PROGRAM_ID, provider);
-  if (!idl) {
-    errorMsg("Could not fetch IDL. Is the program deployed?");
-    return;
-  }
-  const program = new anchor.Program(idl, provider);
+  const program = await loadSssProgram(provider);
 
   const spinner = spin("Fetching full stablecoin state...");
 
@@ -278,6 +278,96 @@ async function handleStatus(globalOpts: Record<string, string>): Promise<void> {
     }
   }
 
+  const activeRolesByUser = new Map<string, Array<string>>();
+  const inactiveRolesByUser = new Map<string, Array<string>>();
+  for (const role of roles) {
+    const target = role.active ? activeRolesByUser : inactiveRolesByUser;
+    const user = role.user.toBase58();
+    const current = target.get(user) ?? [];
+    current.push(ROLE_NAMES[role.roleType] || `Role(${role.roleType})`);
+    target.set(user, current);
+  }
+
+  const statusPayload = {
+    preset: isSSS2 ? "SSS-2" : "SSS-1",
+    rpcUrl,
+    configAddress: configPDA.toBase58(),
+    mintAddress: mintAddress.toBase58(),
+    name: String(config.name),
+    symbol: String(config.symbol),
+    uri: String(config.uri),
+    decimals,
+    masterAuthority: (config.masterAuthority as PublicKey).toBase58(),
+    paused: Boolean(config.paused),
+    features: {
+      permanentDelegate: Boolean(config.enablePermanentDelegate),
+      transferHook: Boolean(config.enableTransferHook),
+      defaultAccountFrozen: Boolean(config.defaultAccountFrozen),
+      transferHookProgram: config.enableTransferHook
+        ? (config.transferHookProgram as PublicKey).toBase58()
+        : null,
+    },
+    supply: {
+      circulating: actualSupply,
+      totalMinted: formatAmount(totalMinted, decimals),
+      totalBurned: formatAmount(totalBurned, decimals),
+      netSupply: formatAmount(netSupply, decimals),
+    },
+    roles: Array.from(new Set(roles.map((role) => role.user.toBase58()))).map((user) => ({
+      user,
+      activeRoles: activeRolesByUser.get(user) ?? [],
+      inactiveRoles: inactiveRolesByUser.get(user) ?? [],
+    })),
+    minters: minterQuotas.map((quota) => ({
+      address: quota.minter.toBase58(),
+      minted: formatAmount(quota.minted.toString(), decimals),
+      quota: formatAmount(quota.quota.toString(), decimals),
+      remaining: formatAmount(quota.quota.sub(quota.minted).toString(), decimals),
+      active: roles.some(
+        (role) =>
+          role.roleType === 0 &&
+          role.active &&
+          role.user.equals(quota.minter)
+      ),
+    })),
+    blacklist: {
+      enabled: isSSS2,
+      count: blacklistCount,
+    },
+  };
+
+  const outputFormat = getOutputFormat(globalOpts);
+  if (outputFormat === "json") {
+    printJson(statusPayload);
+    return;
+  }
+  if (outputFormat === "csv") {
+    const rows = statusPayload.minters.length > 0
+      ? statusPayload.minters
+      : [{
+          address: "",
+          minted: "",
+          quota: "",
+          remaining: "",
+          active: false,
+        }];
+    const columns: Array<CsvColumn<(typeof rows)[number]>> = [
+      { header: "preset", value: () => statusPayload.preset },
+      { header: "name", value: () => statusPayload.name },
+      { header: "symbol", value: () => statusPayload.symbol },
+      { header: "paused", value: () => statusPayload.paused },
+      { header: "circulating_supply", value: () => statusPayload.supply.circulating },
+      { header: "minter", value: (row) => row.address },
+      { header: "minted", value: (row) => row.minted },
+      { header: "quota", value: (row) => row.quota },
+      { header: "remaining", value: (row) => row.remaining },
+      { header: "active", value: (row) => row.active },
+      { header: "blacklist_count", value: () => statusPayload.blacklist.count },
+    ];
+    printCsv(rows, columns);
+    return;
+  }
+
   // ─── Display: Footer ────────────────────────────────────────────
   console.log();
   printDivider();
@@ -287,7 +377,7 @@ async function handleStatus(globalOpts: Record<string, string>): Promise<void> {
 }
 
 async function handleSupply(globalOpts: Record<string, string>): Promise<void> {
-  const sssConfig = loadConfig(globalOpts.config);
+  const sssConfig = loadConfig(globalOpts.config, globalOpts.profile);
   const keypair = loadKeypair(globalOpts.keypair);
   const connection = getConnection(globalOpts.rpc || sssConfig.rpcUrl);
   const wallet = new anchor.Wallet(keypair);
@@ -295,12 +385,7 @@ async function handleSupply(globalOpts: Record<string, string>): Promise<void> {
 
   const configPDA = new PublicKey(sssConfig.configAddress);
 
-  const idl = await anchor.Program.fetchIdl(SSS_PROGRAM_ID, provider);
-  if (!idl) {
-    errorMsg("Could not fetch IDL.");
-    return;
-  }
-  const program = new anchor.Program(idl, provider);
+  const program = await loadSssProgram(provider);
 
   const spinner = spin("Fetching supply statistics...");
 
@@ -323,6 +408,35 @@ async function handleSupply(globalOpts: Record<string, string>): Promise<void> {
   const totalMinted = (config.totalMinted as anchor.BN).toString();
   const totalBurned = (config.totalBurned as anchor.BN).toString();
   const netSupply = (config.totalMinted as anchor.BN).sub(config.totalBurned as anchor.BN).toString();
+
+  const supplyPayload = {
+    mintAddress: mintAddress.toBase58(),
+    decimals,
+    circulatingSupply: actualSupply,
+    totalMinted: formatAmount(totalMinted, decimals),
+    totalBurned: formatAmount(totalBurned, decimals),
+    netSupply: formatAmount(netSupply, decimals),
+  };
+
+  const outputFormat = getOutputFormat(globalOpts);
+  if (outputFormat === "json") {
+    printJson(supplyPayload);
+    return;
+  }
+  if (outputFormat === "csv") {
+    printCsv(
+      [supplyPayload],
+      [
+        { header: "mint_address", value: (row) => row.mintAddress },
+        { header: "decimals", value: (row) => row.decimals },
+        { header: "circulating_supply", value: (row) => row.circulatingSupply },
+        { header: "total_minted", value: (row) => row.totalMinted },
+        { header: "total_burned", value: (row) => row.totalBurned },
+        { header: "net_supply", value: (row) => row.netSupply },
+      ]
+    );
+    return;
+  }
 
   printField("Circulating Supply", chalk.bold(actualSupply));
   printField("Total Minted", formatAmount(totalMinted, decimals));

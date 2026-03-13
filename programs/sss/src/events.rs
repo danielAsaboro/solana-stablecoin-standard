@@ -185,3 +185,55 @@ pub struct TokensSeized {
     /// The seizer who executed the operation.
     pub seized_by: Pubkey,
 }
+
+/// Emitted when a minter's cumulative `minted` counter is reset via
+/// [`reset_minter_quota`](crate::sss::reset_minter_quota).
+#[event]
+pub struct MinterQuotaReset {
+    /// The stablecoin config PDA.
+    pub config: Pubkey,
+    /// The minter whose counter was reset.
+    pub minter: Pubkey,
+    /// The `minted` value before the reset.
+    pub previous_minted: u64,
+    /// The master authority who triggered the reset.
+    pub reset_by: Pubkey,
+}
+
+/// Emitted when an authority transfer is proposed via
+/// [`propose_authority_transfer`](crate::sss::propose_authority_transfer).
+#[event]
+pub struct AuthorityTransferProposed {
+    /// The stablecoin config PDA.
+    pub config: Pubkey,
+    /// The current master authority proposing the transfer.
+    pub current_authority: Pubkey,
+    /// The proposed new master authority.
+    pub pending_authority: Pubkey,
+    /// Unix timestamp when the proposal was created.
+    pub proposed_at: i64,
+}
+
+/// Emitted when a pending authority transfer is cancelled via
+/// [`cancel_authority_transfer`](crate::sss::cancel_authority_transfer).
+#[event]
+pub struct AuthorityTransferCancelled {
+    /// The stablecoin config PDA.
+    pub config: Pubkey,
+    /// The authority that cancelled the transfer.
+    pub cancelled_by: Pubkey,
+    /// The pending authority that was cleared.
+    pub cleared_pending: Pubkey,
+}
+
+/// Emitted when a 2-step authority transfer is completed via
+/// [`accept_authority_transfer`](crate::sss::accept_authority_transfer).
+#[event]
+pub struct AuthorityTransferAccepted {
+    /// The stablecoin config PDA.
+    pub config: Pubkey,
+    /// The outgoing master authority.
+    pub previous_authority: Pubkey,
+    /// The new master authority (formerly `pending_authority`).
+    pub new_authority: Pubkey,
+}

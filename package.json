@@ -9,9 +9,19 @@
     "cli"
   ],
   "scripts": {
-    "build": "yarn workspaces run build",
-    "test": "anchor test",
-    "test:sdk": "yarn workspaces run test"
+    "build:programs": "anchor build",
+    "build:packages": "npm run build --workspace @stbr/sss-core-sdk && npm run build --workspace @stbr/sss-compliance-sdk && npm run build --workspace @stbr/sss-token && npm run build --workspace @stbr/sss-cli",
+    "build": "npm run build:programs && npm run build:packages",
+    "surfpool:start": "surfpool start --network mainnet --legacy-anchor-compatibility --yes --no-tui --no-studio",
+    "test:anchor": "npx ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts",
+    "test:sdk": "npm run test --workspace @stbr/sss-core-sdk && npm run test --workspace @stbr/sss-compliance-sdk && npm run test --workspace @stbr/sss-token",
+    "test:cli": "npm run test --workspace @stbr/sss-cli",
+    "test:backend": "cargo test --manifest-path backend/Cargo.toml",
+    "test:fuzz": "cargo test --manifest-path trident-tests/Cargo.toml",
+    "test:frontend": "npm --prefix frontend run build",
+    "test:tui": "cargo test --manifest-path tui/Cargo.toml",
+    "test:local": "./scripts/test-local.sh",
+    "test": "npm run test:local"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.31.1",

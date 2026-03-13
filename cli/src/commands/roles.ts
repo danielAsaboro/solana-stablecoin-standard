@@ -6,6 +6,7 @@ import {
   loadKeypair,
   getConnection,
   loadConfig,
+  loadSssProgram,
   deriveRolePDA,
   parseRoleType,
   roleName,
@@ -16,7 +17,20 @@ import {
   ROLE_BLACKLISTER,
   ROLE_SEIZER,
 } from "../helpers";
-import { spin, infoMsg, errorMsg, printTxResult, printHeader, printField, printDivider } from "../output";
+import {
+  spin,
+  infoMsg,
+  errorMsg,
+  getOutputFormat,
+  isDryRun,
+  printCsv,
+  printDryRunPlan,
+  printJson,
+  printTxResult,
+  printHeader,
+  printField,
+  printDivider,
+} from "../output";
 
 export function registerRolesCommand(program: Command): void {
   const roles = program
@@ -68,27 +82,31 @@ async function handleRolesUpdate(
   active: boolean,
   globalOpts: any
 ): Promise<void> {
-  const sssConfig = loadConfig(globalOpts.config);
-  const keypair = loadKeypair(globalOpts.keypair);
-  const connection = getConnection(globalOpts.rpc || sssConfig.rpcUrl);
-  const wallet = new anchor.Wallet(keypair);
-  const provider = new anchor.AnchorProvider(connection, wallet, { commitment: "confirmed" });
-
+  const sssConfig = loadConfig(globalOpts.config, globalOpts.profile);
   const configPDA = new PublicKey(sssConfig.configAddress);
   const userPubkey = new PublicKey(addressStr);
   const roleType = parseRoleType(roleStr);
 
   const [rolePDA] = deriveRolePDA(configPDA, roleType, userPubkey);
 
+  if (isDryRun(globalOpts)) {
+    printDryRunPlan(globalOpts, "roles.update", {
+      role: roleName(roleType),
+      user: userPubkey.toBase58(),
+      active,
+      config: configPDA.toBase58(),
+    });
+    return;
+  }
+
+  const keypair = loadKeypair(globalOpts.keypair);
+  const connection = getConnection(globalOpts.rpc || sssConfig.rpcUrl);
+  const wallet = new anchor.Wallet(keypair);
+  const provider = new anchor.AnchorProvider(connection, wallet, { commitment: "confirmed" });
   const action = active ? "Assigning" : "Revoking";
   infoMsg(`${action} ${roleName(roleType)} role ${active ? "to" : "from"} ${userPubkey.toBase58()}...`);
 
-  const idl = await anchor.Program.fetchIdl(SSS_PROGRAM_ID, provider);
-  if (!idl) {
-    errorMsg("Could not fetch IDL.");
-    return;
-  }
-  const program = new anchor.Program(idl, provider);
+  const program = await loadSssProgram(provider);
 
   const spinner = spin("Sending role update transaction...");
 
@@ -113,7 +131,7 @@ async function handleRolesUpdate(
 }
 
 async function handleRolesList(addressStr: string, globalOpts: any): Promise<void> {
-  const sssConfig = loadConfig(globalOpts.config);
+  const sssConfig = loadConfig(globalOpts.config, globalOpts.profile);
   const keypair = loadKeypair(globalOpts.keypair);
   const connection = getConnection(globalOpts.rpc || sssConfig.rpcUrl);
   const wallet = new anchor.Wallet(keypair);
@@ -122,12 +140,7 @@ async function handleRolesList(addressStr: string, globalOpts: any): Promise<voi
   const configPDA = new PublicKey(sssConfig.configAddress);
   const userPubkey = new PublicKey(addressStr);
 
-  const idl = await anchor.Program.fetchIdl(SSS_PROGRAM_ID, provider);
-  if (!idl) {
-    errorMsg("Could not fetch IDL.");
-    return;
-  }
-  const program = new anchor.Program(idl, provider);
+  const program = await loadSssProgram(provider);
 
   const spinner = spin("Fetching roles...");
 
@@ -143,6 +156,29 @@ async function handleRolesList(addressStr: string, globalOpts: any): Promise<voi
     } catch {
       results.push({ rt, status: chalk.gray("NOT ASSIGNED") });
     }
+  }
+
+  const rolePayload = results.map(({ rt, status }) => ({
+    address: userPubkey.toBase58(),
+    role: roleName(rt),
+    status: status.replace(/\u001b\[[0-9;]*m/g, ""),
+  }));
+
+  const outputFormat = getOutputFormat(globalOpts);
+  if (outputFormat === "json") {
+    printJson({
+      address: userPubkey.toBase58(),
+      roles: rolePayload,
+    });
+    return;
+  }
+  if (outputFormat === "csv") {
+    printCsv(rolePayload, [
+      { header: "address", value: (row) => row.address },
+      { header: "role", value: (row) => row.role },
+      { header: "status", value: (row) => row.status },
+    ]);
+    return;
   }
 
   spinner.stop();

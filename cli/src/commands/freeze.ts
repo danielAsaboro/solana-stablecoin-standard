@@ -11,7 +11,14 @@ import {
   SSS_PROGRAM_ID,
   ROLE_PAUSER,
 } from "../helpers";
-import { spin, infoMsg, errorMsg, printTxResult } from "../output";
+import {
+  spin,
+  infoMsg,
+  errorMsg,
+  isDryRun,
+  printDryRunPlan,
+  printTxResult,
+} from "../output";
 
 export function registerFreezeCommand(program: Command): void {
   program
@@ -40,19 +47,26 @@ export function registerFreezeCommand(program: Command): void {
 }
 
 async function handleFreeze(addressStr: string, globalOpts: any): Promise<void> {
-  const sssConfig = loadConfig(globalOpts.config);
+  const sssConfig = loadConfig(globalOpts.config, globalOpts.profile);
+  const configPDA = new PublicKey(sssConfig.configAddress);
+  const mintPubkey = new PublicKey(sssConfig.mintAddress);
+  const targetPubkey = new PublicKey(addressStr);
+  const targetATA = getATA(mintPubkey, targetPubkey);
+
+  if (isDryRun(globalOpts)) {
+    printDryRunPlan(globalOpts, "freeze", {
+      owner: targetPubkey.toBase58(),
+      tokenAccount: targetATA.toBase58(),
+      config: configPDA.toBase58(),
+    });
+    return;
+  }
+
   const keypair = loadKeypair(globalOpts.keypair);
   const connection = getConnection(globalOpts.rpc || sssConfig.rpcUrl);
   const wallet = new anchor.Wallet(keypair);
   const provider = new anchor.AnchorProvider(connection, wallet, { commitment: "confirmed" });
-
-  const configPDA = new PublicKey(sssConfig.configAddress);
-  const mintPubkey = new PublicKey(sssConfig.mintAddress);
-  const targetPubkey = new PublicKey(addressStr);
-
   const [rolePDA] = deriveRolePDA(configPDA, ROLE_PAUSER, keypair.publicKey);
-  const targetATA = getATA(mintPubkey, targetPubkey);
-
   infoMsg(`Freezing token account for ${targetPubkey.toBase58()}...`);
 
   const idl = await anchor.Program.fetchIdl(SSS_PROGRAM_ID, provider);
@@ -86,19 +100,26 @@ async function handleFreeze(addressStr: string, globalOpts: any): Promise<void> 
 }
 
 async function handleThaw(addressStr: string, globalOpts: any): Promise<void> {
-  const sssConfig = loadConfig(globalOpts.config);
+  const sssConfig = loadConfig(globalOpts.config, globalOpts.profile);
+  const configPDA = new PublicKey(sssConfig.configAddress);
+  const mintPubkey = new PublicKey(sssConfig.mintAddress);
+  const targetPubkey = new PublicKey(addressStr);
+  const targetATA = getATA(mintPubkey, targetPubkey);
+
+  if (isDryRun(globalOpts)) {
+    printDryRunPlan(globalOpts, "thaw", {
+      owner: targetPubkey.toBase58(),
+      tokenAccount: targetATA.toBase58(),
+      config: configPDA.toBase58(),
+    });
+    return;
+  }
+
   const keypair = loadKeypair(globalOpts.keypair);
   const connection = getConnection(globalOpts.rpc || sssConfig.rpcUrl);
   const wallet = new anchor.Wallet(keypair);
   const provider = new anchor.AnchorProvider(connection, wallet, { commitment: "confirmed" });
-
-  const configPDA = new PublicKey(sssConfig.configAddress);
-  const mintPubkey = new PublicKey(sssConfig.mintAddress);
-  const targetPubkey = new PublicKey(addressStr);
-
   const [rolePDA] = deriveRolePDA(configPDA, ROLE_PAUSER, keypair.publicKey);
-  const targetATA = getATA(mintPubkey, targetPubkey);
-
   infoMsg(`Thawing token account for ${targetPubkey.toBase58()}...`);
 
   const idl = await anchor.Program.fetchIdl(SSS_PROGRAM_ID, provider);

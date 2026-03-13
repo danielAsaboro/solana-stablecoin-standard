@@ -1,6 +1,6 @@
 [workspace]
 members = ["programs/*"]
-exclude = ["backend", "trident-tests", "tui"]
+exclude = ["backend", "trident-tests", "tui", "programs/sss-math"]
 resolver = "2"
 
 [profile.release]

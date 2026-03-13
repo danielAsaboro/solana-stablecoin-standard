@@ -5,6 +5,7 @@
 //! middleware layers (auth, CORS, tracing) and startup logic.
 
 pub mod error;
+pub mod persistence;
 pub mod routes;
 pub mod services;
 pub mod solana;
@@ -14,6 +15,7 @@ use std::sync::Arc;
 use services::compliance::ComplianceService;
 use services::indexer::IndexerService;
 use services::mint_burn::MintBurnService;
+use services::operator_snapshots::OperatorSnapshotService;
 use services::webhook::WebhookService;
 
 /// Shared application state passed to all route handlers via Axum's `State` extractor.
@@ -27,6 +29,8 @@ pub struct AppState {
     pub indexer: Option<Arc<IndexerService>>,
     /// Webhook service — always available (no Solana dependency).
     pub webhook: Arc<WebhookService>,
+    /// Operator snapshot persistence for evidence bundles and diffs.
+    pub operator_snapshots: Arc<OperatorSnapshotService>,
 }
 
 /// Build the application router with the given state.

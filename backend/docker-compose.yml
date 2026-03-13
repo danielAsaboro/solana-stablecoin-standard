@@ -3,15 +3,14 @@ services:
     build: .
     ports:
       - "3001:3001"
+    env_file:
+      - .env
     environment:
-      - SSS_API_KEY=dev-api-key
-      # DATABASE_URL: not used — backend uses in-memory storage
-      - RPC_URL=https://api.devnet.solana.com
-      # Required for Solana operations — set to your deployed stablecoin mint:
-      # - SSS_MINT_ADDRESS=<your-mint-address>
-      # Optional — defaults to localnet program ID:
-      # - SSS_PROGRAM_ID=DNfk1e2vMJrxHm4BwoRTVqQxcfYjZLHggxr11hMZ5Dyu
-      # Optional — defaults to ~/.config/solana/id.json:
-      # - SSS_KEYPAIR_PATH=/app/keypair.json
       - RUST_LOG=sss_backend=info,tower_http=info
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped

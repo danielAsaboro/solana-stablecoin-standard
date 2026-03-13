@@ -5,11 +5,19 @@ import {
   loadKeypair,
   getConnection,
   loadConfig,
+  loadSssProgram,
   deriveRolePDA,
   SSS_PROGRAM_ID,
   ROLE_PAUSER,
 } from "../helpers";
-import { spin, infoMsg, errorMsg, printTxResult } from "../output";
+import {
+  spin,
+  infoMsg,
+  errorMsg,
+  isDryRun,
+  printDryRunPlan,
+  printTxResult,
+} from "../output";
 
 export function registerPauseCommand(program: Command): void {
   program
@@ -36,24 +44,24 @@ export function registerPauseCommand(program: Command): void {
 }
 
 async function handlePause(globalOpts: any): Promise<void> {
-  const sssConfig = loadConfig(globalOpts.config);
+  const sssConfig = loadConfig(globalOpts.config, globalOpts.profile);
+  const configPDA = new PublicKey(sssConfig.configAddress);
+
+  if (isDryRun(globalOpts)) {
+    printDryRunPlan(globalOpts, "pause", {
+      config: configPDA.toBase58(),
+    });
+    return;
+  }
+
   const keypair = loadKeypair(globalOpts.keypair);
   const connection = getConnection(globalOpts.rpc || sssConfig.rpcUrl);
   const wallet = new anchor.Wallet(keypair);
   const provider = new anchor.AnchorProvider(connection, wallet, { commitment: "confirmed" });
-
-  const configPDA = new PublicKey(sssConfig.configAddress);
-
   const [rolePDA] = deriveRolePDA(configPDA, ROLE_PAUSER, keypair.publicKey);
-
   infoMsg("Pausing stablecoin...");
 
-  const idl = await anchor.Program.fetchIdl(SSS_PROGRAM_ID, provider);
-  if (!idl) {
-    errorMsg("Could not fetch IDL.");
-    return;
-  }
-  const program = new anchor.Program(idl, provider);
+  const program = await loadSssProgram(provider);
 
   const spinner = spin("Sending pause transaction...");
   let tx: string;
@@ -76,24 +84,24 @@ async function handlePause(globalOpts: any): Promise<void> {
 }
 
 async function handleUnpause(globalOpts: any): Promise<void> {
-  const sssConfig = loadConfig(globalOpts.config);
+  const sssConfig = loadConfig(globalOpts.config, globalOpts.profile);
+  const configPDA = new PublicKey(sssConfig.configAddress);
+
+  if (isDryRun(globalOpts)) {
+    printDryRunPlan(globalOpts, "unpause", {
+      config: configPDA.toBase58(),
+    });
+    return;
+  }
+
   const keypair = loadKeypair(globalOpts.keypair);
   const connection = getConnection(globalOpts.rpc || sssConfig.rpcUrl);
   const wallet = new anchor.Wallet(keypair);
   const provider = new anchor.AnchorProvider(connection, wallet, { commitment: "confirmed" });
-
-  const configPDA = new PublicKey(sssConfig.configAddress);
-
   const [rolePDA] = deriveRolePDA(configPDA, ROLE_PAUSER, keypair.publicKey);
-
   infoMsg("Unpausing stablecoin...");
 
-  const idl = await anchor.Program.fetchIdl(SSS_PROGRAM_ID, provider);
-  if (!idl) {
-    errorMsg("Could not fetch IDL.");
-    return;
-  }
-  const program = new anchor.Program(idl, provider);
+  const program = await loadSssProgram(provider);
 
   const spinner = spin("Sending unpause transaction...");
   let tx: string;

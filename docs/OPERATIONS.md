@@ -1,245 +1,329 @@
 # Operations Runbook
 
+This runbook documents the supported operator flows for the `sss-token` CLI.
+
 ## Prerequisites
 
-- Solana CLI installed (`solana --version`)
-- Anchor CLI installed (`anchor --version`)
-- Node.js 18+ and Yarn
-- A funded keypair (`solana-keygen new` or existing)
+- Solana CLI installed and configured
+- Anchor CLI installed
+- Node.js 18+ with `npm`
+- Local packages built with `npm run build`
+- A funded keypair for the target cluster
 
-## Deployment
+## CLI Conventions
 
-### Localnet
+Global options available on all commands:
 
 ```bash
-# Build programs
-anchor build
-
-# Start local validator and deploy
-anchor test --skip-lint
+sss-token --help
 ```
 
-### Devnet
+- `--keypair <path>`: signer keypair path
+- `--rpc <url>`: RPC endpoint
+- `--config <path>`: alternate `.sss-token.json` path
+- `--profile <name>`: named config profile within the selected config file
+- `--output table|json|csv`: machine-readable output for scripts and audits
+- `--dry-run`: preview supported write actions without submitting a transaction
+
+The CLI writes `.sss-token.json` after `init`, so later commands can reuse the same stablecoin config without passing the mint/config manually every time.
+
+Inspect or seed the local config directly:
 
 ```bash
-# Configure for devnet
-solana config set --url devnet
-
-# Ensure deployer has SOL
-solana airdrop 5
-
-# Build and deploy
-anchor build
-anchor deploy --provider.cluster devnet
-
-# Verify deployment
-solana program show <PROGRAM_ID>
+sss-token config path
+sss-token config show
+sss-token config profiles
+sss-token --output json config show
+sss-token --config ./issuer.json config set \
+  --mint <MINT_PUBKEY> \
+  --config-address <CONFIG_PDA> \
+  --preset SSS-2 \
+  --rpc-url https://api.devnet.solana.com
+sss-token --config ./issuer.json config set \
+  --profile devnet \
+  --mint <MINT_PUBKEY> \
+  --config-address <CONFIG_PDA> \
+  --preset SSS-2 \
+  --rpc-url https://api.devnet.solana.com
+sss-token --config ./issuer.json config use devnet
 ```
 
-## Stablecoin Lifecycle
+## Local Verification First
 
-### 1. Initialize a Stablecoin
+Canonical local verification:
 
-**SSS-1 (Minimal)**
 ```bash
-sss-token init --preset sss-1 \
+npm run build
+npm test
+```
+
+The local flow starts Surfpool, runs the Anchor suites, SDK tests, CLI tests, backend tests, fuzz tests, frontend build, and TUI build.
+
+## Initialize A Stablecoin
+
+### SSS-1
+
+```bash
+sss-token init \
+  --preset sss-1 \
   --name "My Stablecoin" \
   --symbol "MUSD" \
   --uri "https://example.com/metadata.json" \
-  --decimals 6 \
-  --keypair ~/.config/solana/id.json
+  --decimals 6
 ```
 
-**SSS-2 (Compliant)**
+### SSS-2
+
 ```bash
-sss-token init --preset sss-2 \
+sss-token init \
+  --preset sss-2 \
   --name "Compliant USD" \
   --symbol "cUSD" \
   --uri "https://example.com/metadata.json" \
-  --decimals 6 \
-  --transfer-hook-program <HOOK_PROGRAM_ID> \
-  --keypair ~/.config/solana/id.json
+  --decimals 6
 ```
 
-After SSS-2 init, initialize the transfer hook's ExtraAccountMetas:
+### Custom JSON Or TOML Config
+
 ```bash
-sss-token init-hook
+sss-token init --custom ./stablecoin.toml
+sss-token init --custom ./stablecoin.json
 ```
 
-### 2. Assign Roles
+Example dry run:
 
 ```bash
-# Assign a minter
-sss-token roles assign --role minter --user <PUBKEY>
-
-# Assign a burner
-sss-token roles assign --role burner --user <PUBKEY>
-
-# Assign a pauser
-sss-token roles assign --role pauser --user <PUBKEY>
-
-# SSS-2 only: assign blacklister and seizer
-sss-token roles assign --role blacklister --user <PUBKEY>
-sss-token roles assign --role seizer --user <PUBKEY>
-
-# Revoke a role
-sss-token roles revoke --role minter --user <PUBKEY>
-
-# List all roles
-sss-token roles list
+sss-token --dry-run init --custom ./stablecoin.toml
 ```
 
-### 3. Configure Minter Quotas
+## Role Management
+
+Assign and revoke roles:
 
 ```bash
-# Set minter quota (in base units, e.g., 1,000,000 = 1 MUSD with 6 decimals)
-sss-token minters add --minter <PUBKEY> --quota 1000000000
+sss-token roles add minter <PUBKEY>
+sss-token roles add burner <PUBKEY>
+sss-token roles add pauser <PUBKEY>
+sss-token roles add blacklister <PUBKEY>
+sss-token roles add seizer <PUBKEY>
 
-# Update quota
-sss-token minters add --minter <PUBKEY> --quota 5000000000
+sss-token roles remove minter <PUBKEY>
+```
 
-# List minters and their quotas
+Inspect one wallet’s roles:
+
+```bash
+sss-token roles list <PUBKEY>
+sss-token --output json roles list <PUBKEY>
+sss-token --output csv roles list <PUBKEY>
+```
+
+Preview a role update without submitting:
+
+```bash
+sss-token --dry-run roles add minter <PUBKEY>
+```
+
+## Minter Quotas
+
+Add or update a minter quota:
+
+```bash
+sss-token minters add <PUBKEY> --quota 1000000000
+sss-token minters add <PUBKEY> --quota 5000000000
+```
+
+Remove a minter role:
+
+```bash
+sss-token minters remove <PUBKEY>
+```
+
+Inspect quotas:
+
+```bash
 sss-token minters list
+sss-token minters list <PUBKEY>
+sss-token --output json minters list
+sss-token --output csv minters list
 ```
 
-### 4. Mint Tokens
+Preview quota changes:
 
 ```bash
-sss-token mint --recipient <PUBKEY> --amount 1000000
+sss-token --dry-run minters add <PUBKEY> --quota 5000000000
 ```
 
-The minter must:
-- Have the Minter role assigned
-- Have sufficient remaining quota (`quota - minted >= amount`)
-- The stablecoin must not be paused
+## Mint And Burn
 
-### 5. Burn Tokens
+Mint tokens:
 
 ```bash
-sss-token burn --amount 500000
+sss-token mint <RECIPIENT_PUBKEY> <AMOUNT>
 ```
 
-The burner must have the Burner role assigned and the stablecoin must not be paused.
-
-### 6. Freeze/Thaw Accounts
+Burn tokens:
 
 ```bash
-# Freeze a specific token account
-sss-token freeze --address <TOKEN_ACCOUNT>
-
-# Thaw a frozen account
-sss-token thaw --address <TOKEN_ACCOUNT>
+sss-token burn <AMOUNT>
 ```
 
-### 7. Pause/Unpause
+## Freeze, Thaw, Pause
 
 ```bash
-# Pause all minting and burning
+sss-token freeze <TOKEN_ACCOUNT_OR_OWNER>
+sss-token thaw <TOKEN_ACCOUNT_OR_OWNER>
+
 sss-token pause
-
-# Resume operations
 sss-token unpause
 ```
 
-### 8. Check Status
+## Status, Supply, Holders
+
+High-level status:
 
 ```bash
-# Full stablecoin status
 sss-token status
+sss-token --output json status
+sss-token --output csv status
+```
 
-# Supply information
+Supply-only view:
+
+```bash
 sss-token supply
+sss-token --output json supply
+sss-token --output csv supply
+```
+
+Holder inspection:
+
+```bash
+sss-token holders
+sss-token holders --min-balance 1000
+sss-token holders --sort address
 ```
 
 ## SSS-2 Compliance Operations
 
-### Blacklist Management
+Blacklist an address:
 
 ```bash
-# Add address to blacklist
-sss-token blacklist add --address <PUBKEY> --reason "Sanctions compliance"
+sss-token blacklist add <PUBKEY> --reason "Sanctions compliance"
+```
 
-# Remove from blacklist
-sss-token blacklist remove --address <PUBKEY>
+Remove an address:
 
-# Check if address is blacklisted
-sss-token blacklist check --address <PUBKEY>
+```bash
+sss-token blacklist remove <PUBKEY>
+```
 
-# List all blacklisted addresses
+Inspect blacklist state:
+
+```bash
 sss-token blacklist list
+sss-token blacklist list <PUBKEY>
+sss-token --output json blacklist list
+sss-token --output csv blacklist list
 ```
 
-When an address is blacklisted:
-- All `transfer_checked` calls involving that address will be rejected by the transfer hook
-- The BlacklistEntry PDA stores the reason, timestamp, and who blacklisted it
-
-### Seize Tokens
+Preview blacklist actions:
 
 ```bash
-sss-token seize --from <TOKEN_ACCOUNT> --to <TREASURY_ACCOUNT> --amount 100000
+sss-token --dry-run blacklist add <PUBKEY> --reason "Manual review"
+sss-token --dry-run blacklist remove <PUBKEY>
 ```
 
-Seize uses the permanent delegate extension. The source account owner does not need to sign.
-
-### Transfer Authority
+Seize tokens:
 
 ```bash
-sss-token transfer-authority --new-authority <PUBKEY>
+sss-token seize <OWNER_OR_TOKEN_ACCOUNT> --to <TREASURY_PUBKEY> --amount <AMOUNT>
 ```
 
-This transfers the master authority role. The new authority gains control of all role management.
+## Audit Trail
 
-## Monitoring
-
-### View Audit Trail
-
-All operations emit on-chain events. Use the SDK or backend API to query:
-
-```typescript
-const auditLog = new AuditLog(connection, configAddress);
-const events = await auditLog.getEvents({ action: "mint", limit: 100 });
-```
-
-### Backend API
+Query recent on-chain events:
 
 ```bash
-# Check backend health
-curl http://localhost:3001/health
-
-# Query audit log
-curl http://localhost:3001/api/v1/audit
-
-# Check blacklist
-curl http://localhost:3001/api/v1/blacklist
+sss-token audit-log
+sss-token audit-log --action mint
+sss-token audit-log --limit 50
+sss-token audit-log --format jsonl
+sss-token --output jsonl audit-log --action compliance
 ```
 
-## Troubleshooting
+`jsonl` emits one complete event object per line with stable operator fields such as `timestamp`, `eventType`, `action`, `status`, `severity`, `authority`, `targetAddress`, and `signature`.
 
-| Error | Cause | Fix |
-|-------|-------|-----|
-| `Unauthorized` | Caller lacks required role | Assign role with `sss-token roles assign` |
-| `QuotaExceeded` | Minter minted beyond quota | Increase quota with `sss-token minters add` |
-| `Paused` | Stablecoin is paused | Run `sss-token unpause` |
-| `ComplianceNotEnabled` | SSS-2 op on SSS-1 config | Re-initialize with `--preset sss-2` |
-| `AlreadyBlacklisted` | Address already on blacklist | No action needed |
-| `NotBlacklisted` | Trying to remove non-blacklisted address | Check address with `sss-token blacklist check` |
-| `AccountFrozen` | Token account is frozen | Thaw with `sss-token thaw` |
-| `Overflow` | Arithmetic overflow | Check amounts are within u64 range |
+For a backend-backed compliance export, request newline-delimited JSON from the API:
 
-## Emergency Procedures
-
-### Pause All Operations
 ```bash
-sss-token pause --keypair <PAUSER_KEYPAIR>
+curl 'http://localhost:3001/api/v1/audit?format=jsonl'
 ```
 
-### Freeze Compromised Account
-```bash
-sss-token freeze --address <TOKEN_ACCOUNT> --keypair <PAUSER_KEYPAIR>
-```
+## Frontend Operator Telemetry
 
-### Seize from Compromised Account (SSS-2)
-```bash
-sss-token blacklist add --address <OWNER> --reason "Account compromise" --keypair <BLACKLISTER_KEYPAIR>
-sss-token seize --from <TOKEN_ACCOUNT> --to <TREASURY> --amount <FULL_BALANCE> --keypair <SEIZER_KEYPAIR>
-```
+The frontend console now supports an overview-first operator mode that can stay RPC-only or become backend-aware.
+
+Set `NEXT_PUBLIC_SSS_BACKEND_URL` before starting the frontend to surface:
+
+- indexed event activity instead of direct RPC-only recent history,
+- webhook registration and delivery health,
+- HMAC signing status, header name, and verification expectations.
+
+Without that variable, the frontend still works and falls back to direct on-chain/RPC activity.
+
+When the backend URL is configured, the dashboard timeline merges:
+
+- tracked mint and burn operations,
+- indexed on-chain events,
+- compliance audit operations,
+- webhook delivery attempts.
+
+Use the timeline filters to narrow by source, severity, status, action, authority, target address, or transaction signature when reviewing incidents.
+
+Operator export and evidence paths:
+
+- `curl 'http://localhost:3001/api/v1/operator-timeline?format=jsonl'`
+- `curl 'http://localhost:3001/api/v1/operator-timeline?format=csv'`
+- `curl 'http://localhost:3001/api/v1/operator-timeline/<incident-id>'`
+- `curl 'http://localhost:3001/api/v1/operator-evidence'`
+- `curl -X POST 'http://localhost:3001/api/v1/operator-snapshots' -H 'content-type: application/json' -d '{"label":"before-change"}'`
+- `curl 'http://localhost:3001/api/v1/operator-snapshots'`
+- `curl 'http://localhost:3001/api/v1/operator-snapshots/diff?from=<snapshot-id>&to=<snapshot-id>'`
+
+Evidence bundle truthfulness:
+
+- snapshot summary fields such as `paused`, `live_supply`, `role_count`, `minter_count`, and `blacklist_count` may be `null` when the backend does not have a direct exact source for them;
+- the bundle does not infer exact current state from partial incident history.
+
+Webhook replay and HMAC verification:
+
+- `curl -X POST 'http://localhost:3001/api/v1/webhooks/deliveries/<delivery-id>/redeliver'`
+- `curl -X POST 'http://localhost:3001/api/v1/operator-timeline/<incident-id>/redeliver'`
+- `sss-token webhook verify --secret "$WEBHOOK_SECRET" --signature "$X_SSS_SIGNATURE" --payload-file ./captured-body.json`
+
+## Failure Handling
+
+Common failure cases:
+
+| Error | Meaning | Expected action |
+|-------|---------|-----------------|
+| `Unauthorized` | signer lacks required authority or role | grant the correct role or use the correct signer |
+| `QuotaExceeded` | mint request exceeds the configured minter quota | raise quota or reduce mint size |
+| `Paused` | stablecoin is paused | unpause before retrying |
+| `ComplianceNotEnabled` | SSS-2-only action attempted on SSS-1 | reinitialize with SSS-2 if compliance is required |
+| `NotBlacklisted` | address removal requested for a non-listed address | inspect current blacklist state first |
+| `AccountFrozen` | account cannot send or receive because it is frozen | thaw the account before retrying |
+
+## Recommended Operator Patterns
+
+- Use `--dry-run` before any role, quota, or blacklist change.
+- Use `--output json` or `--output jsonl` in scripts and CI checks.
+- Use `status` before and after any administrative action to capture an audit snapshot.
+- Use `blacklist list` and `audit-log` together for compliance reviews.
+- When webhooks are enabled, verify whether signing is active and validate the `X-SSS-Signature` header against the raw request body.
+- If the backend indexer is running, webhook payloads and delivery records include `transaction_signature`, `event_id`, and `correlation_id`, so `/api/v1/operator-timeline` can fold delivery success or failure directly into the originating incident.
+- Use operator snapshots before and after high-risk actions to capture a read-only evidence trail.
+- Configure `sss-admin-tui --backend-url <url>` or `SSS_BACKEND_URL=<url>` to expose the correlated incident stream in the terminal UI.
+- Use the TUI incidents tab for keyboard-first review of the same correlated operator timeline surfaced in the frontend.
+- Keep separate keypairs for master authority, minting, pausing, blacklisting, and seizure operations.

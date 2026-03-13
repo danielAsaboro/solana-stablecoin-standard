@@ -1,5 +1,7 @@
 # Solana Stablecoin Standard (SSS)
 
+[![CI](https://github.com/solanabr/solana-stablecoin-standard/actions/workflows/ci.yml/badge.svg)](https://github.com/solanabr/solana-stablecoin-standard/actions/workflows/ci.yml)
+
 > A modular, open-source framework for launching regulated stablecoins on Solana using the Token-2022 program.
 
 SSS provides three preset configurations -- **SSS-1** (minimal), **SSS-2** (compliant), and **SSS-3** (privacy) -- so that issuers can go from zero to a fully operational stablecoin in minutes rather than months. Built on Anchor and Token-2022, it packages battle-tested patterns for role-based access control, mint quotas, on-chain blacklist enforcement, forced seizure, and confidential transfers into a single cohesive toolkit.
@@ -18,7 +20,7 @@ SSS provides three preset configurations -- **SSS-1** (minimal), **SSS-2** (comp
 - [Tutorial: Launch an SSS-1 Stablecoin](#tutorial-launch-an-sss-1-stablecoin)
 - [Tutorial: Launch an SSS-2 Compliant Stablecoin](#tutorial-launch-an-sss-2-compliant-stablecoin)
 - [Tutorial: TypeScript SDK](#tutorial-typescript-sdk)
-- [Devnet Deployment](#devnet-deployment)
+- [Local Verification](#local-verification)
 - [Program IDs](#program-ids)
 - [SDK Usage](#sdk-usage)
 - [CLI Reference](#cli-reference)
@@ -31,6 +33,7 @@ SSS provides three preset configurations -- **SSS-1** (minimal), **SSS-2** (comp
 - [Security Model](#security-model)
 - [Regulatory Alignment](#regulatory-alignment)
 - [Contributing](#contributing)
+- [Changelog](#changelog)
 - [License](#license)
 
 ---
@@ -165,8 +168,9 @@ solana-stablecoin-standard/
 - **Rust** 1.75+ ([install](https://rustup.rs/))
 - **Solana CLI** 1.18+ (`sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)"`)
 - **Anchor CLI** 0.31+ (`cargo install --git https://github.com/coral-xyz/anchor avm && avm install 0.31.1 && avm use 0.31.1`)
-- **Node.js** 18+ and **Yarn** (`npm install -g yarn`)
-- A funded Solana keypair (`solana-keygen new` or use an existing one)
+- **Node.js** 18+ with npm
+- **Surfpool** installed and available on `PATH`
+- A local Solana keypair (`solana-keygen new` or use an existing one)
 
 ---
 
@@ -176,13 +180,13 @@ solana-stablecoin-standard/
 # 1. Clone and install dependencies
 git clone https://github.com/stablebrr/solana-stablecoin-standard.git
 cd solana-stablecoin-standard
-yarn install
+npm install
 
-# 2. Build the on-chain programs
-anchor build
+# 2. Build the workspace
+npm run build
 
-# 3. Run the full test suite against a local validator
-anchor test
+# 3. Run the full local verification flow against Surfpool
+npm test
 
 # 4. Initialize an SSS-1 stablecoin (minimal preset)
 sss-token init --preset sss-1 \
@@ -194,18 +198,16 @@ sss-token init --preset sss-1 \
 sss-token init --preset sss-2 \
   --name "Compliant USD" \
   --symbol "cUSD" \
-  --decimals 6 \
-  --transfer-hook-program <HOOK_PROGRAM_ID>
+  --decimals 6
 
 # 6. Assign a minter and set a quota
-sss-token roles assign --role minter --user <MINTER_PUBKEY>
-sss-token minters add --minter <MINTER_PUBKEY> --quota 1000000000000
+sss-token minters add <MINTER_PUBKEY> --quota 1000000000000
 
 # 7. Mint tokens
-sss-token mint --recipient <RECIPIENT_PUBKEY> --amount 1000000000
+sss-token mint <RECIPIENT_PUBKEY> 1000000000
 
-# 8. Check supply
-sss-token supply
+# 8. Check status
+sss-token status
 ```
 
 See [docs/OPERATIONS.md](docs/OPERATIONS.md) for the full operations runbook.
@@ -215,17 +217,18 @@ See [docs/OPERATIONS.md](docs/OPERATIONS.md) for the full operations runbook.
 ## Build and Test
 
 ```bash
-# Build both on-chain programs (SSS + Transfer Hook)
-anchor build
+# Build everything
+npm run build
 
-# Run the full integration test suite (starts a local validator automatically)
-anchor test
+# Run the full local verification flow against Surfpool
+npm test
 
-# Build the TypeScript SDK packages
-yarn build
+# Run only the on-chain integration suite against the current local RPC
+npm run test:anchor
 
-# Run SDK unit tests
-yarn test:sdk
+# Run SDK and CLI tests
+npm run test:sdk
+npm run test:cli
 
 # Start the backend API server (local development)
 cd backend && cargo run
@@ -252,22 +255,18 @@ The integration test suite covers seven test modules:
 
 ## Tutorial: Launch an SSS-1 Stablecoin
 
-This walkthrough takes you from zero to a fully operational SSS-1 stablecoin on a local Solana validator. Every command is copy-pasteable and every step is verified before moving on.
+This walkthrough takes you from zero to a fully operational SSS-1 stablecoin on a local Surfpool validator. Every command is copy-pasteable and every step is verified before moving on.
 
-> **Time required:** ~5 minutes. No devnet SOL needed — the local validator gives unlimited airdrop.
+> **Time required:** ~5 minutes. No devnet SOL needed.
 
-### Step 1 — Start a local validator
+### Step 1 — Start Surfpool
 
 ```bash
-# Start the local validator with both programs deployed
-# (anchor test does this automatically, but for manual CLI usage you need it running)
-solana-test-validator \
-  --bpf-program DNfk1e2vMJrxHm4BwoRTVqQxcfYjZLHggxr11hMZ5Dyu target/deploy/sss.so \
-  --bpf-program Gcd58Ng9gqRg1XtiU1i8KopwX1u82Mt9VmxKbLJ8RANH target/deploy/transfer_hook.so \
-  --reset &
+# Build programs once
+anchor build
 
-# Wait for the validator to start
-sleep 3
+# Start Surfpool with the local manifest
+npm run surfpool:start &
 
 # Point your Solana CLI to localhost
 solana config set --url http://localhost:8899
@@ -438,7 +437,7 @@ You now have a fully operational SSS-1 stablecoin with role-based access control
 
 SSS-2 adds blacklist enforcement (via transfer hook) and token seizure (via permanent delegate) on top of all SSS-1 features. This tutorial assumes you have completed the prerequisite steps (validator running, wallet funded).
 
-> **Important:** SSS-2 requires the Transfer Hook program to be deployed alongside the SSS program. Both are already loaded by `solana-test-validator` in [Step 1](#step-1--start-a-local-validator) above.
+> **Important:** SSS-2 requires the Transfer Hook program to be deployed alongside the SSS program. Both are loaded by Surfpool in [Step 1](#step-1--start-surfpool).
 
 ### Step 1 — Initialize SSS-2
 
@@ -558,7 +557,7 @@ For programmatic integration, use the TypeScript SDK directly. This example crea
 ### Installation
 
 ```bash
-yarn add @stbr/sss-token
+npm install @stbr/sss-token
 ```
 
 > `@stbr/sss-token` is the canonical consumer entrypoint. It re-exports everything from `@stbr/sss-core-sdk` and `@stbr/sss-compliance-sdk`.
@@ -740,70 +739,16 @@ For the full SDK API reference with 15 sections and 5 end-to-end workflows, see 
 
 ---
 
-## Devnet Deployment
+## Local Verification
 
-All three SSS programs can be deployed to Solana devnet using the automated deployment script or manually. The programs have been fully verified on a local validator with 170 passing tests (96 integration + 53 backend + 21 fuzz).
-
-### Quick Deploy
+Remote deployment proof is deferred in this phase. The supported workflow is local-only with Surfpool:
 
 ```bash
-# Automated: deploys all programs and runs demo transactions
-./scripts/deploy-devnet.sh
+npm run build
+npm test
 ```
 
-### Manual Deploy
-
-```bash
-# 1. Switch to devnet
-solana config set --url https://api.devnet.solana.com
-
-# 2. Ensure sufficient SOL (~7 SOL needed for 3 programs)
-solana balance
-
-# 3. Deploy each program
-anchor deploy --program-name sss --provider.cluster devnet
-anchor deploy --program-name transfer_hook --provider.cluster devnet
-anchor deploy --program-name sss_oracle --provider.cluster devnet
-
-# 4. Run SSS-1 demo (init, roles, mint, burn, freeze, thaw, pause, unpause)
-ANCHOR_PROVIDER_URL=https://api.devnet.solana.com \
-ANCHOR_WALLET=~/.config/solana/id.json \
-npx ts-node scripts/deploy-devnet.ts
-
-# 5. Run SSS-2 demo (init, hook, roles, mint, blacklist, seize, unblacklist)
-ANCHOR_PROVIDER_URL=https://api.devnet.solana.com \
-ANCHOR_WALLET=~/.config/solana/id.json \
-npx ts-node scripts/deploy-sss2-devnet.ts
-```
-
-### Demo Transaction Proof (Localnet)
-
-Both scripts have been verified against a local validator. Example output:
-
-**SSS-1 Lifecycle** (init -> roles -> mint -> burn -> freeze -> thaw -> pause -> unpause):
-```
-Program ID: DNfk1e2vMJrxHm4BwoRTVqQxcfYjZLHggxr11hMZ5Dyu
-Initialize:  5su3q5RDgEw1oHVzSzQAL...
-Mint 100:    5pvLCnhdYPHVwVC3y1AXq...
-Burn 10:     5DsiDTnqA4aybTgZEfgbQ...
-Freeze:      4PEtXS4UhnQjDghzGPXdW...
-Thaw:        5wTs6ieVgKRBVGNqtreBb...
-Pause:       4xQCP55eJyAfWnik2uypdm...
-Unpause:     2fCQZHjdEvzR57dCCdeD2f...
-```
-
-**SSS-2 Compliance** (init -> hook -> roles -> mint -> blacklist -> seize -> unblacklist):
-```
-SSS Program:  DNfk1e2vMJrxHm4BwoRTVqQxcfYjZLHggxr11hMZ5Dyu
-Hook Program: Gcd58Ng9gqRg1XtiU1i8KopwX1u82Mt9VmxKbLJ8RANH
-Initialize:   533Xi1MQPe4vQ8zP3XpAw...
-Init Hook:    4BVY3dT1WzXZ3ENL29am9v...
-Blacklist:    3yiWkxC22NFSpN3EkmNM9m...
-Seize (PD):   REwUV7x4jVFCeGbn47HHz...
-Unblacklist:  4hLqK6yrT5SMdTF46Gb6oP...
-```
-
-For the complete deployment guide with all transaction signatures and troubleshooting, see [docs/DEVNET_DEPLOYMENT.md](docs/DEVNET_DEPLOYMENT.md).
+See [docs/DEVNET_DEPLOYMENT.md](docs/DEVNET_DEPLOYMENT.md) for the current deployment-status note and the retained historical local examples.
 
 ---
 
@@ -834,7 +779,7 @@ For the complete deployment guide with all transaction signatures and troublesho
 ### Installation
 
 ```bash
-yarn add @stbr/sss-core-sdk @stbr/sss-compliance-sdk
+npm install @stbr/sss-core-sdk @stbr/sss-compliance-sdk
 ```
 
 ### Create a New Stablecoin
@@ -898,8 +843,10 @@ The `sss-token` CLI wraps the SDK for terminal-based administration.
 
 ```bash
 sss-token init          # Initialize a new stablecoin
-sss-token roles assign  # Assign a role to a user
-sss-token roles revoke  # Revoke a role from a user
+sss-token config show   # Show the local CLI config
+sss-token config profiles # List named CLI profiles
+sss-token roles add     # Assign a role to a user
+sss-token roles remove  # Revoke a role from a user
 sss-token minters add   # Set/update a minter quota
 sss-token mint          # Mint tokens
 sss-token burn          # Burn tokens
@@ -908,10 +855,14 @@ sss-token thaw          # Thaw a frozen token account
 sss-token pause         # Pause all minting and burning
 sss-token unpause       # Resume operations
 sss-token blacklist add # Add address to blacklist (SSS-2)
+sss-token blacklist list # Inspect blacklist entries (SSS-2)
 sss-token blacklist remove # Remove address from blacklist (SSS-2)
 sss-token seize         # Seize tokens via permanent delegate (SSS-2)
 sss-token status        # Display stablecoin configuration
 sss-token supply        # Display supply information
+sss-token --dry-run ... # Preview supported write actions
+sss-token --profile devnet ... # Select a named CLI profile
+sss-token --output json # Emit machine-readable output
 sss-token holders       # List all token holders with balances
 sss-token audit-log     # Query on-chain event history (audit trail)
 ```
@@ -950,6 +901,16 @@ The oracle parses Switchboard V2 aggregator account data at known Borsh serializ
 - **Staleness** — price data must be within the configured `staleness_threshold` seconds
 - **Bounds** — price must fall within `[min_price, max_price]`
 - **Positivity** — negative or zero prices are rejected
+
+### Localnet Testing Note
+
+On a local test validator there is no real Switchboard aggregator account, so `refresh_price` will reject any locally-generated keypair as an unknown aggregator. The testable path on localnet is **`push_manual_price`**, which allows the oracle authority to push a price directly without a Switchboard feed:
+
+```bash
+sss-token oracle push-price --price 1000000  # 1.00 USD with 6 decimal places
+```
+
+For devnet and mainnet, initialize the oracle with a real Switchboard V2 aggregator address (e.g., the SOL/USD feed on devnet: `GvDMxPzN1sCj7L26YDK2HnMRXEQmQ2aemov8YBtPS7vR`). The oracle will then read live prices on every `refresh_price` call. See `docs/OPERATIONS.md` for the full oracle setup guide.
 
 ### SDK Usage
 
@@ -1044,13 +1005,13 @@ A web-based admin panel built with [Next.js 14](https://nextjs.org/) for managin
 
 ```bash
 # Install dependencies
-cd frontend && yarn install
+cd frontend && npm install
 
 # Start development server
-yarn dev    # → http://localhost:3000
+npm run dev    # → http://localhost:3000
 
 # Build for production
-yarn build && yarn start
+npm run build && npm run start
 ```
 
 **Features:**
@@ -1069,11 +1030,11 @@ yarn build && yarn start
 
 ## Backend API
 
-The backend is a Rust/Axum REST API with PostgreSQL, providing programmatic access to all stablecoin operations.
+The backend is a Rust/Axum REST API that provides programmatic access to mint/burn, compliance, event indexing, and webhooks. In this phase it is validated locally and persists API-layer state to local JSON snapshot files.
 
 ```bash
-# Start with Docker Compose
-cd backend && docker compose up --build
+# Start locally
+cd backend && cargo run
 
 # The API is available at http://localhost:3001
 ```
@@ -1107,7 +1068,7 @@ All `/api/v1/*` endpoints require an API key via the `X-API-Key` header. See [do
 | [Operations Runbook](docs/OPERATIONS.md)  | Step-by-step guide for every operation       |
 | [Compliance Guide](docs/COMPLIANCE.md)    | Regulatory considerations and audit trail    |
 | [API Reference](docs/API.md)             | Backend REST API documentation               |
-| [Devnet Deployment](docs/DEVNET_DEPLOYMENT.md) | Deployment guide with scripts and proof |
+| [Deployment Status](docs/DEVNET_DEPLOYMENT.md) | Local-only verification policy and retained historical examples |
 | [Security Audit](docs/SECURITY_AUDIT.md) | Comprehensive security audit checklist       |
 | [Testing Guide](docs/TESTING.md)        | Test pyramid, categories, fuzz documentation |
 
@@ -1143,12 +1104,18 @@ SSS-2 is designed with current and proposed regulatory frameworks in mind:
 Contributions are welcome. Please follow these guidelines:
 
 1. Fork the repository and create a feature branch from `main`.
-2. Run `anchor build` and `anchor test` to make sure nothing is broken.
+2. Run `npm run build` and `npm test` to make sure nothing is broken.
 3. Write clear commit messages explaining **why** the change was made.
 4. Open a pull request with a description of the change and any relevant context.
 5. All pull requests require at least one approval before merging.
 
 For larger features or protocol changes, please open an issue first to discuss the design.
+
+---
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a full history of releases and changes.
 
 ---
 

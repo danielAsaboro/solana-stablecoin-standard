@@ -6,13 +6,11 @@
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{
-    Block, Borders, Cell, Gauge, Paragraph, Row, Table, Tabs, Wrap,
-};
+use ratatui::widgets::{Block, Borders, Cell, Gauge, Paragraph, Row, Table, Tabs, Wrap};
 use ratatui::Frame;
 
 use crate::app::{App, Tab};
-use crate::data::{role_name, StablecoinData};
+use crate::data::{role_name, FetchFreshness, StablecoinData};
 
 // ── Color palette ───────────────────────────────────────────────────────────
 
@@ -36,7 +34,7 @@ pub fn render(frame: &mut Frame, app: &App, data: &StablecoinData) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3), // tabs
-            Constraint::Min(10),  // content
+            Constraint::Min(10),   // content
             Constraint::Length(3), // footer
         ])
         .split(area);
@@ -70,11 +68,7 @@ fn render_tabs(frame: &mut Frame, app: &App, area: Rect) {
                 .border_style(Style::default().fg(CLR_INACTIVE)),
         )
         .select(app.tab.index())
-        .highlight_style(
-            Style::default()
-                .fg(CLR_TITLE)
-                .add_modifier(Modifier::BOLD),
-        )
+        .highlight_style(Style::default().fg(CLR_TITLE).add_modifier(Modifier::BOLD))
         .divider(Span::styled(" │ ", Style::default().fg(CLR_INACTIVE)));
 
     frame.render_widget(tabs, area);
@@ -85,6 +79,7 @@ fn render_tabs(frame: &mut Frame, app: &App, area: Rect) {
 fn render_content(frame: &mut Frame, app: &App, data: &StablecoinData, area: Rect) {
     match app.tab {
         Tab::Dashboard => render_dashboard(frame, data, area),
+        Tab::Incidents => render_incidents(frame, app, data, area),
         Tab::Roles => render_roles(frame, app, data, area),
         Tab::Minters => render_minters(frame, app, data, area),
         Tab::Blacklist => render_blacklist(frame, app, data, area),
@@ -102,13 +97,30 @@ fn render_footer(frame: &mut Frame, app: &App, data: &StablecoinData, area: Rect
 
     // Left: key hints
     let hints = Line::from(vec![
-        Span::styled(" Tab", Style::default().fg(CLR_TITLE).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            " Tab",
+            Style::default().fg(CLR_TITLE).add_modifier(Modifier::BOLD),
+        ),
         Span::styled(" Switch  ", Style::default().fg(CLR_LABEL)),
-        Span::styled("↑↓/jk", Style::default().fg(CLR_TITLE).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "↑↓/jk",
+            Style::default().fg(CLR_TITLE).add_modifier(Modifier::BOLD),
+        ),
         Span::styled(" Navigate  ", Style::default().fg(CLR_LABEL)),
-        Span::styled("r", Style::default().fg(CLR_TITLE).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "1-6",
+            Style::default().fg(CLR_TITLE).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" Jump Tabs  ", Style::default().fg(CLR_LABEL)),
+        Span::styled(
+            "r",
+            Style::default().fg(CLR_TITLE).add_modifier(Modifier::BOLD),
+        ),
         Span::styled(" Refresh  ", Style::default().fg(CLR_LABEL)),
-        Span::styled("q", Style::default().fg(CLR_TITLE).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "q",
+            Style::default().fg(CLR_TITLE).add_modifier(Modifier::BOLD),
+        ),
         Span::styled(" Quit", Style::default().fg(CLR_LABEL)),
     ]);
     let hints_widget = Paragraph::new(hints).block(
@@ -119,23 +131,38 @@ fn render_footer(frame: &mut Frame, app: &App, data: &StablecoinData, area: Rect
     frame.render_widget(hints_widget, chunks[0]);
 
     // Right: status / last refresh
+    let now = chrono::Local::now();
     let status_text = if let Some(msg) = &app.status_msg {
         Line::from(Span::styled(msg.as_str(), Style::default().fg(CLR_WARN)))
-    } else if let Some(err) = &data.error {
-        Line::from(Span::styled(
-            truncate_str(err, 40),
-            Style::default().fg(CLR_ERR),
-        ))
-    } else if let Some(ts) = &data.last_fetched {
-        Line::from(Span::styled(
-            format!(" Last refresh: {}", ts.format("%H:%M:%S")),
-            Style::default().fg(CLR_ACTIVE),
-        ))
     } else {
-        Line::from(Span::styled(
-            " Connecting...",
-            Style::default().fg(CLR_WARN),
-        ))
+        match data.freshness_at(now) {
+            FetchFreshness::Error => Line::from(Span::styled(
+                format!(
+                    " Error: {}",
+                    truncate_str(data.error.as_deref().unwrap_or("unknown"), 34)
+                ),
+                Style::default().fg(CLR_ERR),
+            )),
+            FetchFreshness::Stale => Line::from(Span::styled(
+                format!(
+                    " Data stale — last refresh {}",
+                    data.age_label(now).unwrap_or_else(|| "unknown".to_string())
+                ),
+                Style::default().fg(CLR_WARN),
+            )),
+            FetchFreshness::Fresh => Line::from(Span::styled(
+                format!(
+                    " Live — last refresh {}",
+                    data.age_label(now)
+                        .unwrap_or_else(|| "just now".to_string())
+                ),
+                Style::default().fg(CLR_ACTIVE),
+            )),
+            FetchFreshness::Connecting => Line::from(Span::styled(
+                " Connecting to Solana RPC...",
+                Style::default().fg(CLR_WARN),
+            )),
+        }
     };
 
     let status_widget = Paragraph::new(status_text).block(
@@ -178,8 +205,8 @@ fn render_dashboard(frame: &mut Frame, data: &StablecoinData, area: Rect) {
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(7),  // Identity + Supply
-            Constraint::Length(7),  // Authorities + Feature Flags
+            Constraint::Length(7), // Identity + Supply
+            Constraint::Length(7), // Authorities + Feature Flags
             Constraint::Min(5),    // Runtime State
         ])
         .split(area);
@@ -206,13 +233,119 @@ fn render_dashboard(frame: &mut Frame, data: &StablecoinData, area: Rect) {
     render_runtime_state(frame, data, rows[2]);
 }
 
+fn render_incidents(frame: &mut Frame, app: &App, data: &StablecoinData, area: Rect) {
+    if data.backend_url.is_none() {
+        let widget = Paragraph::new(
+            "Configure SSS_BACKEND_URL or --backend-url to load the correlated operator timeline."
+        )
+        .style(Style::default().fg(CLR_WARN))
+        .block(
+            Block::default()
+                .title(" Incidents ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(CLR_INACTIVE)),
+        )
+        .wrap(Wrap { trim: true });
+        frame.render_widget(widget, area);
+        return;
+    }
+
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
+        .split(area);
+
+    let rows: Vec<Row> = data
+        .incidents
+        .iter()
+        .map(|incident| {
+            let severity_color = match incident.severity.as_str() {
+                "critical" => CLR_ERR,
+                "warning" => CLR_WARN,
+                "success" => CLR_ACTIVE,
+                _ => CLR_VALUE,
+            };
+            Row::new(vec![
+                Cell::from(incident.action.clone()),
+                Cell::from(incident.status.clone()).style(Style::default().fg(severity_color)),
+                Cell::from(incident.related_count.to_string()),
+            ])
+        })
+        .collect();
+
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Percentage(48),
+            Constraint::Percentage(28),
+            Constraint::Percentage(24),
+        ],
+    )
+    .header(
+        Row::new(vec!["Action", "Status", "Records"])
+            .style(Style::default().fg(CLR_TITLE).add_modifier(Modifier::BOLD))
+    )
+    .block(
+        Block::default()
+            .title(" Incident Stream ")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(CLR_INACTIVE)),
+    )
+    .row_highlight_style(Style::default().bg(Color::DarkGray))
+    .highlight_symbol(">> ");
+    let mut state = ratatui::widgets::TableState::default().with_selected(Some(app.selected));
+    frame.render_stateful_widget(table, chunks[0], &mut state);
+
+    let detail = data.incidents.get(app.selected).map(|incident| {
+        vec![
+            Line::from(vec![
+                Span::styled("When: ", Style::default().fg(CLR_LABEL)),
+                Span::styled(&incident.occurred_at, Style::default().fg(CLR_VALUE)),
+            ]),
+            Line::from(vec![
+                Span::styled("Severity: ", Style::default().fg(CLR_LABEL)),
+                Span::styled(&incident.severity, Style::default().fg(CLR_VALUE)),
+            ]),
+            Line::from(vec![
+                Span::styled("Status: ", Style::default().fg(CLR_LABEL)),
+                Span::styled(&incident.status, Style::default().fg(CLR_VALUE)),
+            ]),
+            Line::from(""),
+            Line::from(incident.summary.clone()),
+            Line::from(""),
+            Line::from(format!("Correlation: {}", incident.id)),
+        ]
+    });
+
+    let detail_widget = Paragraph::new(detail.unwrap_or_else(|| {
+        vec![Line::from("No incidents loaded from the backend yet.")]
+    }))
+    .block(
+        Block::default()
+            .title(" Incident Detail ")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(CLR_INACTIVE)),
+    )
+    .wrap(Wrap { trim: true });
+    frame.render_widget(detail_widget, chunks[1]);
+}
+
 fn render_identity(frame: &mut Frame, config: &crate::data::ConfigAccount, area: Rect) {
     let preset = if config.enable_permanent_delegate && config.enable_transfer_hook {
-        Span::styled("SSS-2", Style::default().fg(CLR_ACCENT).add_modifier(Modifier::BOLD))
+        Span::styled(
+            "SSS-2",
+            Style::default().fg(CLR_ACCENT).add_modifier(Modifier::BOLD),
+        )
     } else if !config.enable_permanent_delegate && !config.enable_transfer_hook {
-        Span::styled("SSS-1", Style::default().fg(CLR_ACTIVE).add_modifier(Modifier::BOLD))
+        Span::styled(
+            "SSS-1",
+            Style::default().fg(CLR_ACTIVE).add_modifier(Modifier::BOLD),
+        )
     } else {
-        Span::styled("Custom", Style::default().fg(CLR_WARN).add_modifier(Modifier::BOLD))
+        Span::styled(
+            "Custom",
+            Style::default().fg(CLR_WARN).add_modifier(Modifier::BOLD),
+        )
     };
 
     let lines = vec![
@@ -262,7 +395,12 @@ fn render_supply(
         if decimals == 0 {
             format_with_commas(whole)
         } else {
-            format!("{}.{:0>width$}", format_with_commas(whole), frac, width = decimals as usize)
+            format!(
+                "{}.{:0>width$}",
+                format_with_commas(whole),
+                frac,
+                width = decimals as usize
+            )
         }
     };
 
@@ -271,11 +409,17 @@ fn render_supply(
     let lines = vec![
         Line::from(vec![
             Span::styled(" Total Minted: ", Style::default().fg(CLR_LABEL)),
-            Span::styled(format_amount(config.total_minted), Style::default().fg(CLR_ACTIVE)),
+            Span::styled(
+                format_amount(config.total_minted),
+                Style::default().fg(CLR_ACTIVE),
+            ),
         ]),
         Line::from(vec![
             Span::styled(" Total Burned: ", Style::default().fg(CLR_LABEL)),
-            Span::styled(format_amount(config.total_burned), Style::default().fg(CLR_ERR)),
+            Span::styled(
+                format_amount(config.total_burned),
+                Style::default().fg(CLR_ERR),
+            ),
         ]),
         Line::from(vec![
             Span::styled(" Net Supply:   ", Style::default().fg(CLR_LABEL)),
@@ -313,7 +457,10 @@ fn render_authorities(
     let lines = vec![
         Line::from(vec![
             Span::styled(" Authority: ", Style::default().fg(CLR_LABEL)),
-            Span::styled(short_pubkey(&config.master_authority), Style::default().fg(CLR_VALUE)),
+            Span::styled(
+                short_pubkey(&config.master_authority),
+                Style::default().fg(CLR_VALUE),
+            ),
         ]),
         Line::from(vec![
             Span::styled(" Mint:      ", Style::default().fg(CLR_LABEL)),
@@ -401,7 +548,11 @@ fn render_runtime_state(frame: &mut Frame, data: &StablecoinData, area: Rect) {
 
     let rows = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .constraints([
+            Constraint::Percentage(42),
+            Constraint::Percentage(28),
+            Constraint::Percentage(30),
+        ])
         .split(area);
 
     // Left: pause state + summary stats
@@ -419,9 +570,15 @@ fn render_runtime_state(frame: &mut Frame, data: &StablecoinData, area: Rect) {
 
     let active_roles = data.roles.iter().filter(|r| r.active).count();
     let total_roles = data.roles.len();
-    let active_minters = data.minters.iter().filter(|m| {
-        data.roles.iter().any(|r| r.user == m.minter && r.role_type == 0 && r.active)
-    }).count();
+    let active_minters = data
+        .minters
+        .iter()
+        .filter(|m| {
+            data.roles
+                .iter()
+                .any(|r| r.user == m.minter && r.role_type == 0 && r.active)
+        })
+        .count();
 
     let lines = vec![
         Line::from(vec![
@@ -446,7 +603,11 @@ fn render_runtime_state(frame: &mut Frame, data: &StablecoinData, area: Rect) {
             Span::styled(" Blacklisted:  ", Style::default().fg(CLR_LABEL)),
             Span::styled(
                 format!("{} addresses", data.blacklist.len()),
-                Style::default().fg(if data.blacklist.is_empty() { CLR_VALUE } else { CLR_WARN }),
+                Style::default().fg(if data.blacklist.is_empty() {
+                    CLR_VALUE
+                } else {
+                    CLR_WARN
+                }),
             ),
         ]),
     ];
@@ -490,6 +651,80 @@ fn render_runtime_state(frame: &mut Frame, data: &StablecoinData, area: Rect) {
         .label(format!("{:.1}%", ratio * 100.0));
 
     frame.render_widget(gauge, rows[1]);
+
+    let now = chrono::Local::now();
+    let freshness = data.freshness_at(now);
+    let freshness_badge = match freshness {
+        FetchFreshness::Fresh => Span::styled(
+            "● FRESH",
+            Style::default().fg(CLR_ACTIVE).add_modifier(Modifier::BOLD),
+        ),
+        FetchFreshness::Stale => Span::styled(
+            "● STALE",
+            Style::default().fg(CLR_WARN).add_modifier(Modifier::BOLD),
+        ),
+        FetchFreshness::Error => Span::styled(
+            "● ERROR",
+            Style::default().fg(CLR_ERR).add_modifier(Modifier::BOLD),
+        ),
+        FetchFreshness::Connecting => Span::styled(
+            "● CONNECTING",
+            Style::default().fg(CLR_WARN).add_modifier(Modifier::BOLD),
+        ),
+    };
+    let blacklist_tone = if data.blacklist.is_empty() {
+        CLR_ACTIVE
+    } else {
+        CLR_ERR
+    };
+    let telemetry_lines = vec![
+        Line::from(vec![
+            Span::styled(" Freshness:  ", Style::default().fg(CLR_LABEL)),
+            freshness_badge,
+        ]),
+        Line::from(vec![
+            Span::styled(" Last Sync:  ", Style::default().fg(CLR_LABEL)),
+            Span::styled(
+                data.age_label(now).unwrap_or_else(|| "n/a".to_string()),
+                Style::default().fg(CLR_VALUE),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled(" Compliance: ", Style::default().fg(CLR_LABEL)),
+            Span::styled(
+                if data.blacklist.is_empty() {
+                    "clear".to_string()
+                } else {
+                    format!("{} blocked", data.blacklist.len())
+                },
+                Style::default().fg(blacklist_tone),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled(" Fetch State: ", Style::default().fg(CLR_LABEL)),
+            Span::styled(
+                data.error
+                    .as_deref()
+                    .map(|error| truncate_str(error, 18).to_string())
+                    .unwrap_or_else(|| "healthy".to_string()),
+                Style::default().fg(if data.error.is_some() {
+                    CLR_ERR
+                } else {
+                    CLR_VALUE
+                }),
+            ),
+        ]),
+    ];
+
+    let telemetry = Paragraph::new(telemetry_lines).block(
+        Block::default()
+            .title(" Telemetry ")
+            .title_style(Style::default().fg(CLR_TITLE).add_modifier(Modifier::BOLD))
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(CLR_INACTIVE)),
+    );
+
+    frame.render_widget(telemetry, rows[2]);
 }
 
 // ── Roles tab ───────────────────────────────────────────────────────────────
@@ -534,8 +769,7 @@ fn render_roles(frame: &mut Frame, app: &App, data: &StablecoinData, area: Rect)
             Row::new(vec![
                 Cell::from(short_pubkey(&role.user)),
                 Cell::from(role_name(role.role_type)),
-                Cell::from(if role.active { "Active" } else { "Inactive" })
-                    .style(status_style),
+                Cell::from(if role.active { "Active" } else { "Inactive" }).style(status_style),
             ])
             .style(style)
         })
@@ -668,9 +902,7 @@ fn render_minters(frame: &mut Frame, app: &App, data: &StablecoinData, area: Rec
                         minter.quota,
                         remaining,
                     ))
-                    .title_style(
-                        Style::default().fg(CLR_TITLE).add_modifier(Modifier::BOLD),
-                    )
+                    .title_style(Style::default().fg(CLR_TITLE).add_modifier(Modifier::BOLD))
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(CLR_INACTIVE)),
             )
@@ -756,9 +988,10 @@ fn render_blacklist(frame: &mut Frame, app: &App, data: &StablecoinData, area: R
 fn render_help(frame: &mut Frame, area: Rect) {
     let lines = vec![
         Line::from(""),
-        Line::from(vec![
-            Span::styled("  Navigation", Style::default().fg(CLR_TITLE).add_modifier(Modifier::BOLD)),
-        ]),
+        Line::from(vec![Span::styled(
+            "  Navigation",
+            Style::default().fg(CLR_TITLE).add_modifier(Modifier::BOLD),
+        )]),
         Line::from(vec![
             Span::styled("    Tab / Shift+Tab   ", Style::default().fg(CLR_ACCENT)),
             Span::styled("Cycle between tabs", Style::default().fg(CLR_LABEL)),
@@ -776,39 +1009,43 @@ fn render_help(frame: &mut Frame, area: Rect) {
             Span::styled("Jump to first item", Style::default().fg(CLR_LABEL)),
         ]),
         Line::from(""),
-        Line::from(vec![
-            Span::styled("  Actions", Style::default().fg(CLR_TITLE).add_modifier(Modifier::BOLD)),
-        ]),
+        Line::from(vec![Span::styled(
+            "  Actions",
+            Style::default().fg(CLR_TITLE).add_modifier(Modifier::BOLD),
+        )]),
         Line::from(vec![
             Span::styled("    r                 ", Style::default().fg(CLR_ACCENT)),
-            Span::styled("Refresh data from Solana RPC", Style::default().fg(CLR_LABEL)),
+            Span::styled(
+                "Refresh data from Solana RPC",
+                Style::default().fg(CLR_LABEL),
+            ),
         ]),
         Line::from(vec![
             Span::styled("    q / Ctrl+C        ", Style::default().fg(CLR_ACCENT)),
             Span::styled("Quit the dashboard", Style::default().fg(CLR_LABEL)),
         ]),
         Line::from(""),
-        Line::from(vec![
-            Span::styled("  About", Style::default().fg(CLR_TITLE).add_modifier(Modifier::BOLD)),
-        ]),
-        Line::from(vec![
-            Span::styled("    SSS Admin TUI v0.1.0", Style::default().fg(CLR_LABEL)),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "    Solana Stablecoin Standard — Interactive Dashboard",
-                Style::default().fg(CLR_LABEL),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "    Data refreshes automatically every 5 seconds",
-                Style::default().fg(CLR_INACTIVE),
-            ),
-        ]),
+        Line::from(vec![Span::styled(
+            "  About",
+            Style::default().fg(CLR_TITLE).add_modifier(Modifier::BOLD),
+        )]),
+        Line::from(vec![Span::styled(
+            "    SSS Admin TUI v0.1.0",
+            Style::default().fg(CLR_LABEL),
+        )]),
+        Line::from(vec![Span::styled(
+            "    Solana Stablecoin Standard — Interactive Dashboard",
+            Style::default().fg(CLR_LABEL),
+        )]),
+        Line::from(vec![Span::styled(
+            "    Data refreshes automatically; r forces an immediate poll",
+            Style::default().fg(CLR_INACTIVE),
+        )]),
     ];
 
-    let p = Paragraph::new(lines).block(section_block(" Help ")).wrap(Wrap { trim: false });
+    let p = Paragraph::new(lines)
+        .block(section_block(" Help "))
+        .wrap(Wrap { trim: false });
 
     frame.render_widget(p, area);
 }

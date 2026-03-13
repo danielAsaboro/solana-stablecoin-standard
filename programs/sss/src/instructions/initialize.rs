@@ -41,6 +41,8 @@ pub struct InitializeParams {
     pub enable_confidential_transfer: bool,
     /// The transfer hook program ID. Required when `enable_transfer_hook` is true.
     pub transfer_hook_program_id: Option<Pubkey>,
+    /// Global supply cap in base units. Set to 0 for unlimited supply.
+    pub supply_cap: u64,
 }
 
 /// Accounts required to initialize a new stablecoin.
@@ -88,6 +90,10 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     require!(params.symbol.len() <= MAX_SYMBOL_LEN, StablecoinError::SymbolTooLong);
     require!(params.uri.len() <= MAX_URI_LEN, StablecoinError::UriTooLong);
     require!(params.decimals <= 9, StablecoinError::InvalidDecimals);
+    require!(
+        !params.enable_transfer_hook || params.transfer_hook_program_id.is_some(),
+        StablecoinError::InvalidConfig
+    );
 
     let config_key = ctx.accounts.config.key();
     let mint_key = ctx.accounts.mint.key();
@@ -164,10 +170,11 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     }
 
     // 3. Initialize transfer hook extension (if enabled) — BEFORE initialize_mint2
+    // Safety: validated above that transfer_hook_program_id.is_some() when enable_transfer_hook
     if params.enable_transfer_hook {
         let hook_program_id = params
             .transfer_hook_program_id
-            .unwrap_or_default();
+            .unwrap();
         invoke(
             &transfer_hook::instruction::initialize(
                 ctx.accounts.token_program.key,
@@ -261,8 +268,11 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     config.transfer_hook_program = params
         .transfer_hook_program_id
         .unwrap_or_default();
+    config.supply_cap = params.supply_cap;
+    config.pending_authority = Pubkey::default();
+    config.authority_transfer_at = 0;
     config.bump = bump;
-    config._reserved = [0u8; 63];
+    config._reserved = [0u8; 15];
 
     emit!(StablecoinInitialized {
         config: config_key,

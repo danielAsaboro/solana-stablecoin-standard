@@ -4,6 +4,7 @@
 //! and webhook registration. Connects to Solana RPC for on-chain execution.
 
 use std::env;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::{
@@ -19,6 +20,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use sss_backend::services::compliance::ComplianceService;
 use sss_backend::services::indexer::IndexerService;
 use sss_backend::services::mint_burn::MintBurnService;
+use sss_backend::services::operator_snapshots::OperatorSnapshotService;
 use sss_backend::services::webhook::WebhookService;
 use sss_backend::solana::{self, SolanaContext};
 use sss_backend::AppState;
@@ -93,6 +95,12 @@ fn init_solana_context() -> Option<Arc<SolanaContext>> {
     )))
 }
 
+fn backend_state_dir() -> PathBuf {
+    env::var("SSS_BACKEND_STATE_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(".sss-backend-state"))
+}
+
 #[tokio::main]
 async fn main() {
     // Initialize structured logging
@@ -105,16 +113,52 @@ async fn main() {
         .init();
 
     // Initialize Solana context (optional — backend works without it)
+    let state_dir = backend_state_dir();
+    tracing::info!(state_dir = %state_dir.display(), "Backend persistence enabled");
+
+    let webhook = Arc::new(
+        WebhookService::with_persistence(state_dir.join("webhooks.json"))
+            .expect("Failed to initialize webhook persistence"),
+    );
+    let operator_snapshots = Arc::new(
+        OperatorSnapshotService::with_persistence(state_dir.join("operator_snapshots.json"))
+            .expect("Failed to initialize operator snapshot persistence"),
+    );
+
     let solana_ctx = init_solana_context();
     let mint_burn = solana_ctx
         .as_ref()
-        .map(|ctx| Arc::new(MintBurnService::new(Arc::clone(ctx))));
+        .map(|ctx| {
+            Arc::new(
+                MintBurnService::with_persistence(
+                    Arc::clone(ctx),
+                    state_dir.join("mint_burn.json"),
+                )
+                .expect("Failed to initialize mint/burn persistence"),
+            )
+        });
     let compliance = solana_ctx
         .as_ref()
-        .map(|ctx| Arc::new(ComplianceService::new(Arc::clone(ctx))));
+        .map(|ctx| {
+            Arc::new(
+                ComplianceService::with_persistence(
+                    Arc::clone(ctx),
+                    state_dir.join("compliance.json"),
+                )
+                .expect("Failed to initialize compliance persistence"),
+            )
+        });
     let indexer = solana_ctx
         .as_ref()
-        .map(|ctx| Arc::new(IndexerService::new(Arc::clone(ctx))));
+        .map(|ctx| {
+            Arc::new(
+                IndexerService::with_persistence(
+                    Arc::clone(ctx),
+                    state_dir.join("indexer.json"),
+                )
+                .expect("Failed to initialize indexer persistence"),
+            )
+        });
 
     // Start the indexer background polling loop (every 10 seconds)
     if let Some(ref indexer_service) = indexer {
@@ -122,17 +166,16 @@ async fn main() {
             .ok()
             .and_then(|v| v.parse::<u64>().ok())
             .unwrap_or(10);
-        Arc::clone(indexer_service).start_polling(polling_interval);
+        Arc::clone(indexer_service)
+            .start_polling_with_webhooks(Arc::clone(&webhook), polling_interval);
     }
-
-    // Webhook service is always available (no Solana dependency)
-    let webhook = Arc::new(WebhookService::new());
 
     let state = AppState {
         mint_burn,
         compliance,
         indexer,
         webhook,
+        operator_snapshots,
     };
 
     // CORS configuration

@@ -4,6 +4,7 @@
 //! keypair, sends transactions, and tracks operation status in memory.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use chrono::Utc;
@@ -13,6 +14,7 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::error::AppError;
+use crate::persistence::JsonFileStore;
 use crate::solana::{
     build_burn_instruction, build_mint_instruction, get_associated_token_address, parse_pubkey,
     SolanaContext,
@@ -43,6 +45,8 @@ pub struct MintBurnOperation {
     pub amount: u64,
     /// Target address (recipient for mint, source for burn)
     pub target: String,
+    /// The authority that submitted the operation.
+    pub authority: String,
     /// Current operation status
     pub status: OperationStatus,
     /// Solana transaction signature (set on completion)
@@ -65,6 +69,12 @@ pub struct MintBurnOperation {
 pub struct MintBurnService {
     ctx: Arc<SolanaContext>,
     operations: RwLock<HashMap<String, MintBurnOperation>>,
+    store: Option<JsonFileStore>,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct PersistedMintBurnState {
+    operations: HashMap<String, MintBurnOperation>,
 }
 
 impl MintBurnService {
@@ -73,7 +83,22 @@ impl MintBurnService {
         Self {
             ctx,
             operations: RwLock::new(HashMap::new()),
+            store: None,
         }
+    }
+
+    /// Create a new service backed by a local JSON persistence file.
+    pub fn with_persistence(
+        ctx: Arc<SolanaContext>,
+        path: impl Into<PathBuf>,
+    ) -> Result<Self, AppError> {
+        let store = JsonFileStore::new(path)?;
+        let persisted: PersistedMintBurnState = store.load_or_default()?;
+        Ok(Self {
+            ctx,
+            operations: RwLock::new(persisted.operations),
+            store: Some(store),
+        })
     }
 
     /// Mint tokens to a recipient wallet address.
@@ -98,6 +123,7 @@ impl MintBurnService {
             operation_type: "mint".to_string(),
             amount,
             target: recipient.to_string(),
+            authority: self.ctx.keypair.pubkey().to_string(),
             status: OperationStatus::Executing,
             signature: None,
             error: None,
@@ -106,6 +132,7 @@ impl MintBurnService {
         };
 
         self.operations.write().await.insert(id.clone(), op.clone());
+        self.persist_state().await;
 
         tracing::info!(
             op_id = %id,
@@ -131,11 +158,13 @@ impl MintBurnService {
                 op.error = Some(e.to_string());
                 op.completed_at = Some(Utc::now().to_rfc3339());
                 self.operations.write().await.insert(id, op.clone());
+                self.persist_state().await;
                 return Err(e);
             }
         }
 
         self.operations.write().await.insert(id, op.clone());
+        self.persist_state().await;
         Ok(op)
     }
 
@@ -162,6 +191,7 @@ impl MintBurnService {
             operation_type: "burn".to_string(),
             amount,
             target: from_account.to_string(),
+            authority: self.ctx.keypair.pubkey().to_string(),
             status: OperationStatus::Executing,
             signature: None,
             error: None,
@@ -170,6 +200,7 @@ impl MintBurnService {
         };
 
         self.operations.write().await.insert(id.clone(), op.clone());
+        self.persist_state().await;
 
         tracing::info!(
             op_id = %id,
@@ -194,11 +225,13 @@ impl MintBurnService {
                 op.error = Some(e.to_string());
                 op.completed_at = Some(Utc::now().to_rfc3339());
                 self.operations.write().await.insert(id, op.clone());
+                self.persist_state().await;
                 return Err(e);
             }
         }
 
         self.operations.write().await.insert(id, op.clone());
+        self.persist_state().await;
         Ok(op)
     }
 
@@ -234,5 +267,26 @@ impl MintBurnService {
     /// Returns the SSS program ID.
     pub fn program_id(&self) -> String {
         self.ctx.program_id.to_string()
+    }
+
+    async fn persist_state(&self) {
+        let Some(store) = &self.store else {
+            return;
+        };
+
+        let snapshot = {
+            let operations = self.operations.read().await;
+            PersistedMintBurnState {
+                operations: operations.clone(),
+            }
+        };
+
+        if let Err(e) = store.save(&snapshot) {
+            tracing::error!(
+                error = %e,
+                path = %store.path().display(),
+                "Failed to persist mint/burn state"
+            );
+        }
     }
 }

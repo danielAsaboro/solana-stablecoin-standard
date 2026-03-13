@@ -2703,6 +2703,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "sss-10"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+ "anchor-spl",
+ "blake3",
+ "constant_time_eq",
+]
+
+[[package]]
+name = "sss-11"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+ "anchor-spl",
+ "blake3",
+ "constant_time_eq",
+]
+
+[[package]]
+name = "sss-allowlist"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+ "blake3",
+ "constant_time_eq",
+]
+
+[[package]]
+name = "sss-caps"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+ "blake3",
+ "constant_time_eq",
+]
+
+[[package]]
 name = "sss-oracle"
 version = "0.1.0"
 dependencies = [
@@ -2718,6 +2756,15 @@ version = "0.1.0"
 dependencies = [
  "anchor-lang",
  "anchor-spl",
+ "blake3",
+ "constant_time_eq",
+]
+
+[[package]]
+name = "sss-timelock"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
  "blake3",
  "constant_time_eq",
 ]

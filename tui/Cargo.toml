@@ -26,6 +26,8 @@ clap = { version = "4", features = ["derive", "env"] }
 # Utilities
 chrono = "0.4"
 anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+reqwest = { version = "0.12", features = ["blocking", "json"] }
 
 # Pinned for Solana BPF compatibility
 constant_time_eq = "=0.3.1"

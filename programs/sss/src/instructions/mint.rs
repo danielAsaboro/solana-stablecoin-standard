@@ -57,8 +57,11 @@ pub struct MintTokens<'info> {
 /// Mint `amount` tokens to the recipient's token account.
 ///
 /// Validates the stablecoin is not paused, the minter has sufficient quota,
-/// then performs a `mint_to` CPI signed by the config PDA. Updates the minter's
-/// cumulative total and the global `total_minted` counter. Emits [`TokensMinted`].
+/// checks the global supply cap (if non-zero), then performs a `mint_to` CPI
+/// signed by the config PDA. If `default_account_frozen` is set and the
+/// recipient account is not yet frozen, a `freeze_account` CPI is issued
+/// immediately after minting. Updates the minter's cumulative total and the
+/// global `total_minted` counter. Emits [`TokensMinted`].
 pub fn handler(ctx: Context<MintTokens>, amount: u64) -> Result<()> {
     require!(amount > 0, StablecoinError::ZeroAmount);
     require!(!ctx.accounts.config.paused, StablecoinError::Paused);
@@ -72,20 +75,31 @@ pub fn handler(ctx: Context<MintTokens>, amount: u64) -> Result<()> {
     minter_quota.minted = new_minted;
 
     let config = &mut ctx.accounts.config;
+
+    // FIX-2: enforce global supply cap (0 = unlimited)
+    if config.supply_cap > 0 {
+        let new_total = config
+            .total_minted
+            .checked_add(amount)
+            .ok_or(StablecoinError::MathOverflow)?;
+        require!(new_total <= config.supply_cap, StablecoinError::SupplyCapExceeded);
+    }
+
     config.total_minted = config
         .total_minted
         .checked_add(amount)
         .ok_or(StablecoinError::MathOverflow)?;
 
-    // CPI: mint_to via config PDA as mint authority
     let mint_key = config.mint;
     let bump = config.bump;
+    let default_frozen = config.default_account_frozen;
     let signer_seeds: &[&[&[u8]]] = &[&[
         STABLECOIN_SEED,
         mint_key.as_ref(),
         &[bump],
     ]];
 
+    // CPI: mint_to via config PDA as mint authority
     token_interface::mint_to(
         CpiContext::new_with_signer(
             ctx.accounts.token_program.to_account_info(),
@@ -98,6 +112,22 @@ pub fn handler(ctx: Context<MintTokens>, amount: u64) -> Result<()> {
         ),
         amount,
     )?;
+
+    // FIX-1: if default_account_frozen, freeze the recipient's ATA after minting
+    // (skip if already frozen to avoid a redundant CPI error)
+    if default_frozen && !ctx.accounts.recipient_token_account.is_frozen() {
+        token_interface::freeze_account(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                token_interface::FreezeAccount {
+                    account: ctx.accounts.recipient_token_account.to_account_info(),
+                    mint: ctx.accounts.mint.to_account_info(),
+                    authority: ctx.accounts.config.to_account_info(),
+                },
+                signer_seeds,
+            ),
+        )?;
+    }
 
     emit!(TokensMinted {
         config: ctx.accounts.config.key(),

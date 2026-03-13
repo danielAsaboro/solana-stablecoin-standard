@@ -5,7 +5,8 @@
   "license": "MIT",
   "main": "src/index.ts",
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "test": "echo 'Re-exports only — tests in @stbr/sss-core-sdk'"
   },
   "dependencies": {
     "@stbr/sss-core-sdk": "0.1.0",

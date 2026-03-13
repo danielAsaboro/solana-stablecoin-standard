@@ -16,6 +16,7 @@ import {
   loadKeypair,
   getConnection,
   loadConfig,
+  SSS_PROGRAM_ID,
 } from "../helpers";
 import {
   spin,
@@ -99,7 +100,7 @@ async function handleHolders(
   globalOpts: Record<string, string>,
   cmdOpts: { minBalance?: string; sort?: string; limit?: string; showFrozen?: boolean }
 ): Promise<void> {
-  const sssConfig = loadConfig(globalOpts.config);
+  const sssConfig = loadConfig(globalOpts.config, globalOpts.profile);
   const keypair = loadKeypair(globalOpts.keypair);
   const connection = getConnection(globalOpts.rpc || sssConfig.rpcUrl);
 
@@ -124,7 +125,7 @@ async function handleHolders(
   const provider = new anchor.AnchorProvider(connection, wallet, { commitment: "confirmed" });
   const configPDA = new PublicKey(sssConfig.configAddress);
   const idl = await anchor.Program.fetchIdl(
-    new PublicKey("7CPH4PAWa9n4rizL8UGDi7h361NU5jMWGX7VjSBydgjd"),
+    SSS_PROGRAM_ID,
     provider
   );
   let decimals = 6; // default

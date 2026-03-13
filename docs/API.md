@@ -11,6 +11,14 @@ It provides synchronous on-chain execution, operation tracking, compliance manag
 
 ---
 
+## Storage Model
+
+The backend now persists its API-layer state to local JSON snapshot files under `SSS_BACKEND_STATE_DIR` (default: `./.sss-backend-state`). Mint/burn operations, compliance audit entries, indexed events, webhook registrations, and webhook delivery records survive process restarts in local development.
+
+The on-chain event log is still the authoritative source of truth. The local snapshot layer exists to make the backend operational and restart-safe during local testing; it is not a substitute for a production database if you need higher write volume, multi-instance coordination, or stronger durability guarantees.
+
+---
+
 ## Running
 
 ### Docker Compose
@@ -20,7 +28,7 @@ cd backend
 docker compose up
 ```
 
-This starts the **backend** on port `3001`. All data is stored in-memory; no external database is required.
+This starts the **backend** on port `3001`. Local state is written to `./.sss-backend-state` unless `SSS_BACKEND_STATE_DIR` is set.
 
 ### Local Development
 
@@ -329,13 +337,27 @@ GET /api/v1/audit
 
 Returns the compliance audit trail (all blacklist and unblacklist operations), newest first. Excludes read-only check queries.
 
+**Query Parameters**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `limit` | `number` | Max entries to return (default `100`, max `1000`) |
+| `format` | `string` | Optional `jsonl` or `ndjson` to return newline-delimited JSON |
+
+**Accept header**:
+
+- `Accept: application/x-ndjson` also returns newline-delimited JSON.
+
 **Response** `200 OK`:
 ```json
 [
   {
     "id": "550e8400-e29b-41d4-a716-446655440002",
+    "event_type": "compliance.blacklist",
     "action": "blacklist",
-    "address": "7Xzw3pQFkHhgx3nL9mVqRsJkYtBnXdWpHcGfZeKuAmPs",
+    "severity": "info",
+    "target_type": "wallet",
+    "target_address": "7Xzw3pQFkHhgx3nL9mVqRsJkYtBnXdWpHcGfZeKuAmPs",
     "reason": "OFAC sanctions compliance",
     "status": "completed",
     "signature": "7Mn2kL3...",
@@ -343,6 +365,14 @@ Returns the compliance audit trail (all blacklist and unblacklist operations), n
     "timestamp": "2025-01-15T10:32:00Z"
   }
 ]
+```
+
+**JSONL response** `200 OK`:
+
+Each line is one full audit event object, with no wrapper array:
+
+```json
+{"id":"550e8400-e29b-41d4-a716-446655440002","event_type":"compliance.blacklist","action":"blacklist","severity":"info","target_type":"wallet","target_address":"7Xzw3pQFkHhgx3nL9mVqRsJkYtBnXdWpHcGfZeKuAmPs","reason":"OFAC sanctions compliance","status":"completed","signature":"7Mn2kL3...","authority":"4Zw1fXuYuJhkMuMELSZpDhRrtgCqQ5iqSGPuXXFjHmJG","timestamp":"2025-01-15T10:32:00Z"}
 ```
 
 ---
@@ -402,6 +432,86 @@ Returns indexed on-chain SSS program events. The indexer background task polls t
 
 ---
 
+### Operator Timeline
+
+```
+GET /api/v1/operator-timeline
+```
+
+Returns a merged incident stream for operators by combining tracked mint/burn operations, indexed on-chain events, compliance audit entries, and webhook delivery attempts.
+
+Records with the same transaction signature are grouped into a single incident. When a webhook delivery was emitted from an indexed event, the delivery carries the same `transaction_signature`, `event_id`, and `correlation_id`, so delivery status collapses directly into the originating incident instead of appearing as a separate item.
+
+**Query Parameters**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `limit` | `number` | Max incidents to return (default: `50`, max: `200`) |
+| `source` | `string` | Optional comma-separated source filter: `operations`, `indexer`, `compliance`, `webhook` |
+| `severity` | `string` | Optional comma-separated severity filter: `info`, `success`, `warning`, `critical` |
+| `action` | `string` | Optional normalized action filter such as `mint`, `blacklist.add`, or `webhook.failed` |
+| `status` | `string` | Optional status filter such as `executing`, `completed`, `restricted`, or `failed` |
+| `address` | `string` | Optional target-address substring filter |
+| `authority` | `string` | Optional authority substring filter |
+| `signature` | `string` | Optional transaction-signature substring filter |
+| `date_from` | `string` | Optional RFC 3339 lower-bound timestamp |
+| `date_to` | `string` | Optional RFC 3339 upper-bound timestamp |
+| `format` | `string` | Optional export format: `jsonl` / `ndjson` or `csv` |
+
+**Response** `200 OK`:
+```json
+[
+  {
+    "id": "tx:4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZ",
+    "occurred_at": "2026-03-12T10:01:00Z",
+    "action": "blacklist.add",
+    "severity": "critical",
+    "status": "restricted",
+    "summary": "Indexed blacklist.add event: AddressBlacklisted with 2 related records across indexer, compliance, webhook",
+    "signature": "4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZ",
+    "authority": "4Nd1mY4bP9RTpV1ZVYzX4t1f34Fq3KZgY7uTW6R1YB3R",
+    "target_address": "11111111111111111111111111111111",
+    "sources": ["indexer", "compliance", "webhook"],
+    "related_count": 3,
+    "records": [
+      {
+        "id": "event-1",
+        "source": "indexer",
+        "occurred_at": "2026-03-12T10:01:00Z",
+        "action": "blacklist.add",
+        "severity": "critical",
+        "status": "restricted",
+        "summary": "Indexed blacklist.add event: AddressBlacklisted",
+        "event_type": "AddressBlacklisted",
+        "signature": "4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZ",
+        "authority": "4Nd1mY4bP9RTpV1ZVYzX4t1f34Fq3KZgY7uTW6R1YB3R",
+        "target_address": "11111111111111111111111111111111",
+        "correlation_id": "tx:4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZ"
+      }
+    ]
+  }
+]
+```
+
+Use this route for operator consoles and incident review. Use `/api/v1/audit?format=jsonl` when you need raw line-oriented audit export.
+
+Related operator routes:
+
+- `GET /api/v1/operator-timeline/{id}` returns a single expanded incident.
+- `POST /api/v1/operator-timeline/{id}/redeliver` replays webhook deliveries already attached to that incident.
+- `GET /api/v1/operator-evidence` returns a bundled operator-proof export.
+- `POST /api/v1/operator-snapshots` stores a read-only evidence snapshot.
+- `GET /api/v1/operator-snapshots`
+- `GET /api/v1/operator-snapshots/{id}`
+- `GET /api/v1/operator-snapshots/diff?from=<id>&to=<id>`
+
+Evidence and snapshot notes:
+
+- Summary fields such as `paused`, `live_supply`, `role_count`, `minter_count`, and `blacklist_count` are nullable when the backend does not have a direct exact source for that value.
+- The operator evidence bundle is meant to be truthful operator proof, not an inferred synthetic state snapshot.
+
+---
+
 ### Get Event Count
 
 ```
@@ -447,7 +557,7 @@ Registers a URL to receive HTTP POST notifications when on-chain events occur. A
 ```json
 {
   "url": "https://your-service.com/webhook",
-  "events": ["TokensMinted", "AccountBlacklisted"],
+  "events": ["TokensMinted", "AddressBlacklisted"],
   "secret": "optional-hmac-secret"
 }
 ```
@@ -463,11 +573,15 @@ Registers a URL to receive HTTP POST notifications when on-chain events occur. A
 {
   "id": "550e8400-e29b-41d4-a716-446655440010",
   "url": "https://your-service.com/webhook",
-  "events": ["TokensMinted", "AccountBlacklisted"],
+  "events": ["TokensMinted", "AddressBlacklisted"],
   "active": true,
   "created_at": "2025-01-15T10:00:00Z",
   "delivery_count": 0,
-  "failure_count": 0
+  "failure_count": 0,
+  "signing_enabled": true,
+  "signature_header": "X-SSS-Signature",
+  "signature_algorithm": "HMAC-SHA256",
+  "signature_verification": "HMAC-SHA256(secret, raw_request_body_bytes)"
 }
 ```
 
@@ -477,6 +591,9 @@ Registers a URL to receive HTTP POST notifications when on-chain events occur. A
   "id": "550e8400-e29b-41d4-a716-446655440020",
   "event_type": "TokensMinted",
   "timestamp": "2025-01-15T10:30:00Z",
+  "correlation_id": "tx:5N8wzC2K1b7oQn4g7P3m9r6zQ4vY2hX3qT8rP9s1u2vW",
+  "transaction_signature": "5N8wzC2K1b7oQn4g7P3m9r6zQ4vY2hX3qT8rP9s1u2vW",
+  "event_id": "550e8400-e29b-41d4-a716-446655440021",
   "data": {
     "config": "8Dp6VmCHHVmx4fEiXMoepkUjJGtFGBNzFvpHgQZVL8JK",
     "recipient": "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
@@ -494,6 +611,12 @@ X-SSS-Signature: sha256=a1b2c3d4e5f6...
 
 Verify the signature: `HMAC-SHA256(secret, raw_request_body_bytes)`.
 
+Correlation notes:
+
+- `transaction_signature` is present when the backend emitted the delivery from an indexed on-chain event.
+- `correlation_id` is the stable operator key used by `/api/v1/operator-timeline`.
+- `event_id` identifies the indexed backend event that originated the delivery.
+
 **Retry policy**: Up to 3 delivery attempts with exponential backoff (1s → 2s → 4s). HTTP 4xx responses are treated as permanent failures and not retried.
 
 ---
@@ -504,7 +627,7 @@ Verify the signature: `HMAC-SHA256(secret, raw_request_body_bytes)`.
 GET /api/v1/webhooks
 ```
 
-**Response** `200 OK`: Array of webhook registration objects.
+**Response** `200 OK`: Array of webhook registration objects with the same signing metadata fields shown above. The secret itself is never returned after registration.
 
 ---
 
@@ -550,11 +673,18 @@ Returns recent webhook delivery attempts (newest first, max 10,000 entries).
     "id": "550e8400-e29b-41d4-a716-446655440030",
     "webhook_id": "550e8400-e29b-41d4-a716-446655440010",
     "event_type": "TokensMinted",
+    "correlation_id": "tx:5N8wzC2K1b7oQn4g7P3m9r6zQ4vY2hX3qT8rP9s1u2vW",
+    "transaction_signature": "5N8wzC2K1b7oQn4g7P3m9r6zQ4vY2hX3qT8rP9s1u2vW",
+    "event_id": "550e8400-e29b-41d4-a716-446655440021",
+    "replayed_from": "550e8400-e29b-41d4-a716-446655440020",
     "status": "delivered",
-    "http_status": 200,
-    "attempt": 1,
+    "attempts": 1,
+    "last_attempt_at": "2025-01-15T10:30:00Z",
+    "response_code": 200,
     "created_at": "2025-01-15T10:30:00Z",
-    "response_time_ms": 145
+    "finalized": true,
+    "retry_scheduled": false,
+    "max_attempts": 3
   }
 ]
 ```
@@ -564,6 +694,24 @@ Returns recent webhook delivery attempts (newest first, max 10,000 entries).
 | `pending` | Delivery in progress |
 | `delivered` | Received 2xx HTTP response |
 | `failed` | All retry attempts exhausted |
+
+Operator-facing notes:
+
+- `signing_enabled=true` means outbound deliveries include `X-SSS-Signature`.
+- `signature_verification` always refers to the raw request body bytes, not a parsed JSON re-encoding.
+- `retry_scheduled=true` indicates the delivery is still in-flight and another retry attempt is expected.
+- `transaction_signature` and `correlation_id` let operator tooling collapse webhook delivery evidence into the originating transaction incident.
+- `replayed_from` is present when an operator manually replays an existing delivery.
+
+### Replay Delivery
+
+```
+POST /api/v1/webhooks/deliveries/{id}/redeliver
+```
+
+Creates a new delivery attempt using the original persisted payload. The new delivery record sets `replayed_from` to the original delivery ID.
+
+**Response** `200 OK`: delivery record with the same shape as `GET /api/v1/webhooks/deliveries`.
 
 ---
 
@@ -600,6 +748,7 @@ All errors return a JSON body:
 | `SSS_MINT_ADDRESS` | **Yes** | _(none)_ | Token-2022 mint address. Required for Solana ops |
 | `SSS_KEYPAIR_PATH` | No | `~/.config/solana/id.json` | Service keypair. Must hold required on-chain roles |
 | `SSS_INDEXER_INTERVAL_SECS` | No | `10` | Event indexer polling interval in seconds |
+| `SSS_BACKEND_STATE_DIR` | No | `./.sss-backend-state` | Local JSON snapshot directory for backend state |
 | `RUST_LOG` | No | `sss_backend=debug` | Rust tracing log filter |
 
 Copy `backend/.env.example` for a complete annotated reference.

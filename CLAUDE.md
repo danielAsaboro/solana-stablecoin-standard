@@ -1,101 +1,87 @@
-# Solana Stablecoin Standard (SSS) — Development Guide
+# Solana Stablecoin Standard (SSS)
 
-## Overview
-SSS is a modular stablecoin toolkit for Solana with two presets:
-- **SSS-1**: Minimal stablecoin (mint, burn, freeze, pause, roles)
-- **SSS-2**: Compliant stablecoin (adds blacklist, seize, transfer hook enforcement)
+Modular, compliance-ready stablecoin toolkit for Solana. Three presets — from minimal (SSS-1) to fully regulated with transfer hooks and seizure (SSS-2) to privacy-preserving with confidential transfers (SSS-3).
 
-## Architecture
-- `programs/sss/` — Main Anchor program (Token-2022)
-- `programs/transfer-hook/` — SPL Transfer Hook for blacklist enforcement
-- `programs/oracle/` — Switchboard V2 price feed integration for non-USD pegs
-- `sdk/core/` — `@stbr/sss-core-sdk` TypeScript SDK
-- `sdk/compliance/` — `@stbr/sss-compliance-sdk` compliance extensions
-- `cli/` — `sss-token` CLI tool (commander.js)
-- `backend/` — Rust/Axum API server with Docker
-- `tests/` — Anchor integration tests
-- `scripts/` — Devnet deployment examples
+**Stack**: Anchor 0.31+, Rust 1.82+, Token-2022, TypeScript
+**Reference**: `docs/SSS-1.md`, `docs/SSS-2.md` for standard specifications
 
-## Program IDs (localnet)
-- SSS: `DNfk1e2vMJrxHm4BwoRTVqQxcfYjZLHggxr11hMZ5Dyu`
-- Transfer Hook: `Gcd58Ng9gqRg1XtiU1i8KopwX1u82Mt9VmxKbLJ8RANH`
-- Oracle: `6PHWYPgkVWE7f5Saak4EXVh49rv9ZcXdz7HMfHnQdNLJ`
+## Skills & Commands
 
-## PDA Seeds
-- Config: `["stablecoin", mint]`
-- Role: `["role", config, role_type_u8, user]`
-- MinterQuota: `["minter_quota", config, minter]`
-- BlacklistEntry: `["blacklist", config, address]`
-- ExtraAccountMetas: `["extra-account-metas", mint]` (on hook program)
-- OracleConfig: `["oracle_config", stablecoin_config]` (on oracle program)
+Run `/quick-commit`, `/build-program`, `/test-rust`, `/test-typescript`, `/deploy`, `/audit-solana`, `/test-and-fix`, `/plan-feature`, `/explain-code`, `/write-docs`, `/setup-ci-cd` for workflows.
+Agents: `solana-architect`, `anchor-engineer`, `solana-qa-engineer`, `tech-docs-writer`, `compliance-engineer`, `solana-researcher`
+Details in `.claude/commands/`, `.claude/agents/`, `.claude/skills/`
 
-## Key Conventions
-- Anchor 0.31.1 (CLI 0.32.1)
-- Token-2022 for all token operations
-- Config PDA owns mint authority, freeze authority, permanent delegate
-- All instructions emit events
-- Checked arithmetic everywhere (no unchecked math)
-- Role-based access control: Minter(0), Burner(1), Pauser(2), Blacklister(3), Seizer(4)
-- Feature gates: SSS-2 instructions check `config.enable_transfer_hook` / `config.enable_permanent_delegate`
+## Standards
 
-## Build & Test
-```bash
-anchor build                    # Build all four programs
-anchor test --skip-build        # Run integration tests (requires Surfpool running)
-npm run test:local              # Full test suite (starts Surfpool automatically)
-npm run test:anchor             # Anchor tests only (requires Surfpool running)
-npm run build:packages          # Build SDK + CLI packages
-npm run test:sdk                # SDK unit tests
-```
+- Build → Format → Lint → Test before commit
+- Devnet first, mainnet only with explicit confirmation
+- Feature gates enforced on-chain (SSS-1 can never gain SSS-2 capabilities)
+- Round supply counters conservatively (checked arithmetic everywhere)
+- Two-step authority transfer (propose → accept)
 
-## Local Validator: Surfpool
+## Anti-Patterns (Growing List)
 
-The project uses **Surfpool** (drop-in for solana-test-validator) running on port 8899.
-Surfpool forks mainnet JIT — Token-2022 and other mainnet programs are fetched automatically.
+**Security - NEVER:**
+- `unwrap()` in program code
+- Unchecked arithmetic — use `checked_add`, `checked_sub`
+- Recalculate PDA bumps — store canonical bumps
+- Skip account validation (owner, signer, PDA derivation)
+- Deploy mainnet without explicit user confirmation
+- Trust CPI return data without validating target program ID
+- Single-step authority transfer (always propose → accept)
 
-### Starting Surfpool correctly
+**Code Quality - NEVER:**
+- Comments stating the obvious (`// increment counter` before `counter += 1`)
+- Defensive try/catch blocks abnormal for the codebase
+- Verbose error messages where simple ones suffice
+- Import unused dependencies
+- Create abstractions for one-time operations
+- Add features beyond what was asked
 
-**Must run from the project root directory** (not from any other project):
+**AI Slop - ALWAYS REMOVE:**
+- Excessive inline comments on self-explanatory code
+- Redundant validation of already-validated data
+- Style inconsistent with surrounding code
+- Empty error handling blocks
+- `// TODO: implement` without actual implementation plan
 
-```bash
-cd /path/to/solana-stablecoin-standard
-surfpool start --network mainnet --legacy-anchor-compatibility --yes --no-tui --no-studio
-```
+**Stablecoin-Specific - NEVER:**
+- Allow SSS-2 instructions without feature gate check
+- Seize without verifying BlacklistEntry PDA exists
+- Mint beyond minter quota without error
+- Skip ExtraAccountMetaList init during SSS-2 setup
+- Initialize SSS-2 config without hookProgram.programId
 
-Or use the npm script:
-```bash
-npm run surfpool:start
-```
+## Lessons Learned
 
-### Critical flags
-- `--network mainnet` — enables JIT mainnet account fetching (Token-2022, etc.)
-- `--yes` — auto-generates the deployment runbook from `Surfpool.toml` without prompts
-- `--legacy-anchor-compatibility` — applies anchor-test-suite defaults for runbook generation
-- WITHOUT `--yes`: runbook is not generated → programs not deployed → all tests fail
+**2026-03: Token-2022 transfer hooks + Anchor**
+- SPL Transfer Hook Execute discriminator `[105, 37, 101, 197, 75, 251, 102, 26]` is NOT Anchor-native
+- Need `fallback` handler in Anchor program for non-Anchor discriminator
+- `anchor_spl::token_interface::transfer_checked` does NOT forward `remaining_accounts` — use raw `invoke_signed`
+- ExtraAccountMetas uses `Seed::AccountData` for dynamic PDA resolution from token account owners
 
-### Auto-deploy mechanism
-Surfpool reads `Surfpool.toml` → generates a `deployment` runbook → deploys all `.so` files at their keypair addresses. Check deployment succeeded:
-```bash
-curl -s -X POST http://localhost:8899 -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"surfnet_getSurfnetInfo","params":[]}' | python3 -m json.tool
-# Should show: runbookExecutions: [{runbookId: "deployment", errors: null}]
-```
+**2026-03: Surfpool + Anchor testing**
+- Must start from project root with `--network mainnet --yes --legacy-anchor-compatibility`
+- Surfpool is stateless — `--yes` re-runs deployment runbook on each start
+- `ticks_per_slot = 100` + `startup_wait = 45000` stabilizes tests
+- Use `{ commitment: "confirmed" }` provider to avoid blockhash expiration
 
-### If programs are missing after restart
-Surfpool is **stateless** — state is lost on restart. The `--yes` flag re-runs the deployment runbook on each start. If you started Surfpool without `--yes`, manually deploy:
-```bash
-anchor deploy --provider.cluster localnet
-```
+**2026-02: ConfidentialTransfer + TransferHook incompatibility**
+- Token-2022 rejects combining these extensions on the same mint
+- SSS-3 uses account approval gating instead of transfer-time hooks
 
-### Surfpool cheatcodes (useful for testing)
-- `surfnet_setAccount` — override any account's lamports/data/owner/executable
-- `surfnet_setTokenAccount` — set token balances directly
-- `surfnet_timeTravel` — advance clock to test time-sensitive logic
-- `surfnet_resetNetwork` — wipe all state back to initial
-- `surfnet_getSurfnetInfo` — check runbook execution status
+**2026-03: Token-2022 metadata space**
+- Metadata space must be pre-funded: `create_account` with base extension space but lamports for `space + metadata_space`
+- `anchor_spl::token_interface` re-exports from `token_2022` module
 
-Dashboard (when not using `--no-studio`): http://localhost:18488
+## Review Checklist
 
-## Dependency Pins
-- `blake3 = "=1.5.5"` — Required for Solana BPF toolchain compatibility
-- `constant_time_eq = "=0.3.1"` — Same reason
+Before merge, run `git diff main...HEAD` and verify:
+- No AI slop introduced
+- Error handling matches existing patterns
+- No unnecessary abstractions added
+- Security checks present where needed
+- Feature gates checked for all SSS-2 instructions
+- Events emitted for all state changes
+- Minter quotas enforced on every mint
+- Two-step authority pattern used for transfers

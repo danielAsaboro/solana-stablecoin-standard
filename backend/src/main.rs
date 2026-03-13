@@ -52,8 +52,8 @@ async fn auth_middleware(req: Request, next: Next) -> Result<Response, StatusCod
 /// those indicate misconfiguration that should be fixed before deployment.
 fn init_solana_context() -> Option<Arc<SolanaContext>> {
     let mint_address = match env::var("SSS_MINT_ADDRESS") {
-        Ok(addr) => addr,
-        Err(_) => {
+        Ok(addr) if !addr.is_empty() => addr,
+        _ => {
             tracing::warn!(
                 "SSS_MINT_ADDRESS not set — Solana operations will be unavailable. \
                  Set SSS_MINT_ADDRESS, SSS_PROGRAM_ID, and SSS_KEYPAIR_PATH to enable."

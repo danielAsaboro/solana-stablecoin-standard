@@ -967,12 +967,19 @@ describe("Authority Rotation: SSS-2 Compliance", () => {
       );
       const extraKeys = dummyIx.keys.slice(4);
 
+      const [targetBlacklistEntry] = PublicKey.findProgramAddressSync(
+        [BLACKLIST_SEED, configPda.toBuffer(), targetUser.publicKey.toBuffer()],
+        program.programId
+      );
+
       await program.methods
         .seize(new anchor.BN(50_000_000))
         .accountsStrict({
           authority: newAuthority.publicKey,
           config: configPda,
           roleAccount: newSeizerRole,
+          blacklistedOwner: targetUser.publicKey,
+          blacklistEntry: targetBlacklistEntry,
           mint: mintKey,
           fromTokenAccount: targetAta,
           toTokenAccount: newAuthorityAta,

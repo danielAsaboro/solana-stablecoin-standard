@@ -58,6 +58,9 @@ import {
   UpdateRolesBuilder,
   UpdateMinterBuilder,
   TransferAuthorityBuilder,
+  ProposeAuthorityBuilder,
+  AcceptAuthorityBuilder,
+  CancelAuthorityBuilder,
   BlacklistAddBuilder,
   BlacklistRemoveBuilder,
   SeizeBuilder,
@@ -103,7 +106,8 @@ export class ComplianceModule {
     private readonly program: Program,
     private readonly connection: Connection,
     private readonly mint: PublicKey,
-    private readonly configAddress: PublicKey
+    private readonly configAddress: PublicKey,
+    private readonly _isSSS2 = false,
   ) {}
 
   /** @internal Create a BuilderContext from this module's state. */
@@ -112,6 +116,7 @@ export class ComplianceModule {
       program: this.program,
       mintAddress: this.mint,
       configAddress: this.configAddress,
+      isSSS2: this._isSSS2,
     };
   }
 
@@ -282,12 +287,27 @@ export class ComplianceModule {
       params.authority
     );
 
+    // Resolve the blacklisted owner from the token account on chain
+    const accountInfo = await this.connection.getAccountInfo(params.fromTokenAccount);
+    if (!accountInfo) {
+      throw new Error("Source token account not found on chain");
+    }
+    const blacklistedOwner = new PublicKey(accountInfo.data.subarray(32, 64));
+
+    const [blacklistEntry] = getBlacklistEntryAddress(
+      this.program.programId,
+      this.configAddress,
+      blacklistedOwner
+    );
+
     return await this.program.methods
       .seize(params.amount)
       .accountsStrict({
         authority: params.authority,
         config: this.configAddress,
         roleAccount,
+        blacklistedOwner,
+        blacklistEntry,
         mint: this.mint,
         fromTokenAccount: params.fromTokenAccount,
         toTokenAccount: params.toTokenAccount,
@@ -416,6 +436,12 @@ export class SolanaStablecoin {
   public readonly compliance: ComplianceModule;
 
   private readonly connection: Connection;
+  private _configCache?: { enableTransferHook: boolean };
+
+  /** Whether this stablecoin uses SSS-2 features (transfer hook enabled). */
+  get isSSS2(): boolean {
+    return this._configCache?.enableTransferHook === true;
+  }
 
   // -------------------------------------------------------------------
   // Private constructor — use factory methods instead
@@ -426,18 +452,21 @@ export class SolanaStablecoin {
     program: Program,
     mint: PublicKey,
     configAddress: PublicKey,
-    configBump: number
+    configBump: number,
+    isSSS2 = false,
   ) {
     this.connection = connection;
     this.program = program;
     this.mintAddress = mint;
     this.configAddress = configAddress;
     this.configBump = configBump;
+    this._configCache = isSSS2 ? { enableTransferHook: true } : undefined;
     this.compliance = new ComplianceModule(
       program,
       connection,
       mint,
-      configAddress
+      configAddress,
+      isSSS2,
     );
   }
 
@@ -595,7 +624,8 @@ export class SolanaStablecoin {
       program,
       mintAddress,
       configAddress,
-      configBump
+      configBump,
+      configAccount.enableTransferHook as boolean,
     );
   }
 
@@ -1070,6 +1100,92 @@ export class SolanaStablecoin {
       .instruction();
   }
 
+  /**
+   * Propose an authority transfer (two-step: propose then accept).
+   *
+   * **Overloaded:**
+   * - `proposeAuthority(params)` — returns a TransactionInstruction
+   * - `proposeAuthority(newAuthority)` — returns a {@link ProposeAuthorityBuilder}
+   */
+  proposeAuthority(params: TransferAuthorityParams): Promise<TransactionInstruction>;
+  proposeAuthority(newAuthority: PublicKey): ProposeAuthorityBuilder;
+  proposeAuthority(
+    paramsOrNewAuth: TransferAuthorityParams | PublicKey
+  ): Promise<TransactionInstruction> | ProposeAuthorityBuilder {
+    if (paramsOrNewAuth instanceof PublicKey) {
+      return new ProposeAuthorityBuilder(this, paramsOrNewAuth);
+    }
+    return this._proposeAuthorityImpl(paramsOrNewAuth);
+  }
+
+  private async _proposeAuthorityImpl(
+    params: TransferAuthorityParams
+  ): Promise<TransactionInstruction> {
+    return await this.program.methods
+      .proposeAuthorityTransfer(params.newAuthority)
+      .accountsStrict({
+        authority: params.authority,
+        config: this.configAddress,
+      })
+      .instruction();
+  }
+
+  /**
+   * Accept a pending authority transfer (must be called by the proposed new authority).
+   *
+   * **Overloaded:**
+   * - `acceptAuthority(params)` — returns a TransactionInstruction
+   * - `acceptAuthority()` — returns an {@link AcceptAuthorityBuilder}
+   */
+  acceptAuthority(params: PauseParams): Promise<TransactionInstruction>;
+  acceptAuthority(): AcceptAuthorityBuilder;
+  acceptAuthority(
+    params?: PauseParams
+  ): Promise<TransactionInstruction> | AcceptAuthorityBuilder {
+    if (params) return this._acceptAuthorityImpl(params);
+    return new AcceptAuthorityBuilder(this);
+  }
+
+  private async _acceptAuthorityImpl(
+    params: PauseParams
+  ): Promise<TransactionInstruction> {
+    return await this.program.methods
+      .acceptAuthorityTransfer()
+      .accountsStrict({
+        newAuthority: params.authority,
+        config: this.configAddress,
+      })
+      .instruction();
+  }
+
+  /**
+   * Cancel a pending authority transfer (must be called by the current authority).
+   *
+   * **Overloaded:**
+   * - `cancelAuthority(params)` — returns a TransactionInstruction
+   * - `cancelAuthority()` — returns a {@link CancelAuthorityBuilder}
+   */
+  cancelAuthority(params: PauseParams): Promise<TransactionInstruction>;
+  cancelAuthority(): CancelAuthorityBuilder;
+  cancelAuthority(
+    params?: PauseParams
+  ): Promise<TransactionInstruction> | CancelAuthorityBuilder {
+    if (params) return this._cancelAuthorityImpl(params);
+    return new CancelAuthorityBuilder(this);
+  }
+
+  private async _cancelAuthorityImpl(
+    params: PauseParams
+  ): Promise<TransactionInstruction> {
+    return await this.program.methods
+      .cancelAuthorityTransfer()
+      .accountsStrict({
+        authority: params.authority,
+        config: this.configAddress,
+      })
+      .instruction();
+  }
+
   // -------------------------------------------------------------------
   // Batch operations — multiple actions in a single transaction
   // -------------------------------------------------------------------
@@ -1189,5 +1305,82 @@ export class SolanaStablecoin {
    */
   getTokenAccount(owner: PublicKey): PublicKey {
     return getAssociatedTokenAddress(this.mintAddress, owner);
+  }
+
+  /**
+   * Fetch all token holders for this stablecoin.
+   *
+   * Uses `getProgramAccounts` with a memcmp filter on the mint address
+   * to find all Token-2022 accounts, then decodes owner, balance, and
+   * frozen state.
+   *
+   * @param opts - Optional filters
+   * @returns Array of holder entries
+   */
+  async getHolders(opts?: {
+    minBalance?: BN;
+    includeFrozen?: boolean;
+    limit?: number;
+  }): Promise<
+    Array<{
+      owner: PublicKey;
+      tokenAccount: PublicKey;
+      balance: BN;
+      frozen: boolean;
+    }>
+  > {
+    const accounts = await this.connection.getProgramAccounts(
+      TOKEN_2022_PROGRAM_ID,
+      {
+        filters: [
+          {
+            memcmp: {
+              offset: 0,
+              bytes: this.mintAddress.toBase58(),
+            },
+          },
+        ],
+      }
+    );
+
+    const holders: Array<{
+      owner: PublicKey;
+      tokenAccount: PublicKey;
+      balance: BN;
+      frozen: boolean;
+    }> = [];
+
+    for (const { pubkey, account } of accounts) {
+      const data = account.data as Buffer;
+      if (data.length < 109) continue;
+
+      const state = data[108];
+      if (state === 0) continue; // uninitialized
+
+      const frozen = state === 2;
+      if (frozen && !opts?.includeFrozen) continue;
+
+      const owner = new PublicKey(data.subarray(32, 64));
+
+      // Read u64 LE at offset 64
+      let rawBalance = BigInt(0);
+      for (let i = 0; i < 8; i++) {
+        rawBalance |= BigInt(data[64 + i]) << BigInt(i * 8);
+      }
+      const balance = new BN(rawBalance.toString());
+
+      if (opts?.minBalance && balance.lt(opts.minBalance)) continue;
+
+      holders.push({ owner, tokenAccount: pubkey, balance, frozen });
+    }
+
+    // Sort by balance descending
+    holders.sort((a, b) => (b.balance.gt(a.balance) ? 1 : b.balance.lt(a.balance) ? -1 : 0));
+
+    if (opts?.limit) {
+      return holders.slice(0, opts.limit);
+    }
+
+    return holders;
   }
 }

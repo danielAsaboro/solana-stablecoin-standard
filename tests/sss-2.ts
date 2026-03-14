@@ -283,6 +283,26 @@ describe("SSS-2: Compliant Stablecoin Lifecycle", () => {
         })
         .rpc({ commitment: "confirmed" });
 
+      // Blacklist target for seize (required by on-chain check)
+      const [blacklisterRole] = PublicKey.findProgramAddressSync(
+        [ROLE_SEED, configPda.toBuffer(), Buffer.from([ROLE_BLACKLISTER]), authority.publicKey.toBuffer()],
+        program.programId
+      );
+      const [targetBlacklistEntry] = PublicKey.findProgramAddressSync(
+        [BLACKLIST_SEED, configPda.toBuffer(), targetUser.publicKey.toBuffer()],
+        program.programId
+      );
+      await program.methods
+        .addToBlacklist(targetUser.publicKey, "Seize target")
+        .accountsStrict({
+          authority: authority.publicKey,
+          config: configPda,
+          roleAccount: blacklisterRole,
+          blacklistEntry: targetBlacklistEntry,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc({ commitment: "confirmed" });
+
       // Now seize 50M from target
       const [seizerRole] = PublicKey.findProgramAddressSync(
         [ROLE_SEED, configPda.toBuffer(), Buffer.from([ROLE_SEIZER]), authority.publicKey.toBuffer()],
@@ -325,6 +345,8 @@ describe("SSS-2: Compliant Stablecoin Lifecycle", () => {
           authority: authority.publicKey,
           config: configPda,
           roleAccount: seizerRole,
+          blacklistedOwner: targetUser.publicKey,
+          blacklistEntry: targetBlacklistEntry,
           mint: mintKey,
           fromTokenAccount: targetAta,
           toTokenAccount: authorityAta,

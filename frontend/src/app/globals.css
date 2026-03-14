@@ -7,14 +7,13 @@
   --shell-accent: #0f172a;
   --panel-bg: rgba(15, 23, 42, 0.86);
   --panel-border: rgba(51, 65, 85, 0.9);
-  --brand-500: #38bdf8;
 }
 
 @layer base {
   body {
     @apply min-h-screen bg-slate-950 text-slate-100 antialiased;
     background-image:
-      radial-gradient(circle at top left, rgba(14, 165, 233, 0.18), transparent 32%),
+      radial-gradient(circle at top left, rgba(99, 102, 241, 0.12), transparent 32%),
       radial-gradient(circle at top right, rgba(16, 185, 129, 0.14), transparent 28%),
       linear-gradient(180deg, rgba(2, 6, 23, 0.98), rgba(2, 6, 23, 1));
   }
@@ -23,12 +22,12 @@
 @layer components {
   .bg-shell {
     background:
-      radial-gradient(circle at top left, rgba(8, 47, 73, 0.55), transparent 28%),
+      radial-gradient(circle at top left, rgba(30, 27, 75, 0.45), transparent 28%),
       linear-gradient(180deg, rgba(2, 6, 23, 1), rgba(2, 6, 23, 0.98));
   }
 
   .eyebrow {
-    @apply text-xs font-semibold uppercase tracking-[0.28em] text-sky-300/75;
+    @apply text-xs font-semibold uppercase tracking-[0.28em] text-brand-300/75;
   }
 
   .panel {
@@ -184,14 +183,34 @@
   }
 
   .sidebar-link-active {
-    @apply sidebar-link border border-sky-500/20 bg-sky-500/10 text-sky-200;
+    @apply sidebar-link border border-brand-500/20 bg-brand-500/10 text-brand-200;
   }
-}
 
-.wallet-adapter-button {
-  @apply !rounded-xl !bg-brand-600 !font-medium hover:!bg-brand-500;
-}
+  .code-block {
+    @apply rounded-xl border border-slate-700/60 bg-slate-950/80 p-4;
+  }
 
-.wallet-adapter-modal-wrapper {
-  @apply !bg-slate-900;
+  .drawer-backdrop {
+    @apply fixed inset-0 z-40 bg-slate-950/80 backdrop-blur-sm transition-opacity;
+  }
+
+  .drawer-panel {
+    @apply fixed inset-y-0 left-0 z-50 w-80 border-r border-slate-800 bg-slate-950 shadow-2xl transition-transform;
+  }
+
+  .nav-section-label {
+    @apply px-4 pb-2 pt-5 text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-600;
+  }
+
+  .wallet-pill {
+    @apply inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/80 px-3 py-2 text-sm;
+  }
+
+  .connected-dot {
+    @apply h-2 w-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50;
+  }
+
+  .hero-card {
+    @apply rounded-2xl border border-slate-700 bg-slate-900/70 p-4 transition-all hover:border-brand-500/40 hover:bg-brand-500/5;
+  }
 }

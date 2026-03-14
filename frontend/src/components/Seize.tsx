@@ -26,10 +26,15 @@ export default function Seize({ config, onSeize }: SeizeProps) {
 
   if (!config || !config.enablePermanentDelegate) {
     return (
-      <div className="card">
-        <h2 className="card-header">Seize Tokens</h2>
-        <div className="flex min-h-[200px] items-center justify-center">
-          <p className="text-gray-400">
+      <div className="panel">
+        <div className="panel-header">
+          <div>
+            <p className="eyebrow">Compliance</p>
+            <h2 className="panel-title">Seize Tokens</h2>
+          </div>
+        </div>
+        <div className="empty-state">
+          <p className="text-center text-sm text-slate-400">
             Token seizure is only available on SSS-2 stablecoins with permanent delegate enabled
           </p>
         </div>
@@ -62,16 +67,22 @@ export default function Seize({ config, onSeize }: SeizeProps) {
 
   return (
     <div className="space-y-6">
-      <div className="card">
-        <h2 className="card-header">Seize Tokens</h2>
-        <p className="mb-6 text-sm text-gray-400">
+      <div className="panel">
+        <div className="panel-header">
+          <div>
+            <p className="eyebrow">Regulatory Action</p>
+            <h2 className="panel-title">Seize Tokens</h2>
+          </div>
+        </div>
+
+        <p className="mb-6 text-sm text-slate-400">
           Seize tokens from a target account using the permanent delegate authority (SSS-2).
           Requires the Seizer role. Tokens are transferred to the specified treasury account.
         </p>
 
         <form onSubmit={handleSeize} className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-300">
+            <label className="mb-1 block text-sm font-medium text-slate-300">
               Target Wallet Address
             </label>
             <input
@@ -85,7 +96,7 @@ export default function Seize({ config, onSeize }: SeizeProps) {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-300">
+            <label className="mb-1 block text-sm font-medium text-slate-300">
               Treasury Wallet Address
             </label>
             <input
@@ -99,7 +110,7 @@ export default function Seize({ config, onSeize }: SeizeProps) {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-300">
+            <label className="mb-1 block text-sm font-medium text-slate-300">
               Amount (base units)
             </label>
             <input
@@ -121,29 +132,27 @@ export default function Seize({ config, onSeize }: SeizeProps) {
           </button>
 
           {result && (
-            <p
-              className={
-                result.type === "success"
-                  ? "text-sm text-green-400"
-                  : "text-sm text-red-400"
-              }
-            >
-              {result.message}
-            </p>
+            <div className={`alert-panel ${result.type === "success" ? "alert-success" : "alert-critical"}`}>
+              <p className={`text-sm ${result.type === "success" ? "text-emerald-200" : "text-rose-200"}`}>
+                {result.message}
+              </p>
+            </div>
           )}
         </form>
       </div>
 
-      <div className="card border-yellow-800 bg-yellow-950/20">
-        <h3 className="mb-2 text-sm font-semibold text-yellow-400">
-          Compliance Notice
-        </h3>
-        <p className="text-sm text-yellow-200/70">
-          Token seizure is an irreversible on-chain operation. Ensure you have
-          proper legal authorization before seizing funds. All seizure operations
-          emit a <code className="text-yellow-300">TokensSeized</code> event to
-          the immutable on-chain audit trail.
-        </p>
+      <div className="alert-panel alert-warning">
+        <div>
+          <h3 className="mb-2 text-sm font-semibold text-amber-300">
+            Compliance Notice
+          </h3>
+          <p className="text-sm text-amber-200/70">
+            Token seizure is an irreversible on-chain operation. Ensure you have
+            proper legal authorization before seizing funds. All seizure operations
+            emit a <code className="text-amber-300">TokensSeized</code> event to
+            the immutable on-chain audit trail.
+          </p>
+        </div>
       </div>
     </div>
   );

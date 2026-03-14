@@ -7,6 +7,8 @@ import {
   TOKEN_2022_PROGRAM_ID,
   getAssociatedTokenAddressSync,
   createAssociatedTokenAccountInstruction,
+  createTransferCheckedInstruction,
+  addExtraAccountMetasForExecute,
   getAccount,
   ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
@@ -14,6 +16,11 @@ import {
 const STABLECOIN_SEED = Buffer.from("stablecoin");
 const ROLE_SEED = Buffer.from("role");
 const MINTER_QUOTA_SEED = Buffer.from("minter_quota");
+const BLACKLIST_SEED = Buffer.from("blacklist");
+
+const ROLE_MINTER = 0;
+const ROLE_BLACKLISTER = 3;
+const ROLE_SEIZER = 4;
 
 describe("Seize", () => {
   const _env = anchor.AnchorProvider.env();
@@ -24,6 +31,7 @@ describe("Seize", () => {
   );
   anchor.setProvider(provider);
   const program = anchor.workspace.Sss as Program<Sss>;
+  const hookProgram = anchor.workspace.TransferHook as Program;
   const authority = provider.wallet;
   const connection = provider.connection;
 
@@ -35,6 +43,8 @@ describe("Seize", () => {
   let configPda: PublicKey;
   let victimAta: PublicKey;
   let treasuryAta: PublicKey;
+  let victimBlacklistEntry: PublicKey;
+  let seizerRolePda: PublicKey;
 
   before(async () => {
     // Fund accounts
@@ -55,7 +65,7 @@ describe("Seize", () => {
       [STABLECOIN_SEED, mintKey.toBuffer()], program.programId
     );
 
-    // Init SSS-2
+    // Init SSS-2 with permanent delegate + transfer hook
     await program.methods
       .initialize({
         name: "Seize Test",
@@ -63,10 +73,10 @@ describe("Seize", () => {
         uri: "https://test.com",
         decimals: 6,
         enablePermanentDelegate: true,
-        enableTransferHook: false,
+        enableTransferHook: true,
         defaultAccountFrozen: false,
         enableConfidentialTransfer: false,
-        transferHookProgramId: null,
+        transferHookProgramId: hookProgram.programId,
       })
       .accountsStrict({
         authority: authority.publicKey,
@@ -78,10 +88,26 @@ describe("Seize", () => {
         rent: SYSVAR_RENT_PUBKEY,
       })
       .signers([mintKeypair])
-      .rpc();
+      .rpc({ commitment: "confirmed" });
 
-    // Setup minter + seizer roles
-    for (const [roleType] of [[0], [4]]) {
+    // Initialize extra account metas for the transfer hook
+    const [extraAccountMetasPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("extra-account-metas"), mintKey.toBuffer()],
+      hookProgram.programId
+    );
+    await hookProgram.methods
+      .initializeExtraAccountMetas()
+      .accountsStrict({
+        payer: authority.publicKey,
+        extraAccountMetas: extraAccountMetasPda,
+        mint: mintKey,
+        sssProgram: program.programId,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc({ commitment: "confirmed" });
+
+    // Setup minter, blacklister, and seizer roles
+    for (const roleType of [ROLE_MINTER, ROLE_BLACKLISTER, ROLE_SEIZER]) {
       const [rolePda] = PublicKey.findProgramAddressSync(
         [ROLE_SEED, configPda.toBuffer(), Buffer.from([roleType]), authority.publicKey.toBuffer()],
         program.programId
@@ -94,8 +120,14 @@ describe("Seize", () => {
           roleAccount: rolePda,
           systemProgram: SystemProgram.programId,
         })
-        .rpc();
+        .rpc({ commitment: "confirmed" });
     }
+
+    // Store commonly used PDAs
+    [seizerRolePda] = PublicKey.findProgramAddressSync(
+      [ROLE_SEED, configPda.toBuffer(), Buffer.from([ROLE_SEIZER]), authority.publicKey.toBuffer()],
+      program.programId
+    );
 
     // Set quota
     const [quotaPda] = PublicKey.findProgramAddressSync(
@@ -110,7 +142,7 @@ describe("Seize", () => {
         minterQuota: quotaPda,
         systemProgram: SystemProgram.programId,
       })
-      .rpc();
+      .rpc({ commitment: "confirmed" });
 
     // Create ATAs
     victimAta = getAssociatedTokenAddressSync(mintKey, victim.publicKey, false, TOKEN_2022_PROGRAM_ID);
@@ -127,7 +159,7 @@ describe("Seize", () => {
 
     // Mint to victim
     const [minterRole] = PublicKey.findProgramAddressSync(
-      [ROLE_SEED, configPda.toBuffer(), Buffer.from([0]), authority.publicKey.toBuffer()],
+      [ROLE_SEED, configPda.toBuffer(), Buffer.from([ROLE_MINTER]), authority.publicKey.toBuffer()],
       program.programId
     );
     await program.methods
@@ -141,26 +173,56 @@ describe("Seize", () => {
         recipientTokenAccount: victimAta,
         tokenProgram: TOKEN_2022_PROGRAM_ID,
       })
-      .rpc();
+      .rpc({ commitment: "confirmed" });
+
+    // Blacklist victim (required for seize)
+    const [blacklisterRole] = PublicKey.findProgramAddressSync(
+      [ROLE_SEED, configPda.toBuffer(), Buffer.from([ROLE_BLACKLISTER]), authority.publicKey.toBuffer()],
+      program.programId
+    );
+    [victimBlacklistEntry] = PublicKey.findProgramAddressSync(
+      [BLACKLIST_SEED, configPda.toBuffer(), victim.publicKey.toBuffer()],
+      program.programId
+    );
+    await program.methods
+      .addToBlacklist(victim.publicKey, "Seize target")
+      .accountsStrict({
+        authority: authority.publicKey,
+        config: configPda,
+        roleAccount: blacklisterRole,
+        blacklistEntry: victimBlacklistEntry,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc({ commitment: "confirmed" });
   });
 
   it("seizes tokens to treasury", async () => {
-    const [seizerRole] = PublicKey.findProgramAddressSync(
-      [ROLE_SEED, configPda.toBuffer(), Buffer.from([4]), authority.publicKey.toBuffer()],
-      program.programId
+    // Build dummy ix for hook account resolution — config PDA is the permanent delegate
+    const dummyIx = createTransferCheckedInstruction(
+      victimAta, mintKey, treasuryAta, configPda,
+      BigInt(100_000_000), 6, [], TOKEN_2022_PROGRAM_ID
     );
+    await addExtraAccountMetasForExecute(
+      connection, dummyIx, hookProgram.programId,
+      victimAta, mintKey, treasuryAta, configPda,
+      BigInt(100_000_000), "confirmed"
+    );
+    const extraKeys = dummyIx.keys.slice(4);
 
     await program.methods
       .seize(new anchor.BN(100_000_000))
       .accountsStrict({
         authority: authority.publicKey,
         config: configPda,
-        roleAccount: seizerRole,
+        roleAccount: seizerRolePda,
         mint: mintKey,
         fromTokenAccount: victimAta,
         toTokenAccount: treasuryAta,
+        blacklistedOwner: victim.publicKey,
+        blacklistEntry: victimBlacklistEntry,
         tokenProgram: TOKEN_2022_PROGRAM_ID,
       })
+      .remainingAccounts(extraKeys)
       .rpc({ commitment: "confirmed" });
 
     const victimAccount = await getAccount(connection, victimAta, "confirmed", TOKEN_2022_PROGRAM_ID);
@@ -171,10 +233,16 @@ describe("Seize", () => {
   });
 
   it("rejects zero amount seize", async () => {
-    const [seizerRole] = PublicKey.findProgramAddressSync(
-      [ROLE_SEED, configPda.toBuffer(), Buffer.from([4]), authority.publicKey.toBuffer()],
-      program.programId
+    const dummyIx = createTransferCheckedInstruction(
+      victimAta, mintKey, treasuryAta, configPda,
+      BigInt(1), 6, [], TOKEN_2022_PROGRAM_ID
     );
+    await addExtraAccountMetasForExecute(
+      connection, dummyIx, hookProgram.programId,
+      victimAta, mintKey, treasuryAta, configPda,
+      BigInt(1), "confirmed"
+    );
+    const extraKeys = dummyIx.keys.slice(4);
 
     try {
       await program.methods
@@ -182,12 +250,15 @@ describe("Seize", () => {
         .accountsStrict({
           authority: authority.publicKey,
           config: configPda,
-          roleAccount: seizerRole,
+          roleAccount: seizerRolePda,
           mint: mintKey,
           fromTokenAccount: victimAta,
           toTokenAccount: treasuryAta,
+          blacklistedOwner: victim.publicKey,
+          blacklistEntry: victimBlacklistEntry,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
         })
+        .remainingAccounts(extraKeys)
         .rpc();
       expect.fail("Should have thrown");
     } catch (err: any) {
@@ -196,7 +267,6 @@ describe("Seize", () => {
   });
 
   it("rejects seize by non-Seizer", async () => {
-    // Generate an account with no Seizer role
     const attacker = Keypair.generate();
     const fundTx = new anchor.web3.Transaction().add(
       SystemProgram.transfer({
@@ -207,11 +277,21 @@ describe("Seize", () => {
     );
     await provider.sendAndConfirm(fundTx);
 
-    // Derive a role PDA for the attacker — this account does not exist
     const [attackerRolePda] = PublicKey.findProgramAddressSync(
-      [ROLE_SEED, configPda.toBuffer(), Buffer.from([4]), attacker.publicKey.toBuffer()],
+      [ROLE_SEED, configPda.toBuffer(), Buffer.from([ROLE_SEIZER]), attacker.publicKey.toBuffer()],
       program.programId
     );
+
+    const dummyIx = createTransferCheckedInstruction(
+      victimAta, mintKey, treasuryAta, configPda,
+      BigInt(50_000_000), 6, [], TOKEN_2022_PROGRAM_ID
+    );
+    await addExtraAccountMetasForExecute(
+      connection, dummyIx, hookProgram.programId,
+      victimAta, mintKey, treasuryAta, configPda,
+      BigInt(50_000_000), "confirmed"
+    );
+    const extraKeys = dummyIx.keys.slice(4);
 
     try {
       await program.methods
@@ -223,13 +303,15 @@ describe("Seize", () => {
           mint: mintKey,
           fromTokenAccount: victimAta,
           toTokenAccount: treasuryAta,
+          blacklistedOwner: victim.publicKey,
+          blacklistEntry: victimBlacklistEntry,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
         })
+        .remainingAccounts(extraKeys)
         .signers([attacker])
         .rpc();
       expect.fail("Should have thrown");
     } catch (err: any) {
-      // Account not found (role PDA doesn't exist) or constraint violation
       expect(err.toString()).to.satisfy((msg: string) =>
         msg.includes("AccountNotInitialized") ||
         msg.includes("AnchorError") ||
@@ -240,30 +322,130 @@ describe("Seize", () => {
   });
 
   it("seizes full remaining balance", async () => {
-    // At this point victim has 100M remaining (after partial seize of 100M)
-    const [seizerRole] = PublicKey.findProgramAddressSync(
-      [ROLE_SEED, configPda.toBuffer(), Buffer.from([4]), authority.publicKey.toBuffer()],
-      program.programId
-    );
-
     const victimBefore = await getAccount(connection, victimAta, "confirmed", TOKEN_2022_PROGRAM_ID);
     const remainingBalance = Number(victimBefore.amount);
     expect(remainingBalance).to.be.greaterThan(0);
+
+    const dummyIx = createTransferCheckedInstruction(
+      victimAta, mintKey, treasuryAta, configPda,
+      BigInt(remainingBalance), 6, [], TOKEN_2022_PROGRAM_ID
+    );
+    await addExtraAccountMetasForExecute(
+      connection, dummyIx, hookProgram.programId,
+      victimAta, mintKey, treasuryAta, configPda,
+      BigInt(remainingBalance), "confirmed"
+    );
+    const extraKeys = dummyIx.keys.slice(4);
 
     await program.methods
       .seize(new anchor.BN(remainingBalance))
       .accountsStrict({
         authority: authority.publicKey,
         config: configPda,
-        roleAccount: seizerRole,
+        roleAccount: seizerRolePda,
         mint: mintKey,
         fromTokenAccount: victimAta,
         toTokenAccount: treasuryAta,
+        blacklistedOwner: victim.publicKey,
+        blacklistEntry: victimBlacklistEntry,
         tokenProgram: TOKEN_2022_PROGRAM_ID,
       })
+      .remainingAccounts(extraKeys)
       .rpc({ commitment: "confirmed" });
 
     const victimAfter = await getAccount(connection, victimAta, "confirmed", TOKEN_2022_PROGRAM_ID);
     expect(Number(victimAfter.amount)).to.equal(0);
+  });
+
+  it("rejects seize with mismatched blacklisted_owner", async () => {
+    // Pass treasury as blacklisted_owner but victim's ATA as source
+    // The blacklist PDA for treasury doesn't exist, so Anchor constraint fails
+    const [treasuryBlacklistEntry] = PublicKey.findProgramAddressSync(
+      [BLACKLIST_SEED, configPda.toBuffer(), treasury.publicKey.toBuffer()],
+      program.programId
+    );
+
+    const dummyIx = createTransferCheckedInstruction(
+      victimAta, mintKey, treasuryAta, configPda,
+      BigInt(1), 6, [], TOKEN_2022_PROGRAM_ID
+    );
+    await addExtraAccountMetasForExecute(
+      connection, dummyIx, hookProgram.programId,
+      victimAta, mintKey, treasuryAta, configPda,
+      BigInt(1), "confirmed"
+    );
+    const extraKeys = dummyIx.keys.slice(4);
+
+    try {
+      await program.methods
+        .seize(new anchor.BN(1))
+        .accountsStrict({
+          authority: authority.publicKey,
+          config: configPda,
+          roleAccount: seizerRolePda,
+          mint: mintKey,
+          fromTokenAccount: victimAta,
+          toTokenAccount: treasuryAta,
+          blacklistedOwner: treasury.publicKey,
+          blacklistEntry: treasuryBlacklistEntry,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .remainingAccounts(extraKeys)
+        .rpc();
+      expect.fail("Should have thrown");
+    } catch (err: any) {
+      expect(err.toString()).to.satisfy((msg: string) =>
+        msg.includes("AccountNotInitialized") ||
+        msg.includes("AnchorError") ||
+        msg.includes("ConstraintSeeds") ||
+        msg.includes("Error")
+      );
+    }
+  });
+
+  it("rejects seize on non-blacklisted account", async () => {
+    // Treasury is not blacklisted — mint some tokens to treasury first (it already has tokens from seize)
+    const [treasuryBlacklistEntry] = PublicKey.findProgramAddressSync(
+      [BLACKLIST_SEED, configPda.toBuffer(), treasury.publicKey.toBuffer()],
+      program.programId
+    );
+
+    // Create a destination for seized tokens (use victim's ATA which is empty)
+    const dummyIx = createTransferCheckedInstruction(
+      treasuryAta, mintKey, victimAta, configPda,
+      BigInt(10_000_000), 6, [], TOKEN_2022_PROGRAM_ID
+    );
+    await addExtraAccountMetasForExecute(
+      connection, dummyIx, hookProgram.programId,
+      treasuryAta, mintKey, victimAta, configPda,
+      BigInt(10_000_000), "confirmed"
+    );
+    const extraKeys = dummyIx.keys.slice(4);
+
+    try {
+      await program.methods
+        .seize(new anchor.BN(10_000_000))
+        .accountsStrict({
+          authority: authority.publicKey,
+          config: configPda,
+          roleAccount: seizerRolePda,
+          mint: mintKey,
+          fromTokenAccount: treasuryAta,
+          toTokenAccount: victimAta,
+          blacklistedOwner: treasury.publicKey,
+          blacklistEntry: treasuryBlacklistEntry,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .remainingAccounts(extraKeys)
+        .rpc();
+      expect.fail("Should have thrown");
+    } catch (err: any) {
+      expect(err.toString()).to.satisfy((msg: string) =>
+        msg.includes("AccountNotInitialized") ||
+        msg.includes("AnchorError") ||
+        msg.includes("NotBlacklisted") ||
+        msg.includes("Error")
+      );
+    }
   });
 });

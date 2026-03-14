@@ -83,106 +83,93 @@ export default function MintBurn({
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {/* Mint Tokens Card */}
-      <div className="card">
-        <h2 className="card-header">Mint Tokens</h2>
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="panel">
+        <div className="panel-header">
+          <div>
+            <p className="eyebrow">Supply Increase</p>
+            <h2 className="panel-title">Mint Tokens</h2>
+          </div>
+        </div>
         <form onSubmit={handleMint} className="space-y-4">
-          <div>
-            <input
-              type="text"
-              className="input-field"
-              placeholder="Recipient wallet address"
-              value={mintRecipient}
-              onChange={(e) => setMintRecipient(e.target.value)}
-              disabled={isDisabled || mintLoading}
-            />
-          </div>
-          <div>
-            <input
-              type="number"
-              className="input-field"
-              placeholder="Amount in base units"
-              value={mintAmount}
-              onChange={(e) => setMintAmount(e.target.value)}
-              disabled={isDisabled || mintLoading}
-              min="0"
-            />
-          </div>
+          <input
+            type="text"
+            className="input-field"
+            placeholder="Recipient wallet address"
+            value={mintRecipient}
+            onChange={(e) => setMintRecipient(e.target.value)}
+            disabled={isDisabled || mintLoading}
+          />
+          <input
+            type="number"
+            className="input-field"
+            placeholder="Amount in base units"
+            value={mintAmount}
+            onChange={(e) => setMintAmount(e.target.value)}
+            disabled={isDisabled || mintLoading}
+            min="0"
+          />
           <button
             type="submit"
             className="btn-primary w-full"
-            disabled={
-              isDisabled || mintLoading || !mintRecipient || !mintAmount
-            }
+            disabled={isDisabled || mintLoading || !mintRecipient || !mintAmount}
           >
             {mintLoading ? "Minting..." : "Mint Tokens"}
           </button>
-          <p className="text-xs text-gray-500">
-            Tokens will be minted to the recipient&apos;s associated token
-            account
+          <p className="text-xs text-slate-500">
+            Tokens will be minted to the recipient&apos;s associated token account
           </p>
           {mintResult && (
-            <p
-              className={
-                mintResult.type === "success"
-                  ? "text-sm text-green-400"
-                  : "text-sm text-red-400"
-              }
-            >
-              {mintResult.message}
-            </p>
+            <div className={`alert-panel ${mintResult.type === "success" ? "alert-success" : "alert-critical"}`}>
+              <p className={`text-sm ${mintResult.type === "success" ? "text-emerald-200" : "text-rose-200"}`}>
+                {mintResult.message}
+              </p>
+            </div>
           )}
         </form>
       </div>
 
-      {/* Burn Tokens Card */}
-      <div className="card">
-        <h2 className="card-header">Burn Tokens</h2>
+      <div className="panel">
+        <div className="panel-header">
+          <div>
+            <p className="eyebrow">Supply Reduction</p>
+            <h2 className="panel-title">Burn Tokens</h2>
+          </div>
+        </div>
         <form onSubmit={handleBurn} className="space-y-4">
-          <div>
-            <input
-              type="text"
-              className="input-field"
-              placeholder="Token account to burn from"
-              value={burnAccount}
-              onChange={(e) => setBurnAccount(e.target.value)}
-              disabled={isDisabled || burnLoading}
-            />
-          </div>
-          <div>
-            <input
-              type="number"
-              className="input-field"
-              placeholder="Amount in base units"
-              value={burnAmount}
-              onChange={(e) => setBurnAmount(e.target.value)}
-              disabled={isDisabled || burnLoading}
-              min="0"
-            />
-          </div>
+          <input
+            type="text"
+            className="input-field"
+            placeholder="Token account to burn from"
+            value={burnAccount}
+            onChange={(e) => setBurnAccount(e.target.value)}
+            disabled={isDisabled || burnLoading}
+          />
+          <input
+            type="number"
+            className="input-field"
+            placeholder="Amount in base units"
+            value={burnAmount}
+            onChange={(e) => setBurnAmount(e.target.value)}
+            disabled={isDisabled || burnLoading}
+            min="0"
+          />
           <button
             type="submit"
             className="btn-danger w-full"
-            disabled={
-              isDisabled || burnLoading || !burnAccount || !burnAmount
-            }
+            disabled={isDisabled || burnLoading || !burnAccount || !burnAmount}
           >
             {burnLoading ? "Burning..." : "Burn Tokens"}
           </button>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-slate-500">
             Burns tokens from the specified token account
           </p>
           {burnResult && (
-            <p
-              className={
-                burnResult.type === "success"
-                  ? "text-sm text-green-400"
-                  : "text-sm text-red-400"
-              }
-            >
-              {burnResult.message}
-            </p>
+            <div className={`alert-panel ${burnResult.type === "success" ? "alert-success" : "alert-critical"}`}>
+              <p className={`text-sm ${burnResult.type === "success" ? "text-emerald-200" : "text-rose-200"}`}>
+                {burnResult.message}
+              </p>
+            </div>
           )}
         </form>
       </div>

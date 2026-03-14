@@ -409,6 +409,11 @@ describe("Full Lifecycle: SSS-2 Compliant Stablecoin", () => {
     const seizeAmount = Number(aliceAccount.amount);
     const authorityBefore = await getAccount(connection, authorityAta, "confirmed", TOKEN_2022_PROGRAM_ID);
 
+    const [aliceBlacklist] = PublicKey.findProgramAddressSync(
+      [BLACKLIST_SEED, configPda.toBuffer(), alice.publicKey.toBuffer()],
+      program.programId
+    );
+
     // Build dummy ix for hook account resolution — config PDA is the permanent delegate
     const dummyIx = createTransferCheckedInstruction(
       aliceAta, mintKey, authorityAta, configPda,
@@ -427,6 +432,8 @@ describe("Full Lifecycle: SSS-2 Compliant Stablecoin", () => {
         authority: authority.publicKey,
         config: configPda,
         roleAccount: seizerRolePda,
+        blacklistedOwner: alice.publicKey,
+        blacklistEntry: aliceBlacklist,
         mint: mintKey,
         fromTokenAccount: aliceAta,
         toTokenAccount: authorityAta,

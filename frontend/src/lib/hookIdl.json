@@ -1,0 +1,155 @@
+{
+  "address": "Gcd58Ng9gqRg1XtiU1i8KopwX1u82Mt9VmxKbLJ8RANH",
+  "metadata": {
+    "name": "transfer_hook",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "SSS-2 Transfer Hook - Blacklist enforcement on every transfer"
+  },
+  "instructions": [
+    {
+      "name": "initialize_extra_account_metas",
+      "docs": [
+        "Initialize the ExtraAccountMetas PDA for a stablecoin mint.",
+        "Must be called after the stablecoin is initialized with transfer hook enabled."
+      ],
+      "discriminator": [
+        22,
+        213,
+        130,
+        114,
+        1,
+        174,
+        121,
+        36
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "extra_account_metas",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  120,
+                  116,
+                  114,
+                  97,
+                  45,
+                  97,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116,
+                  45,
+                  109,
+                  101,
+                  116,
+                  97,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint",
+          "docs": [
+            "The Token-2022 mint this hook is associated with. Validated as a",
+            "legitimate token mint by the token program ownership check."
+          ]
+        },
+        {
+          "name": "sss_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "transfer_hook_execute",
+      "docs": [
+        "Transfer hook handler — invoked by Token-2022 on every transfer_checked.",
+        "This is the Anchor instruction that maps to the SPL Transfer Hook execute interface."
+      ],
+      "discriminator": [
+        96,
+        171,
+        172,
+        37,
+        86,
+        139,
+        6,
+        30
+      ],
+      "accounts": [
+        {
+          "name": "source_token"
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "destination_token"
+        },
+        {
+          "name": "owner_delegate"
+        },
+        {
+          "name": "extra_account_metas"
+        },
+        {
+          "name": "sss_program"
+        },
+        {
+          "name": "config"
+        },
+        {
+          "name": "source_blacklist"
+        },
+        {
+          "name": "dest_blacklist"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "SourceBlacklisted",
+      "msg": "Source address is blacklisted"
+    },
+    {
+      "code": 6001,
+      "name": "DestinationBlacklisted",
+      "msg": "Destination address is blacklisted"
+    },
+    {
+      "code": 6002,
+      "name": "InvalidExtraAccountMetas",
+      "msg": "Invalid extra account metas"
+    }
+  ]
+}

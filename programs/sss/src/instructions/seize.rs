@@ -5,7 +5,7 @@ use anchor_spl::token_interface::{TokenAccount, TokenInterface};
 use crate::constants::*;
 use crate::error::StablecoinError;
 use crate::events::TokensSeized;
-use crate::state::{RoleAccount, StablecoinConfig};
+use crate::state::{BlacklistEntry, RoleAccount, StablecoinConfig};
 
 /// Accounts required to seize tokens from an account (SSS-2 only).
 ///
@@ -32,6 +32,16 @@ pub struct Seize<'info> {
         constraint = role_account.active @ StablecoinError::Unauthorized,
     )]
     pub role_account: Account<'info, RoleAccount>,
+
+    /// The wallet owner being seized from (must match from_token_account.owner).
+    /// CHECK: Validated in handler against from_token_account.owner.
+    pub blacklisted_owner: UncheckedAccount<'info>,
+
+    #[account(
+        seeds = [BLACKLIST_SEED, config.key().as_ref(), blacklisted_owner.key().as_ref()],
+        bump = blacklist_entry.bump,
+    )]
+    pub blacklist_entry: Account<'info, BlacklistEntry>,
 
     /// CHECK: Token-2022 mint
     #[account(address = config.mint)]
@@ -64,6 +74,11 @@ pub struct Seize<'info> {
 /// as the authority and skips blacklist checks. Emits [`TokensSeized`].
 pub fn handler<'info>(ctx: Context<'_, '_, 'info, 'info, Seize<'info>>, amount: u64) -> Result<()> {
     require!(amount > 0, StablecoinError::ZeroAmount);
+
+    require!(
+        ctx.accounts.blacklisted_owner.key() == ctx.accounts.from_token_account.owner,
+        StablecoinError::InvalidAuthority
+    );
 
     let mint_key = ctx.accounts.config.mint;
     let bump = ctx.accounts.config.bump;

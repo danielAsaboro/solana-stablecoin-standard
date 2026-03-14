@@ -1,8 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useSolanaWallet } from "@/hooks/usePrivySolana";
 import Sidebar from "@/components/Sidebar";
+import Header from "@/components/Header";
+import MobileDrawer from "@/components/MobileDrawer";
+import ConnectHero from "@/components/ConnectHero";
 import Dashboard from "@/components/Dashboard";
 import MintBurn from "@/components/MintBurn";
 import Roles from "@/components/Roles";
@@ -10,6 +13,10 @@ import FreezeThaw from "@/components/FreezeThaw";
 import Blacklist from "@/components/Blacklist";
 import PauseControl from "@/components/PauseControl";
 import Seize from "@/components/Seize";
+import DemoWizard from "@/components/DemoWizard";
+import Initialize from "@/components/Initialize";
+import Transfer from "@/components/Transfer";
+import AuditLog from "@/components/AuditLog";
 import {
   useStablecoin,
   type OperatorTimelineIncident,
@@ -19,21 +26,27 @@ import {
 } from "@/hooks/useStablecoin";
 
 type ViewType =
+  | "demo"
   | "dashboard"
+  | "initialize"
   | "mint-burn"
+  | "transfer"
   | "roles"
   | "freeze-thaw"
   | "blacklist"
   | "pause"
-  | "seize";
+  | "seize"
+  | "audit";
 
 export default function Home() {
-  const wallet = useWallet();
+  const wallet = useSolanaWallet();
   const stablecoin = useStablecoin();
   const [activeView, setActiveView] = useState<ViewType>("dashboard");
   const [mintInput, setMintInput] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [statsError, setStatsError] = useState<string | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [heroSkipped, setHeroSkipped] = useState(false);
 
   const [supply, setSupply] = useState("0");
   const [roleCount, setRoleCount] = useState(0);
@@ -147,6 +160,8 @@ export default function Home() {
     return snapshot;
   }, [refreshStats, stablecoin]);
 
+  const showHero = !wallet.connected && !stablecoin.config && !heroSkipped;
+
   return (
     <div className="flex min-h-screen overflow-hidden bg-shell">
       <Sidebar
@@ -157,259 +172,206 @@ export default function Home() {
         paused={stablecoin.config?.paused ?? false}
       />
 
+      <MobileDrawer
+        open={mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
+        activeView={activeView}
+        onViewChange={(view) => setActiveView(view as ViewType)}
+      />
+
       <main className="flex-1 overflow-y-auto">
-        <header className="sticky top-0 z-10 border-b border-slate-800 bg-slate-950/90 px-6 py-5 backdrop-blur-md md:px-8">
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-center">
-              <div className="flex-1">
-                <p className="eyebrow">Stablecoin Operations Console</p>
-                <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-center">
-                  <input
-                    type="text"
-                    value={mintInput}
-                    onChange={(event) => setMintInput(event.target.value)}
-                    onKeyDown={(event) => event.key === "Enter" && void handleLoad()}
-                    placeholder="Load a stablecoin by mint address"
-                    className="input-field max-w-2xl"
-                    disabled={!stablecoin.ready}
-                  />
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => void handleLoad()}
-                      disabled={!stablecoin.ready || !mintInput.trim() || stablecoin.loading}
-                      className="btn-primary"
-                    >
-                      {stablecoin.loading ? "Loading..." : "Load"}
-                    </button>
-                    {stablecoin.config && (
-                      <button onClick={() => void refreshStats()} className="btn-secondary">
-                        Refresh
-                      </button>
-                    )}
-                  </div>
-                </div>
-                {loadError && <p className="mt-2 text-sm text-red-300">{loadError}</p>}
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                <div className="status-tile">
-                  <span className="status-tile-label">Wallet</span>
-                  <span className={wallet.connected ? "badge-green" : "badge-yellow"}>
-                    {wallet.connected ? "Connected" : "Read-only"}
-                  </span>
-                </div>
-                <div className="status-tile">
-                  <span className="status-tile-label">Preset</span>
-                  <span
-                    className={
-                      stablecoin.config?.enablePermanentDelegate &&
-                      stablecoin.config?.enableTransferHook
-                        ? "badge-green"
-                        : stablecoin.config
-                          ? "badge-blue"
-                          : "badge-muted"
-                    }
-                  >
-                    {stablecoin.config
-                      ? stablecoin.config.enablePermanentDelegate &&
-                        stablecoin.config.enableTransferHook
-                        ? "SSS-2"
-                        : stablecoin.config.enablePermanentDelegate ||
-                            stablecoin.config.enableTransferHook
-                          ? "Custom"
-                          : "SSS-1"
-                      : "Unloaded"}
-                  </span>
-                </div>
-                <div className="status-tile">
-                  <span className="status-tile-label">Runtime</span>
-                  <span className={stablecoin.config?.paused ? "badge-red" : "badge-green"}>
-                    {stablecoin.config?.paused ? "Paused" : "Active"}
-                  </span>
-                </div>
-                <div className="status-tile">
-                  <span className="status-tile-label">Telemetry</span>
-                  <span
-                    className={
-                      stablecoin.backendBaseUrl
-                        ? webhookOverview?.available
-                          ? "badge-blue"
-                          : "badge-yellow"
-                        : "badge-muted"
-                    }
-                  >
-                    {telemetryLabel}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex flex-wrap gap-2">
-                {stablecoin.config && (
-                  <>
-                    <span className="badge-muted">
-                      {stablecoin.config.symbol} operator surface
-                    </span>
-                    <span className="badge-muted">
-                      RPC: {stablecoin.rpcEndpoint.replace(/^https?:\/\//, "")}
-                    </span>
-                    {stablecoin.backendBaseUrl && (
-                      <span className="badge-muted">
-                        Backend: {stablecoin.backendBaseUrl.replace(/^https?:\/\//, "")}
-                      </span>
-                    )}
-                  </>
-                )}
-              </div>
-              <p className="text-sm text-slate-400">
-                {lastRefreshedAt
-                  ? `Last console refresh ${new Date(lastRefreshedAt).toLocaleTimeString()}`
-                  : "Load a mint to start the operator console"}
-              </p>
-            </div>
-
-            {statsError && <p className="text-sm text-amber-300">{statsError}</p>}
-            {lastOperatorAction && (
-              <p className="text-sm text-emerald-300">
-                Last operator action: {lastOperatorAction.action}{" "}
-                <span className="font-mono text-emerald-200">{lastOperatorAction.signature}</span>
-              </p>
-            )}
-            {!wallet.connected && (
-              <p className="text-sm text-amber-200">
-                Connect a wallet to execute admin instructions. Overview and audit panels stay
-                available without a signer.
-              </p>
-            )}
-          </div>
-        </header>
+        <Header
+          mintInput={mintInput}
+          onMintInputChange={setMintInput}
+          onLoad={() => void handleLoad()}
+          onRefresh={() => void refreshStats()}
+          loading={stablecoin.loading}
+          ready={stablecoin.ready}
+          loadError={loadError}
+          statsError={statsError}
+          config={
+            stablecoin.config
+              ? {
+                  symbol: stablecoin.config.symbol,
+                  paused: stablecoin.config.paused,
+                  enablePermanentDelegate: stablecoin.config.enablePermanentDelegate,
+                  enableTransferHook: stablecoin.config.enableTransferHook,
+                }
+              : null
+          }
+          rpcEndpoint={stablecoin.rpcEndpoint}
+          backendBaseUrl={stablecoin.backendBaseUrl}
+          webhookOverview={webhookOverview}
+          telemetryLabel={telemetryLabel}
+          lastRefreshedAt={lastRefreshedAt}
+          lastOperatorAction={lastOperatorAction}
+          walletConnected={wallet.connected}
+          onToggleMobileMenu={() => setMobileMenuOpen((prev) => !prev)}
+        />
 
         <div className="mx-auto max-w-7xl p-6 md:p-8">
-          {activeView === "dashboard" && (
-            <Dashboard
-              config={stablecoin.config}
-              configAddress={stablecoin.configAddress}
-              mintAddress={stablecoin.mintAddress}
-              supply={supply}
-              roleCount={roleCount}
-              minterCount={minterCount}
-              blacklistCount={blacklistCount}
-              timelineIncidents={timelineIncidents}
-              webhookOverview={webhookOverview}
-              snapshots={snapshots}
-              snapshotDiff={snapshotDiff}
-              onCreateSnapshot={handleCreateSnapshot}
-              onRedeliverIncident={stablecoin.redeliverIncident}
-              onRedeliverDelivery={stablecoin.redeliverDelivery}
-              backendBaseUrl={stablecoin.backendBaseUrl}
-              lastOperatorAction={lastOperatorAction}
-              lastRefreshedAt={lastRefreshedAt}
-              rpcEndpoint={stablecoin.rpcEndpoint}
-            />
-          )}
+          {showHero ? (
+            <ConnectHero onSkip={() => setHeroSkipped(true)} />
+          ) : (
+            <>
+              {activeView === "dashboard" && (
+                <Dashboard
+                  config={stablecoin.config}
+                  configAddress={stablecoin.configAddress}
+                  mintAddress={stablecoin.mintAddress}
+                  supply={supply}
+                  roleCount={roleCount}
+                  minterCount={minterCount}
+                  blacklistCount={blacklistCount}
+                  timelineIncidents={timelineIncidents}
+                  webhookOverview={webhookOverview}
+                  snapshots={snapshots}
+                  snapshotDiff={snapshotDiff}
+                  onCreateSnapshot={handleCreateSnapshot}
+                  onRedeliverIncident={stablecoin.redeliverIncident}
+                  onRedeliverDelivery={stablecoin.redeliverDelivery}
+                  backendBaseUrl={stablecoin.backendBaseUrl}
+                  lastOperatorAction={lastOperatorAction}
+                  lastRefreshedAt={lastRefreshedAt}
+                  rpcEndpoint={stablecoin.rpcEndpoint}
+                />
+              )}
 
-          {activeView === "mint-burn" && (
-            <MintBurn
-              config={
-                stablecoin.config
-                  ? {
-                      decimals: stablecoin.config.decimals,
-                      paused: stablecoin.config.paused,
-                      symbol: stablecoin.config.symbol,
-                    }
-                  : null
-              }
-              mintAddress={stablecoin.mintAddress}
-              onMint={(recipient, amount) =>
-                runTrackedAction("mint", stablecoin.mintTokens, recipient, amount)
-              }
-              onBurn={(fromAccount, amount) =>
-                runTrackedAction("burn", stablecoin.burnTokens, fromAccount, amount)
-              }
-            />
-          )}
+              {activeView === "mint-burn" && (
+                <MintBurn
+                  config={
+                    stablecoin.config
+                      ? {
+                          decimals: stablecoin.config.decimals,
+                          paused: stablecoin.config.paused,
+                          symbol: stablecoin.config.symbol,
+                        }
+                      : null
+                  }
+                  mintAddress={stablecoin.mintAddress}
+                  onMint={(recipient, amount) =>
+                    runTrackedAction("mint", stablecoin.mintTokens, recipient, amount)
+                  }
+                  onBurn={(fromAccount, amount) =>
+                    runTrackedAction("burn", stablecoin.burnTokens, fromAccount, amount)
+                  }
+                />
+              )}
 
-          {activeView === "roles" && (
-            <Roles
-              config={
-                stablecoin.config
-                  ? {
-                      enableTransferHook: stablecoin.config.enableTransferHook,
-                      enablePermanentDelegate: stablecoin.config.enablePermanentDelegate,
-                    }
-                  : null
-              }
-              onUpdateRole={(roleType, user, active) =>
-                runTrackedAction("role.update", stablecoin.updateRole, roleType, user, active)
-              }
-              onUpdateMinterQuota={(minter, quota) =>
-                runTrackedAction("minter.update", stablecoin.updateMinterQuota, minter, quota)
-              }
-              fetchRoles={stablecoin.fetchRoles}
-              fetchMinterQuotas={stablecoin.fetchMinterQuotas}
-            />
-          )}
+              {activeView === "roles" && (
+                <Roles
+                  config={
+                    stablecoin.config
+                      ? {
+                          enableTransferHook: stablecoin.config.enableTransferHook,
+                          enablePermanentDelegate: stablecoin.config.enablePermanentDelegate,
+                        }
+                      : null
+                  }
+                  onUpdateRole={(roleType, user, active) =>
+                    runTrackedAction("role.update", stablecoin.updateRole, roleType, user, active)
+                  }
+                  onUpdateMinterQuota={(minter, quota) =>
+                    runTrackedAction("minter.update", stablecoin.updateMinterQuota, minter, quota)
+                  }
+                  fetchRoles={stablecoin.fetchRoles}
+                  fetchMinterQuotas={stablecoin.fetchMinterQuotas}
+                />
+              )}
 
-          {activeView === "freeze-thaw" && (
-            <FreezeThaw
-              config={stablecoin.config ? { symbol: stablecoin.config.symbol } : null}
-              onFreeze={(walletAddress) =>
-                runTrackedAction("freeze", stablecoin.freezeAccount, walletAddress)
-              }
-              onThaw={(walletAddress) =>
-                runTrackedAction("thaw", stablecoin.thawAccount, walletAddress)
-              }
-            />
-          )}
+              {activeView === "freeze-thaw" && (
+                <FreezeThaw
+                  config={stablecoin.config ? { symbol: stablecoin.config.symbol } : null}
+                  onFreeze={(walletAddress) =>
+                    runTrackedAction("freeze", stablecoin.freezeAccount, walletAddress)
+                  }
+                  onThaw={(walletAddress) =>
+                    runTrackedAction("thaw", stablecoin.thawAccount, walletAddress)
+                  }
+                />
+              )}
 
-          {activeView === "blacklist" && (
-            <Blacklist
-              config={
-                stablecoin.config
-                  ? {
-                      enableTransferHook: stablecoin.config.enableTransferHook,
-                    }
-                  : null
-              }
-              onAdd={(address, reason) =>
-                runTrackedAction("blacklist.add", stablecoin.addToBlacklist, address, reason)
-              }
-              onRemove={(address) =>
-                runTrackedAction("blacklist.remove", stablecoin.removeFromBlacklist, address)
-              }
-              fetchBlacklist={stablecoin.fetchBlacklist}
-            />
-          )}
+              {activeView === "blacklist" && (
+                <Blacklist
+                  config={
+                    stablecoin.config
+                      ? {
+                          enableTransferHook: stablecoin.config.enableTransferHook,
+                        }
+                      : null
+                  }
+                  onAdd={(address, reason) =>
+                    runTrackedAction("blacklist.add", stablecoin.addToBlacklist, address, reason)
+                  }
+                  onRemove={(address) =>
+                    runTrackedAction("blacklist.remove", stablecoin.removeFromBlacklist, address)
+                  }
+                  fetchBlacklist={stablecoin.fetchBlacklist}
+                />
+              )}
 
-          {activeView === "pause" && (
-            <PauseControl
-              config={
-                stablecoin.config
-                  ? {
-                      paused: stablecoin.config.paused,
-                      symbol: stablecoin.config.symbol,
-                    }
-                  : null
-              }
-              onPause={() => runTrackedAction("pause", stablecoin.pauseStablecoin)}
-              onUnpause={() => runTrackedAction("unpause", stablecoin.unpauseStablecoin)}
-            />
-          )}
+              {activeView === "pause" && (
+                <PauseControl
+                  config={
+                    stablecoin.config
+                      ? {
+                          paused: stablecoin.config.paused,
+                          symbol: stablecoin.config.symbol,
+                        }
+                      : null
+                  }
+                  onPause={() => runTrackedAction("pause", stablecoin.pauseStablecoin)}
+                  onUnpause={() => runTrackedAction("unpause", stablecoin.unpauseStablecoin)}
+                />
+              )}
 
-          {activeView === "seize" && (
-            <Seize
-              config={
-                stablecoin.config
-                  ? {
-                      enablePermanentDelegate: stablecoin.config.enablePermanentDelegate,
-                    }
-                  : null
-              }
-              onSeize={(fromOwner, toOwner, amount) =>
-                runTrackedAction("seize", stablecoin.seizeTokens, fromOwner, toOwner, amount)
-              }
-            />
+              {activeView === "seize" && (
+                <Seize
+                  config={
+                    stablecoin.config
+                      ? {
+                          enablePermanentDelegate: stablecoin.config.enablePermanentDelegate,
+                        }
+                      : null
+                  }
+                  onSeize={(fromOwner, toOwner, amount) =>
+                    runTrackedAction("seize", stablecoin.seizeTokens, fromOwner, toOwner, amount)
+                  }
+                />
+              )}
+
+              {activeView === "demo" && (
+                <DemoWizard
+                  onComplete={(mintAddr) => {
+                    setMintInput(mintAddr);
+                    void stablecoin.loadStablecoin(mintAddr).then(() => {
+                      void refreshStats();
+                      setActiveView("dashboard");
+                    });
+                  }}
+                />
+              )}
+
+              {activeView === "initialize" && (
+                <Initialize
+                  onCreated={(mintAddr) => {
+                    setMintInput(mintAddr);
+                    void stablecoin.loadStablecoin(mintAddr).then(() => {
+                      void refreshStats();
+                      setActiveView("dashboard");
+                    });
+                  }}
+                />
+              )}
+
+              {activeView === "transfer" && (
+                <Transfer mintAddress={stablecoin.mintAddress} decimals={stablecoin.config?.decimals ?? 6} />
+              )}
+
+              {activeView === "audit" && (
+                <AuditLog configAddress={stablecoin.configAddress} />
+              )}
+            </>
           )}
         </div>
       </main>

@@ -12,6 +12,7 @@ import {
   loadConfig,
   loadSssProgram,
   deriveRolePDA,
+  deriveBlacklistPDA,
   getATA,
   SSS_PROGRAM_ID,
   ROLE_SEIZER,
@@ -54,6 +55,7 @@ async function handleSeize(
   const toPubkey = new PublicKey(toStr);
   const fromATA = getATA(mintPubkey, fromPubkey);
   const toATA = getATA(mintPubkey, toPubkey);
+  const [blacklistEntry] = deriveBlacklistPDA(configPDA, fromPubkey);
 
   // If no amount specified, we would need to query the balance.
   // For now, amount is required.
@@ -96,6 +98,8 @@ async function handleSeize(
         authority: keypair.publicKey,
         config: configPDA,
         roleAccount: rolePDA,
+        blacklistedOwner: fromPubkey,
+        blacklistEntry,
         mint: mintPubkey,
         fromTokenAccount: fromATA,
         toTokenAccount: toATA,

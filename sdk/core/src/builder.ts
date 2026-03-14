@@ -83,6 +83,8 @@ export interface BuilderContext {
    * this context. Individual builders can override via `.withRetry()`.
    */
   readonly retryConfig?: Partial<RetryConfig>;
+  /** Whether this stablecoin uses SSS-2 features (transfer hook enabled). */
+  readonly isSSS2?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -289,6 +291,11 @@ export abstract class OperationBuilder {
    */
   async transaction(feePayer: PublicKey): Promise<Transaction> {
     const tx = new Transaction();
+
+    // Auto-set compute budget for SSS-2 when not explicitly set
+    if (this._computeUnits === undefined && this.ctx.isSSS2) {
+      this._computeUnits = 400_000;
+    }
 
     if (this._computeUnits !== undefined) {
       tx.add(
@@ -1101,6 +1108,164 @@ export class TransferAuthorityBuilder extends OperationBuilder {
 }
 
 // ---------------------------------------------------------------------------
+// ProposeAuthorityBuilder
+// ---------------------------------------------------------------------------
+
+/**
+ * Fluent builder for proposing an authority transfer (two-step).
+ *
+ * @example
+ * ```ts
+ * await stablecoin.proposeAuthority(newAuthorityPubkey)
+ *   .by(currentAuthorityKeypair)
+ *   .send(payerKeypair);
+ * ```
+ */
+export class ProposeAuthorityBuilder extends OperationBuilder {
+  private readonly _newAuthority: PublicKey;
+  private _authority?: PublicKey;
+
+  /** @internal */
+  constructor(ctx: BuilderContext, newAuthority: PublicKey) {
+    super(ctx);
+    this._newAuthority = newAuthority;
+  }
+
+  /**
+   * Set the current master authority. Accepts PublicKey or Keypair.
+   * @param authority - The current master authority
+   */
+  by(authority: PublicKey | Keypair): this {
+    this._authority = toPublicKey(authority);
+    const kp = collectKeypair(authority);
+    if (kp) this._additionalSigners.push(kp);
+    return this;
+  }
+
+  protected async buildCoreInstructions(): Promise<TransactionInstruction[]> {
+    if (!this._authority) {
+      throw new Error(
+        "ProposeAuthorityBuilder: authority not set. Call .by(authority)"
+      );
+    }
+
+    const ix = await this.ctx.program.methods
+      .proposeAuthorityTransfer(this._newAuthority)
+      .accountsStrict({
+        authority: this._authority,
+        config: this.ctx.configAddress,
+      })
+      .instruction();
+
+    return [ix];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// AcceptAuthorityBuilder
+// ---------------------------------------------------------------------------
+
+/**
+ * Fluent builder for accepting an authority transfer (two-step).
+ *
+ * @example
+ * ```ts
+ * await stablecoin.acceptAuthority()
+ *   .by(newAuthorityKeypair)
+ *   .send(payerKeypair);
+ * ```
+ */
+export class AcceptAuthorityBuilder extends OperationBuilder {
+  private _newAuthority?: PublicKey;
+
+  /** @internal */
+  constructor(ctx: BuilderContext) {
+    super(ctx);
+  }
+
+  /**
+   * Set the new authority (must be the pending authority). Accepts PublicKey or Keypair.
+   * @param newAuthority - The proposed new authority
+   */
+  by(newAuthority: PublicKey | Keypair): this {
+    this._newAuthority = toPublicKey(newAuthority);
+    const kp = collectKeypair(newAuthority);
+    if (kp) this._additionalSigners.push(kp);
+    return this;
+  }
+
+  protected async buildCoreInstructions(): Promise<TransactionInstruction[]> {
+    if (!this._newAuthority) {
+      throw new Error(
+        "AcceptAuthorityBuilder: new authority not set. Call .by(newAuthority)"
+      );
+    }
+
+    const ix = await this.ctx.program.methods
+      .acceptAuthorityTransfer()
+      .accountsStrict({
+        newAuthority: this._newAuthority,
+        config: this.ctx.configAddress,
+      })
+      .instruction();
+
+    return [ix];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// CancelAuthorityBuilder
+// ---------------------------------------------------------------------------
+
+/**
+ * Fluent builder for cancelling a pending authority transfer (two-step).
+ *
+ * @example
+ * ```ts
+ * await stablecoin.cancelAuthority()
+ *   .by(currentAuthorityKeypair)
+ *   .send(payerKeypair);
+ * ```
+ */
+export class CancelAuthorityBuilder extends OperationBuilder {
+  private _authority?: PublicKey;
+
+  /** @internal */
+  constructor(ctx: BuilderContext) {
+    super(ctx);
+  }
+
+  /**
+   * Set the current master authority. Accepts PublicKey or Keypair.
+   * @param authority - The current master authority
+   */
+  by(authority: PublicKey | Keypair): this {
+    this._authority = toPublicKey(authority);
+    const kp = collectKeypair(authority);
+    if (kp) this._additionalSigners.push(kp);
+    return this;
+  }
+
+  protected async buildCoreInstructions(): Promise<TransactionInstruction[]> {
+    if (!this._authority) {
+      throw new Error(
+        "CancelAuthorityBuilder: authority not set. Call .by(authority)"
+      );
+    }
+
+    const ix = await this.ctx.program.methods
+      .cancelAuthorityTransfer()
+      .accountsStrict({
+        authority: this._authority,
+        config: this.ctx.configAddress,
+      })
+      .instruction();
+
+    return [ix];
+  }
+}
+
+// ---------------------------------------------------------------------------
 // BlacklistAddBuilder
 // ---------------------------------------------------------------------------
 
@@ -1266,6 +1431,7 @@ export class BlacklistRemoveBuilder extends OperationBuilder {
  */
 export class SeizeBuilder extends OperationBuilder {
   private _amount: BN;
+  private _fromWallet?: PublicKey;
   private _fromTokenAccount?: PublicKey;
   private _toTokenAccount?: PublicKey;
   private _authority?: PublicKey;
@@ -1291,6 +1457,7 @@ export class SeizeBuilder extends OperationBuilder {
    * @param wallet - Wallet to seize tokens from
    */
   from(wallet: PublicKey): this {
+    this._fromWallet = wallet;
     this._fromTokenAccount = getAssociatedTokenAddress(
       this.ctx.mintAddress,
       wallet
@@ -1361,6 +1528,26 @@ export class SeizeBuilder extends OperationBuilder {
       this._authority
     );
 
+    // Resolve the blacklisted owner: use stored wallet or fetch from chain
+    let blacklistedOwner: PublicKey;
+    if (this._fromWallet) {
+      blacklistedOwner = this._fromWallet;
+    } else {
+      const connection = (this.ctx.program.provider as any).connection;
+      const accountInfo = await connection.getAccountInfo(this._fromTokenAccount);
+      if (!accountInfo) {
+        throw new Error("SeizeBuilder: source token account not found on chain");
+      }
+      // Token-2022 account layout: owner is at offset 32 (32 bytes)
+      blacklistedOwner = new PublicKey(accountInfo.data.subarray(32, 64));
+    }
+
+    const [blacklistEntry] = getBlacklistEntryAddress(
+      this.ctx.program.programId,
+      this.ctx.configAddress,
+      blacklistedOwner
+    );
+
     const stablecoinConfig =
       await (this.ctx.program.account as any).stablecoinConfig.fetch(
         this.ctx.configAddress
@@ -1371,6 +1558,8 @@ export class SeizeBuilder extends OperationBuilder {
         authority: this._authority,
         config: this.ctx.configAddress,
         roleAccount,
+        blacklistedOwner,
+        blacklistEntry,
         mint: this.ctx.mintAddress,
         fromTokenAccount: this._fromTokenAccount,
         toTokenAccount: this._toTokenAccount,

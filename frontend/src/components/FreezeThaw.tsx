@@ -76,21 +76,23 @@ export default function FreezeThaw({
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {/* Freeze Account Card */}
-      <div className="card">
-        <h2 className="card-header">Freeze Account</h2>
-        <form onSubmit={handleFreeze} className="space-y-4">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="panel">
+        <div className="panel-header">
           <div>
-            <input
-              type="text"
-              className="input-field"
-              placeholder="Wallet address to freeze"
-              value={freezeWallet}
-              onChange={(e) => setFreezeWallet(e.target.value)}
-              disabled={isDisabled || freezeLoading}
-            />
+            <p className="eyebrow">Account Restriction</p>
+            <h2 className="panel-title">Freeze Account</h2>
           </div>
+        </div>
+        <form onSubmit={handleFreeze} className="space-y-4">
+          <input
+            type="text"
+            className="input-field"
+            placeholder="Wallet address to freeze"
+            value={freezeWallet}
+            onChange={(e) => setFreezeWallet(e.target.value)}
+            disabled={isDisabled || freezeLoading}
+          />
           <button
             type="submit"
             className="btn-danger w-full"
@@ -98,37 +100,35 @@ export default function FreezeThaw({
           >
             {freezeLoading ? "Freezing..." : "Freeze"}
           </button>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-slate-500">
             Freezes the wallet&apos;s associated token account
           </p>
           {freezeResult && (
-            <p
-              className={
-                freezeResult.type === "success"
-                  ? "text-sm text-green-400"
-                  : "text-sm text-red-400"
-              }
-            >
-              {freezeResult.message}
-            </p>
+            <div className={`alert-panel ${freezeResult.type === "success" ? "alert-success" : "alert-critical"}`}>
+              <p className={`text-sm ${freezeResult.type === "success" ? "text-emerald-200" : "text-rose-200"}`}>
+                {freezeResult.message}
+              </p>
+            </div>
           )}
         </form>
       </div>
 
-      {/* Thaw Account Card */}
-      <div className="card">
-        <h2 className="card-header">Thaw Account</h2>
-        <form onSubmit={handleThaw} className="space-y-4">
+      <div className="panel">
+        <div className="panel-header">
           <div>
-            <input
-              type="text"
-              className="input-field"
-              placeholder="Wallet address to thaw"
-              value={thawWallet}
-              onChange={(e) => setThawWallet(e.target.value)}
-              disabled={isDisabled || thawLoading}
-            />
+            <p className="eyebrow">Account Restoration</p>
+            <h2 className="panel-title">Thaw Account</h2>
           </div>
+        </div>
+        <form onSubmit={handleThaw} className="space-y-4">
+          <input
+            type="text"
+            className="input-field"
+            placeholder="Wallet address to thaw"
+            value={thawWallet}
+            onChange={(e) => setThawWallet(e.target.value)}
+            disabled={isDisabled || thawLoading}
+          />
           <button
             type="submit"
             className="btn-primary w-full"
@@ -136,19 +136,15 @@ export default function FreezeThaw({
           >
             {thawLoading ? "Thawing..." : "Thaw"}
           </button>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-slate-500">
             Unfreezes a previously frozen token account
           </p>
           {thawResult && (
-            <p
-              className={
-                thawResult.type === "success"
-                  ? "text-sm text-green-400"
-                  : "text-sm text-red-400"
-              }
-            >
-              {thawResult.message}
-            </p>
+            <div className={`alert-panel ${thawResult.type === "success" ? "alert-success" : "alert-critical"}`}>
+              <p className={`text-sm ${thawResult.type === "success" ? "text-emerald-200" : "text-rose-200"}`}>
+                {thawResult.message}
+              </p>
+            </div>
           )}
         </form>
       </div>

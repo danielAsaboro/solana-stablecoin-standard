@@ -794,6 +794,8 @@ describe("SSS-2: Transfer Hook Enforcement", () => {
         authority: authority.publicKey,
         config: configPda,
         roleAccount: seizerRolePda,
+        blacklistedOwner: alice.publicKey,
+        blacklistEntry: aliceBlacklistEntry,
         mint: mintKey,
         fromTokenAccount: aliceAta,
         toTokenAccount: authorityAta,

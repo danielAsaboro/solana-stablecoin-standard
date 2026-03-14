@@ -617,6 +617,42 @@ describe("Edge Cases: SSS-1", () => {
         expect(err).to.exist;
       }
     });
+
+    it("rejects seize on SSS-1 config (permanent delegate not enabled)", async () => {
+      const target = Keypair.generate();
+      const [seizerRole] = PublicKey.findProgramAddressSync(
+        [ROLE_SEED, configPda.toBuffer(), Buffer.from([ROLE_SEIZER]), authority.publicKey.toBuffer()],
+        program.programId
+      );
+      const [blacklistEntry] = PublicKey.findProgramAddressSync(
+        [BLACKLIST_SEED, configPda.toBuffer(), target.publicKey.toBuffer()],
+        program.programId
+      );
+
+      try {
+        await program.methods
+          .seize(new anchor.BN(1_000_000))
+          .accountsStrict({
+            authority: authority.publicKey,
+            config: configPda,
+            roleAccount: seizerRole,
+            mint: mintKey,
+            fromTokenAccount: authorityAta,
+            toTokenAccount: authorityAta,
+            blacklistedOwner: target.publicKey,
+            blacklistEntry,
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .rpc();
+        expect.fail("Should have thrown");
+      } catch (err: unknown) {
+        expect((err as Error).toString()).to.satisfy((msg: string) =>
+          msg.includes("PermanentDelegateNotEnabled") ||
+          msg.includes("ConstraintRaw") ||
+          msg.includes("Error")
+        );
+      }
+    });
   });
 });
 

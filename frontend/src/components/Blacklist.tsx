@@ -81,10 +81,15 @@ export default function Blacklist({
 
   if (!config || !config.enableTransferHook) {
     return (
-      <div className="card">
-        <h2 className="card-header">Blacklist Management</h2>
-        <div className="flex min-h-[200px] items-center justify-center">
-          <p className="text-gray-400">
+      <div className="panel">
+        <div className="panel-header">
+          <div>
+            <p className="eyebrow">Compliance</p>
+            <h2 className="panel-title">Blacklist Management</h2>
+          </div>
+        </div>
+        <div className="empty-state">
+          <p className="text-center text-sm text-slate-400">
             Blacklist is only available on SSS-2 stablecoins
           </p>
         </div>
@@ -141,10 +146,13 @@ export default function Blacklist({
 
   return (
     <div className="space-y-6">
-      {/* Blacklist Table */}
-      <div className="card">
-        <div className="flex items-center justify-between">
-          <h2 className="card-header">Blacklisted Addresses</h2>
+      {/* Blacklisted Addresses */}
+      <div className="panel">
+        <div className="panel-header">
+          <div>
+            <p className="eyebrow">Restricted Addresses</p>
+            <h2 className="panel-title">Blacklisted Addresses</h2>
+          </div>
           <button
             onClick={loadEntries}
             className="btn-secondary"
@@ -155,67 +163,63 @@ export default function Blacklist({
         </div>
 
         {entries.length === 0 ? (
-          <p className="py-8 text-center text-gray-500">
-            No blacklisted addresses
-          </p>
+          <div className="empty-state">
+            <p className="text-center text-sm text-slate-400">
+              No blacklisted addresses
+            </p>
+          </div>
         ) : (
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-gray-700 text-gray-400">
-                  <th className="pb-3 pr-4 font-medium">Address</th>
-                  <th className="pb-3 pr-4 font-medium">Reason</th>
-                  <th className="pb-3 pr-4 font-medium">Date</th>
-                  <th className="pb-3 font-medium">Added By</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-800">
-                {entries.map((entry, idx) => (
-                  <tr key={idx} className="text-gray-300">
-                    <td className="py-3 pr-4 font-mono">
+          <div className="space-y-3">
+            {entries.map((entry, idx) => (
+              <div key={idx} className="activity-row">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <p className="font-mono text-sm text-white">
                       {truncateAddress(entry.address.toBase58())}
-                    </td>
-                    <td className="py-3 pr-4">{entry.reason}</td>
-                    <td className="py-3 pr-4">
+                    </p>
+                    <p className="text-sm text-slate-400">{entry.reason}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-slate-500">
                       {formatTimestamp(entry.blacklistedAt)}
-                    </td>
-                    <td className="py-3 font-mono">
-                      {truncateAddress(entry.blacklistedBy.toBase58())}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </p>
+                    <p className="font-mono text-xs text-slate-600">
+                      by {truncateAddress(entry.blacklistedBy.toBase58())}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
 
       {/* Add / Remove Forms */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Add to Blacklist */}
-        <div className="card">
-          <h2 className="card-header">Add to Blacklist</h2>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="panel">
+          <div className="panel-header">
+            <div>
+              <p className="eyebrow">Restrict Access</p>
+              <h2 className="panel-title">Add to Blacklist</h2>
+            </div>
+          </div>
           <form onSubmit={handleAdd} className="space-y-4">
-            <div>
-              <input
-                type="text"
-                className="input-field"
-                placeholder="Address to blacklist"
-                value={addAddress}
-                onChange={(e) => setAddAddress(e.target.value)}
-                disabled={addLoading}
-              />
-            </div>
-            <div>
-              <input
-                type="text"
-                className="input-field"
-                placeholder="Reason for blacklisting"
-                value={addReason}
-                onChange={(e) => setAddReason(e.target.value)}
-                disabled={addLoading}
-              />
-            </div>
+            <input
+              type="text"
+              className="input-field"
+              placeholder="Address to blacklist"
+              value={addAddress}
+              onChange={(e) => setAddAddress(e.target.value)}
+              disabled={addLoading}
+            />
+            <input
+              type="text"
+              className="input-field"
+              placeholder="Reason for blacklisting"
+              value={addReason}
+              onChange={(e) => setAddReason(e.target.value)}
+              disabled={addLoading}
+            />
             <button
               type="submit"
               className="btn-danger w-full"
@@ -224,33 +228,31 @@ export default function Blacklist({
               {addLoading ? "Adding..." : "Add to Blacklist"}
             </button>
             {addResult && (
-              <p
-                className={
-                  addResult.type === "success"
-                    ? "text-sm text-green-400"
-                    : "text-sm text-red-400"
-                }
-              >
-                {addResult.message}
-              </p>
+              <div className={`alert-panel ${addResult.type === "success" ? "alert-success" : "alert-critical"}`}>
+                <p className={`text-sm ${addResult.type === "success" ? "text-emerald-200" : "text-rose-200"}`}>
+                  {addResult.message}
+                </p>
+              </div>
             )}
           </form>
         </div>
 
-        {/* Remove from Blacklist */}
-        <div className="card">
-          <h2 className="card-header">Remove from Blacklist</h2>
-          <form onSubmit={handleRemove} className="space-y-4">
+        <div className="panel">
+          <div className="panel-header">
             <div>
-              <input
-                type="text"
-                className="input-field"
-                placeholder="Address to remove"
-                value={removeAddress}
-                onChange={(e) => setRemoveAddress(e.target.value)}
-                disabled={removeLoading}
-              />
+              <p className="eyebrow">Restore Access</p>
+              <h2 className="panel-title">Remove from Blacklist</h2>
             </div>
+          </div>
+          <form onSubmit={handleRemove} className="space-y-4">
+            <input
+              type="text"
+              className="input-field"
+              placeholder="Address to remove"
+              value={removeAddress}
+              onChange={(e) => setRemoveAddress(e.target.value)}
+              disabled={removeLoading}
+            />
             <button
               type="submit"
               className="btn-secondary w-full"
@@ -259,15 +261,11 @@ export default function Blacklist({
               {removeLoading ? "Removing..." : "Remove from Blacklist"}
             </button>
             {removeResult && (
-              <p
-                className={
-                  removeResult.type === "success"
-                    ? "text-sm text-green-400"
-                    : "text-sm text-red-400"
-                }
-              >
-                {removeResult.message}
-              </p>
+              <div className={`alert-panel ${removeResult.type === "success" ? "alert-success" : "alert-critical"}`}>
+                <p className={`text-sm ${removeResult.type === "success" ? "text-emerald-200" : "text-rose-200"}`}>
+                  {removeResult.message}
+                </p>
+              </div>
             )}
           </form>
         </div>

@@ -5,10 +5,6 @@ import { PublicKey } from "@solana/web3.js";
 import { BN } from "@coral-xyz/anchor";
 import { ROLE_LABELS, truncateAddress } from "@/lib/constants";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
 interface RoleAccountData {
   config: PublicKey;
   user: PublicKey;
@@ -38,11 +34,6 @@ interface RolesProps {
   fetchMinterQuotas: () => Promise<MinterQuotaData[]>;
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Available role options based on current config feature flags. */
 function getRoleOptions(
   config: RolesProps["config"],
 ): { value: number; label: string }[] {
@@ -63,16 +54,11 @@ function getRoleOptions(
   return base;
 }
 
-/** Return a Tailwind color class for a usage percentage bar. */
 function usageColor(pct: number): string {
-  if (pct > 80) return "bg-red-500";
-  if (pct >= 50) return "bg-yellow-500";
-  return "bg-green-500";
+  if (pct > 80) return "bg-rose-500";
+  if (pct >= 50) return "bg-amber-500";
+  return "bg-emerald-500";
 }
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
 
 const Roles: FC<RolesProps> = ({
   config,
@@ -81,29 +67,23 @@ const Roles: FC<RolesProps> = ({
   fetchRoles,
   fetchMinterQuotas,
 }) => {
-  // ---- Roles state ----
   const [roles, setRoles] = useState<RoleAccountData[]>([]);
   const [rolesLoading, setRolesLoading] = useState(false);
 
-  // ---- Assign / Revoke form ----
   const [selectedRole, setSelectedRole] = useState<number>(0);
   const [roleUserAddress, setRoleUserAddress] = useState("");
   const [roleResult, setRoleResult] = useState<string | null>(null);
   const [roleError, setRoleError] = useState<string | null>(null);
   const [roleSubmitting, setRoleSubmitting] = useState(false);
 
-  // ---- Minter quotas state ----
   const [quotas, setQuotas] = useState<MinterQuotaData[]>([]);
   const [quotasLoading, setQuotasLoading] = useState(false);
 
-  // ---- Set Quota form ----
   const [quotaMinterAddress, setQuotaMinterAddress] = useState("");
   const [quotaAmount, setQuotaAmount] = useState("");
   const [quotaResult, setQuotaResult] = useState<string | null>(null);
   const [quotaError, setQuotaError] = useState<string | null>(null);
   const [quotaSubmitting, setQuotaSubmitting] = useState(false);
-
-  // ---- Data loading helpers ----
 
   const loadRoles = async () => {
     setRolesLoading(true);
@@ -129,14 +109,11 @@ const Roles: FC<RolesProps> = ({
     }
   };
 
-  // Auto-load on mount
   useEffect(() => {
     loadRoles();
     loadQuotas();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // ---- Handlers ----
 
   const handleAssignRole = async () => {
     setRoleResult(null);
@@ -183,20 +160,19 @@ const Roles: FC<RolesProps> = ({
     }
   };
 
-  // ---- Derived data ----
-
   const roleOptions = getRoleOptions(config);
 
   return (
     <div className="space-y-6">
-      {/* ------------------------------------------------------------------ */}
-      {/* Current Roles                                                       */}
-      {/* ------------------------------------------------------------------ */}
-      <div className="card">
-        <div className="card-header flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-white">Current Roles</h2>
+      {/* Current Roles */}
+      <div className="panel">
+        <div className="panel-header">
+          <div>
+            <p className="eyebrow">Access Control</p>
+            <h2 className="panel-title">Current Roles</h2>
+          </div>
           <button
-            className="btn-primary text-sm"
+            className="btn-secondary"
             onClick={loadRoles}
             disabled={rolesLoading}
           >
@@ -204,61 +180,47 @@ const Roles: FC<RolesProps> = ({
           </button>
         </div>
 
-        <div className="p-4">
-          {roles.length === 0 ? (
-            <p className="text-sm text-gray-400">No roles assigned</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="border-b border-gray-700 text-gray-400">
-                    <th className="pb-2 pr-4">Address</th>
-                    <th className="pb-2 pr-4">Role</th>
-                    <th className="pb-2">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {roles.map((role, idx) => (
-                    <tr
-                      key={idx}
-                      className="border-b border-gray-800 text-gray-200"
-                    >
-                      <td className="py-2 pr-4 font-mono text-xs">
-                        {truncateAddress(role.user.toBase58())}
-                      </td>
-                      <td className="py-2 pr-4">
-                        {ROLE_LABELS[role.roleType] ?? `Unknown(${role.roleType})`}
-                      </td>
-                      <td className="py-2">
-                        {role.active ? (
-                          <span className="badge-green">Active</span>
-                        ) : (
-                          <span className="badge-red">Inactive</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        {roles.length === 0 ? (
+          <div className="empty-state">
+            <p className="text-sm text-slate-400">No roles assigned</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {roles.map((role, idx) => (
+              <div key={idx} className="activity-row">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono text-xs text-slate-300">
+                      {truncateAddress(role.user.toBase58())}
+                    </span>
+                    <span className="badge-muted">
+                      {ROLE_LABELS[role.roleType] ?? `Unknown(${role.roleType})`}
+                    </span>
+                  </div>
+                  {role.active ? (
+                    <span className="badge-green">Active</span>
+                  ) : (
+                    <span className="badge-red">Inactive</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Assign / Revoke Role                                                */}
-      {/* ------------------------------------------------------------------ */}
-      <div className="card">
-        <div className="card-header">
-          <h2 className="text-lg font-semibold text-white">
-            Assign / Revoke Role
-          </h2>
+      {/* Assign / Revoke Role */}
+      <div className="panel">
+        <div className="panel-header">
+          <div>
+            <p className="eyebrow">Role Management</p>
+            <h2 className="panel-title">Assign / Revoke Role</h2>
+          </div>
         </div>
 
-        <div className="space-y-4 p-4">
-          {/* Role type dropdown */}
+        <div className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-300">
+            <label className="mb-1 block text-sm font-medium text-slate-300">
               Role Type
             </label>
             <select
@@ -274,9 +236,8 @@ const Roles: FC<RolesProps> = ({
             </select>
           </div>
 
-          {/* User address input */}
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-300">
+            <label className="mb-1 block text-sm font-medium text-slate-300">
               User Address
             </label>
             <input
@@ -288,7 +249,6 @@ const Roles: FC<RolesProps> = ({
             />
           </div>
 
-          {/* Action buttons */}
           <div className="flex gap-3">
             <button
               className="btn-primary"
@@ -306,24 +266,28 @@ const Roles: FC<RolesProps> = ({
             </button>
           </div>
 
-          {/* Result / Error messages */}
           {roleResult && (
-            <p className="break-all text-sm text-green-400">{roleResult}</p>
+            <div className="alert-panel alert-success">
+              <p className="break-all text-sm text-emerald-200">{roleResult}</p>
+            </div>
           )}
           {roleError && (
-            <p className="break-all text-sm text-red-400">{roleError}</p>
+            <div className="alert-panel alert-critical">
+              <p className="break-all text-sm text-rose-200">{roleError}</p>
+            </div>
           )}
         </div>
       </div>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Minter Quotas                                                       */}
-      {/* ------------------------------------------------------------------ */}
-      <div className="card">
-        <div className="card-header flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-white">Minter Quotas</h2>
+      {/* Minter Quotas */}
+      <div className="panel">
+        <div className="panel-header">
+          <div>
+            <p className="eyebrow">Supply Limits</p>
+            <h2 className="panel-title">Minter Quotas</h2>
+          </div>
           <button
-            className="btn-primary text-sm"
+            className="btn-secondary"
             onClick={loadQuotas}
             disabled={quotasLoading}
           >
@@ -331,80 +295,58 @@ const Roles: FC<RolesProps> = ({
           </button>
         </div>
 
-        <div className="p-4">
-          {quotas.length === 0 ? (
-            <p className="text-sm text-gray-400">No minter quotas configured</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="border-b border-gray-700 text-gray-400">
-                    <th className="pb-2 pr-4">Minter</th>
-                    <th className="pb-2 pr-4">Minted</th>
-                    <th className="pb-2 pr-4">Quota</th>
-                    <th className="pb-2 pr-4">Remaining</th>
-                    <th className="pb-2">Usage %</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {quotas.map((q, idx) => {
-                    const minted = q.minted.toNumber();
-                    const quota = q.quota.toNumber();
-                    const remaining = Math.max(0, quota - minted);
-                    const pct = quota > 0 ? (minted / quota) * 100 : 0;
+        {quotas.length === 0 ? (
+          <div className="empty-state">
+            <p className="text-sm text-slate-400">No minter quotas configured</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {quotas.map((q, idx) => {
+              const minted = q.minted.toNumber();
+              const quota = q.quota.toNumber();
+              const remaining = Math.max(0, quota - minted);
+              const pct = quota > 0 ? (minted / quota) * 100 : 0;
 
-                    return (
-                      <tr
-                        key={idx}
-                        className="border-b border-gray-800 text-gray-200"
-                      >
-                        <td className="py-2 pr-4 font-mono text-xs">
-                          {truncateAddress(q.minter.toBase58())}
-                        </td>
-                        <td className="py-2 pr-4">
-                          {minted.toLocaleString()}
-                        </td>
-                        <td className="py-2 pr-4">
-                          {quota.toLocaleString()}
-                        </td>
-                        <td className="py-2 pr-4">
-                          {remaining.toLocaleString()}
-                        </td>
-                        <td className="py-2">
-                          <div className="flex items-center gap-2">
-                            <div className="h-2 w-24 overflow-hidden rounded-full bg-gray-700">
-                              <div
-                                className={`h-full rounded-full ${usageColor(pct)}`}
-                                style={{ width: `${Math.min(pct, 100)}%` }}
-                              />
-                            </div>
-                            <span className="text-xs text-gray-400">
-                              {pct.toFixed(1)}%
-                            </span>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+              return (
+                <div key={idx} className="activity-row">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-mono text-xs text-slate-300">
+                      {truncateAddress(q.minter.toBase58())}
+                    </span>
+                    <span className="text-xs text-slate-500">
+                      {minted.toLocaleString()} / {quota.toLocaleString()} (remaining: {remaining.toLocaleString()})
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-800">
+                      <div
+                        className={`h-full rounded-full ${usageColor(pct)}`}
+                        style={{ width: `${Math.min(pct, 100)}%` }}
+                      />
+                    </div>
+                    <span className="text-xs text-slate-400">
+                      {pct.toFixed(1)}%
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Set Minter Quota                                                    */}
-      {/* ------------------------------------------------------------------ */}
-      <div className="card">
-        <div className="card-header">
-          <h2 className="text-lg font-semibold text-white">Set Minter Quota</h2>
+      {/* Set Minter Quota */}
+      <div className="panel">
+        <div className="panel-header">
+          <div>
+            <p className="eyebrow">Quota Configuration</p>
+            <h2 className="panel-title">Set Minter Quota</h2>
+          </div>
         </div>
 
-        <div className="space-y-4 p-4">
-          {/* Minter address input */}
+        <div className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-300">
+            <label className="mb-1 block text-sm font-medium text-slate-300">
               Minter Address
             </label>
             <input
@@ -416,9 +358,8 @@ const Roles: FC<RolesProps> = ({
             />
           </div>
 
-          {/* Quota amount input */}
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-300">
+            <label className="mb-1 block text-sm font-medium text-slate-300">
               Quota Amount
             </label>
             <input
@@ -430,7 +371,6 @@ const Roles: FC<RolesProps> = ({
             />
           </div>
 
-          {/* Action button */}
           <button
             className="btn-primary"
             onClick={handleSetQuota}
@@ -439,12 +379,15 @@ const Roles: FC<RolesProps> = ({
             {quotaSubmitting ? "Processing..." : "Set Quota"}
           </button>
 
-          {/* Result / Error messages */}
           {quotaResult && (
-            <p className="break-all text-sm text-green-400">{quotaResult}</p>
+            <div className="alert-panel alert-success">
+              <p className="break-all text-sm text-emerald-200">{quotaResult}</p>
+            </div>
           )}
           {quotaError && (
-            <p className="break-all text-sm text-red-400">{quotaError}</p>
+            <div className="alert-panel alert-critical">
+              <p className="break-all text-sm text-rose-200">{quotaError}</p>
+            </div>
           )}
         </div>
       </div>

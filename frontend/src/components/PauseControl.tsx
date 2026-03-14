@@ -81,21 +81,25 @@ export default function PauseControl({
   }
 
   return (
-    <div className="card max-w-xl">
-      <h2 className="card-header">Pause Control</h2>
+    <div className="panel max-w-xl">
+      <div className="panel-header">
+        <div>
+          <p className="eyebrow">Emergency Controls</p>
+          <h2 className="panel-title">Pause Control</h2>
+        </div>
+      </div>
 
       {/* Current Status */}
       <div className="mb-6 flex items-center gap-4">
-        <span className="text-sm text-gray-400">Current Status</span>
+        <span className="text-sm text-slate-400">Current Status</span>
         {isPaused ? (
-          <span className="badge-red text-lg px-4 py-1.5">PAUSED</span>
+          <span className="badge-red px-4 py-1.5 text-lg">PAUSED</span>
         ) : (
-          <span className="badge-green text-lg px-4 py-1.5">ACTIVE</span>
+          <span className="badge-green px-4 py-1.5 text-lg">ACTIVE</span>
         )}
       </div>
 
-      {/* Description */}
-      <p className="mb-6 text-sm text-gray-400">
+      <p className="mb-6 text-sm text-slate-400">
         When paused, all minting and burning operations are blocked across the
         entire stablecoin. Freeze, thaw, and role management operations remain
         available. Use this as an emergency measure when the stablecoin needs to
@@ -114,27 +118,26 @@ export default function PauseControl({
           </button>
         </form>
       ) : (
-        /* Pause Form with confirmation */
         <form onSubmit={handlePause} className="space-y-4">
-          <div className="rounded-lg border border-red-900/50 bg-red-950/30 p-4">
-            <p className="text-sm font-medium text-red-400">
-              This will block ALL minting and burning
-            </p>
-            <p className="mt-2 text-xs text-gray-400">
-              Type <span className="font-mono font-semibold text-white">{symbol}</span> below
-              to confirm you want to pause the stablecoin.
-            </p>
+          <div className="alert-panel alert-critical">
+            <div>
+              <p className="text-sm font-medium text-rose-300">
+                This will block ALL minting and burning
+              </p>
+              <p className="mt-2 text-xs text-slate-400">
+                Type <span className="font-mono font-semibold text-white">{symbol}</span> below
+                to confirm you want to pause the stablecoin.
+              </p>
+            </div>
           </div>
-          <div>
-            <input
-              type="text"
-              className="input-field"
-              placeholder={`Type "${symbol}" to confirm`}
-              value={confirmText}
-              onChange={(e) => setConfirmText(e.target.value)}
-              disabled={!config || loading}
-            />
-          </div>
+          <input
+            type="text"
+            className="input-field"
+            placeholder={`Type "${symbol}" to confirm`}
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            disabled={!config || loading}
+          />
           <button
             type="submit"
             className="btn-danger w-full"
@@ -147,15 +150,11 @@ export default function PauseControl({
 
       {/* Result Message */}
       {result && (
-        <p
-          className={
-            result.type === "success"
-              ? "mt-4 text-sm text-green-400"
-              : "mt-4 text-sm text-red-400"
-          }
-        >
-          {result.message}
-        </p>
+        <div className={`mt-4 alert-panel ${result.type === "success" ? "alert-success" : "alert-critical"}`}>
+          <p className={`text-sm ${result.type === "success" ? "text-emerald-200" : "text-rose-200"}`}>
+            {result.message}
+          </p>
+        </div>
       )}
     </div>
   );

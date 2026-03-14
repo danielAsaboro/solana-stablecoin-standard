@@ -1,0 +1,49 @@
+# =============================================================================
+# SSS DEMO — COPY-PASTE COMMANDS
+# =============================================================================
+# Network: devnet
+# Mint:      36hjNDmTgPaRwonxXVDgbSNq8ZWExX6Kk666QT58oZBK
+# Alice:     75TgHQDwSjvvKx73UGweAR9WS452N2EHK9fBgsahWBQE
+# Bob:       HKqobvvwsh2EKM1jQxkiEQuLcN3fWbMJsAEe38onQeiL
+# Victim:    DbXk6K9hv5N3cZtKnzmcCxmyyMEq7PxAXPFxMr8JToMW
+# Authority: CChvxUR37fry8i2Gdvyrmwu2PH8vgZeTcFwtNqLxaHDW
+# =============================================================================
+
+# --- STEP 1: Initialize (already done — just show the command on screen) ---
+# npx sss-token init --preset sss-2 --name "Demo USD" --symbol "DUSD" --decimals 6
+
+# --- STEP 2: Mint tokens ---
+npx sss-token mint 75TgHQDwSjvvKx73UGweAR9WS452N2EHK9fBgsahWBQE 10000000 -u https://api.devnet.solana.com
+
+npx sss-token mint HKqobvvwsh2EKM1jQxkiEQuLcN3fWbMJsAEe38onQeiL 5000000 -u https://api.devnet.solana.com
+
+# --- STEP 3: Check supply ---
+npx sss-token supply -u https://api.devnet.solana.com
+
+# --- STEP 4: Happy path — transfers work normally ---
+spl-token transfer 36hjNDmTgPaRwonxXVDgbSNq8ZWExX6Kk666QT58oZBK 1 75TgHQDwSjvvKx73UGweAR9WS452N2EHK9fBgsahWBQE --owner ~/demo-bob.json --url https://api.devnet.solana.com --fee-payer ~/demo-bob.json --program-id TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+
+spl-token transfer 36hjNDmTgPaRwonxXVDgbSNq8ZWExX6Kk666QT58oZBK 1 HKqobvvwsh2EKM1jQxkiEQuLcN3fWbMJsAEe38onQeiL --owner ~/demo-alice.json --url https://api.devnet.solana.com --fee-payer ~/demo-alice.json --program-id TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+
+# --- STEP 5: Blacklist Bob ---
+npx sss-token blacklist add HKqobvvwsh2EKM1jQxkiEQuLcN3fWbMJsAEe38onQeiL --reason "FBI Case #2024-1847 - Fraud proceeds" -u https://api.devnet.solana.com
+
+# --- STEP 6: Sad path — transfers now blocked ---
+spl-token transfer 36hjNDmTgPaRwonxXVDgbSNq8ZWExX6Kk666QT58oZBK 1 75TgHQDwSjvvKx73UGweAR9WS452N2EHK9fBgsahWBQE --owner ~/demo-bob.json --url https://api.devnet.solana.com --fee-payer ~/demo-bob.json --program-id TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+
+spl-token transfer 36hjNDmTgPaRwonxXVDgbSNq8ZWExX6Kk666QT58oZBK 1 HKqobvvwsh2EKM1jQxkiEQuLcN3fWbMJsAEe38onQeiL --owner ~/demo-alice.json --url https://api.devnet.solana.com --fee-payer ~/demo-alice.json --program-id TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+
+# --- STEP 7: Seize ---
+npx sss-token seize HKqobvvwsh2EKM1jQxkiEQuLcN3fWbMJsAEe38onQeiL --to CChvxUR37fry8i2Gdvyrmwu2PH8vgZeTcFwtNqLxaHDW --amount 5000000 -u https://api.devnet.solana.com
+
+# --- STEP 8: Burn seized tokens ---
+npx sss-token burn 5000000 -u https://api.devnet.solana.com
+
+# --- STEP 9: Remint to victim ---
+npx sss-token mint DbXk6K9hv5N3cZtKnzmcCxmyyMEq7PxAXPFxMr8JToMW 5000000 -u https://api.devnet.solana.com
+
+# --- STEP 10: Verify supply conservation ---
+npx sss-token supply -u https://api.devnet.solana.com
+
+# --- STEP 11: Audit trail ---
+npx sss-token audit-log --action all --limit 10 -u https://api.devnet.solana.com

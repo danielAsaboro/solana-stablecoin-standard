@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { WalletProvider } from "@/components/WalletProvider";
+import { PrivyProviderWrapper } from "@/contexts/PrivyProviderWrapper";
+import { SolanaConnectionProvider } from "@/contexts/ConnectionContext";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -16,7 +17,13 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body>
-        <WalletProvider>{children}</WalletProvider>
+        <PrivyProviderWrapper>
+          <SolanaConnectionProvider
+            endpoint={process.env.NEXT_PUBLIC_RPC_URL || "http://127.0.0.1:8899"}
+          >
+            {children}
+          </SolanaConnectionProvider>
+        </PrivyProviderWrapper>
       </body>
     </html>
   );

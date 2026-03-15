@@ -1,3 +1,4 @@
+.claude/
 node_modules/
 target/
 test-ledger/
@@ -15,6 +16,9 @@ backend/.env
 # Internal analysis (not for submission)
 CRITICAL_EVALUATION.md
 PR_DESCRIPTION.md
+
+# Generated Codama clients
+sdk/codama/
 
 # Compiled TypeScript artifacts (these belong in dist/, which is already ignored above)
 sdk/core/src/*.js

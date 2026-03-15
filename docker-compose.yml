@@ -3,10 +3,14 @@ services:
     build: ./backend
     ports:
       - "3001:3001"
+    depends_on:
+      redis:
+        condition: service_healthy
     env_file:
       - ./backend/.env.example
     environment:
-      - RUST_LOG=sss_backend=info,tower_http=info
+      RUST_LOG: sss_backend=info,tower_http=info
+      REDIS_URL: redis://redis:6379
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
       interval: 10s
@@ -14,3 +18,43 @@ services:
       retries: 3
       start_period: 10s
     restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    volumes:
+      - ./infrastructure/grafana/provisioning:/etc/grafana/provisioning
+      - grafana-data:/var/lib/grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/sss-overview.json
+
+volumes:
+  redis-data:
+  grafana-data:

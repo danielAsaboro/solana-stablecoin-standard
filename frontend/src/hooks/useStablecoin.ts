@@ -931,7 +931,7 @@ export function useStablecoin(): UseStablecoinResult {
       const [blacklistEntry] = getBlacklistEntryAddress(configAddress, addr);
 
       const ix = await program.methods
-        .addToBlacklist(addr, reason)
+        .addToBlacklist(addr, reason, Array(32).fill(0), "")
         .accountsStrict({
           authority: wallet.publicKey,
           config: configAddress,

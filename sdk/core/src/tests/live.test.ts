@@ -19,11 +19,15 @@ import {
 } from "../index";
 import transferHookIdl from "../../../../target/idl/transfer_hook.json";
 
-const describeLive = process.env.SSS_LIVE_TESTS === "1" ? describe : describe.skip;
+const describeLive =
+  process.env.SSS_LIVE_TESTS === "1" ? describe : describe.skip;
 
 function loadWalletKeypair(): Keypair {
-  const walletPath = process.env.ANCHOR_WALLET ?? `${process.env.HOME}/.config/solana/id.json`;
-  const secretKey = JSON.parse(readFileSync(walletPath, "utf-8")) as Array<number>;
+  const walletPath =
+    process.env.ANCHOR_WALLET ?? `${process.env.HOME}/.config/solana/id.json`;
+  const secretKey = JSON.parse(
+    readFileSync(walletPath, "utf-8"),
+  ) as Array<number>;
   return Keypair.fromSecretKey(Uint8Array.from(secretKey));
 }
 
@@ -31,13 +35,18 @@ async function sendInstructions(
   connection: Connection,
   payer: Keypair,
   instructions: Array<Parameters<Transaction["add"]>[0]>,
-  extraSigners: Array<Keypair> = []
+  extraSigners: Array<Keypair> = [],
 ): Promise<string> {
   const transaction = new Transaction();
   transaction.add(...instructions);
-  return sendAndConfirmTransaction(connection, transaction, [payer, ...extraSigners], {
-    commitment: "confirmed",
-  });
+  return sendAndConfirmTransaction(
+    connection,
+    transaction,
+    [payer, ...extraSigners],
+    {
+      commitment: "confirmed",
+    },
+  );
 }
 
 describeLive("SDK Live Tests", function () {
@@ -45,21 +54,24 @@ describeLive("SDK Live Tests", function () {
 
   const connection = new Connection(
     process.env.ANCHOR_PROVIDER_URL ?? "http://127.0.0.1:8899",
-    "confirmed"
+    "confirmed",
   );
   const authority = loadWalletKeypair();
 
   let stablecoin: SolanaStablecoin;
 
   it("creates and loads an SSS-1 stablecoin against Surfpool", async () => {
-    const { stablecoin: createdStablecoin, mintKeypair, instruction } =
-      await SolanaStablecoin.create(connection, {
-        preset: Presets.SSS_1,
-        name: `Live Test USD ${Date.now()}`,
-        symbol: `LT${Date.now().toString().slice(-4)}`,
-        decimals: 6,
-        authority: authority.publicKey,
-      });
+    const {
+      stablecoin: createdStablecoin,
+      mintKeypair,
+      instruction,
+    } = await SolanaStablecoin.create(connection, {
+      preset: Presets.SSS_1,
+      name: `Live Test USD ${Date.now()}`,
+      symbol: `LT${Date.now().toString().slice(-4)}`,
+      decimals: 6,
+      authority: authority.publicKey,
+    });
 
     await sendInstructions(connection, authority, [instruction], [mintKeypair]);
 
@@ -67,14 +79,16 @@ describeLive("SDK Live Tests", function () {
 
     const loadedStablecoin = await SolanaStablecoin.load(
       connection,
-      stablecoin.mintAddress
+      stablecoin.mintAddress,
     );
     const config = await loadedStablecoin.getConfig();
 
     expect(loadedStablecoin.program.programId.toBase58()).to.equal(
-      "DNfk1e2vMJrxHm4BwoRTVqQxcfYjZLHggxr11hMZ5Dyu"
+      "DNfk1e2vMJrxHm4BwoRTVqQxcfYjZLHggxr11hMZ5Dyu",
     );
-    expect(config.masterAuthority.toBase58()).to.equal(authority.publicKey.toBase58());
+    expect(config.masterAuthority.toBase58()).to.equal(
+      authority.publicKey.toBase58(),
+    );
     expect(config.enablePermanentDelegate).to.equal(false);
     expect(config.enableTransferHook).to.equal(false);
   });
@@ -85,7 +99,11 @@ describeLive("SDK Live Tests", function () {
     const quota = new BN(5_000_000);
 
     await sendInstructions(connection, authority, [
-      createATAInstruction(authority.publicKey, recipient.publicKey, stablecoin.mintAddress),
+      createATAInstruction(
+        authority.publicKey,
+        recipient.publicKey,
+        stablecoin.mintAddress,
+      ),
     ]);
 
     await sendInstructions(connection, authority, [
@@ -120,7 +138,7 @@ describeLive("SDK Live Tests", function () {
     const recipientBalance = await getTokenBalance(
       connection,
       stablecoin.mintAddress,
-      recipient.publicKey
+      recipient.publicKey,
     );
     const supply = await stablecoin.getSupply();
     expect(recipientBalance).to.equal(1.5);
@@ -146,25 +164,31 @@ describeLive("SDK Live Tests", function () {
     const treasury = Keypair.generate();
     const mintAmount = new BN(1_200_000);
 
-    const { stablecoin: compliantStablecoin, mintKeypair, instruction } =
-      await SolanaStablecoin.create(connection, {
-        preset: Presets.SSS_2,
-        name: "Live Compliance USD",
-        symbol: `LC${Date.now().toString().slice(-4)}`,
-        decimals: 6,
-        authority: authority.publicKey,
-        transferHookProgramId: new PublicKey(transferHookIdl.address),
-      });
+    const {
+      stablecoin: compliantStablecoin,
+      mintKeypair,
+      instruction,
+    } = await SolanaStablecoin.create(connection, {
+      preset: Presets.SSS_2,
+      name: "Live Compliance USD",
+      symbol: `LC${Date.now().toString().slice(-4)}`,
+      decimals: 6,
+      authority: authority.publicKey,
+      transferHookProgramId: new PublicKey(transferHookIdl.address),
+    });
 
     await sendInstructions(connection, authority, [instruction], [mintKeypair]);
 
     const hookProgram = new Program(
       transferHookIdl as Idl,
-      compliantStablecoin.program.provider as AnchorProvider
+      compliantStablecoin.program.provider as AnchorProvider,
     );
     const [extraAccountMetas] = PublicKey.findProgramAddressSync(
-      [Buffer.from("extra-account-metas"), compliantStablecoin.mintAddress.toBuffer()],
-      hookProgram.programId
+      [
+        Buffer.from("extra-account-metas"),
+        compliantStablecoin.mintAddress.toBuffer(),
+      ],
+      hookProgram.programId,
     );
     const initHookIx = await hookProgram.methods
       .initializeExtraAccountMetas()
@@ -183,12 +207,12 @@ describeLive("SDK Live Tests", function () {
       createATAInstruction(
         authority.publicKey,
         blockedUser.publicKey,
-        compliantStablecoin.mintAddress
+        compliantStablecoin.mintAddress,
       ),
       createATAInstruction(
         authority.publicKey,
         treasury.publicKey,
-        compliantStablecoin.mintAddress
+        compliantStablecoin.mintAddress,
       ),
     ]);
 
@@ -240,12 +264,12 @@ describeLive("SDK Live Tests", function () {
     const blockedBalance = await getTokenBalance(
       connection,
       compliantStablecoin.mintAddress,
-      blockedUser.publicKey
+      blockedUser.publicKey,
     );
     const treasuryBalance = await getTokenBalance(
       connection,
       compliantStablecoin.mintAddress,
-      treasury.publicKey
+      treasury.publicKey,
     );
 
     expect(blockedBalance).to.equal(0);

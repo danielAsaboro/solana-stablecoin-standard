@@ -46,24 +46,78 @@ import {
  * @internal
  */
 const SSS_ERROR_CODES: Record<number, { name: string; message: string }> = {
-  6000: { name: "Unauthorized", message: "Caller lacks the required role for this operation" },
-  6001: { name: "Paused", message: "Stablecoin is paused — mint and burn operations are blocked" },
-  6002: { name: "NotPaused", message: "Stablecoin is not paused — cannot unpause" },
-  6003: { name: "QuotaExceeded", message: "Minter quota exceeded — request a higher quota from the master authority" },
+  6000: {
+    name: "Unauthorized",
+    message: "Caller lacks the required role for this operation",
+  },
+  6001: {
+    name: "Paused",
+    message: "Stablecoin is paused — mint and burn operations are blocked",
+  },
+  6002: {
+    name: "NotPaused",
+    message: "Stablecoin is not paused — cannot unpause",
+  },
+  6003: {
+    name: "QuotaExceeded",
+    message:
+      "Minter quota exceeded — request a higher quota from the master authority",
+  },
   6004: { name: "ZeroAmount", message: "Amount must be greater than zero" },
-  6005: { name: "NameTooLong", message: "Name exceeds maximum length (32 characters)" },
-  6006: { name: "SymbolTooLong", message: "Symbol exceeds maximum length (10 characters)" },
-  6007: { name: "UriTooLong", message: "URI exceeds maximum length (200 characters)" },
-  6008: { name: "ReasonTooLong", message: "Blacklist reason exceeds maximum length (64 characters)" },
-  6009: { name: "InvalidRole", message: "Invalid role type — must be 0-4 (Minter, Burner, Pauser, Blacklister, Seizer)" },
-  6010: { name: "ComplianceNotEnabled", message: "Compliance features not enabled — this stablecoin uses SSS-1 preset (no blacklist/seize)" },
-  6011: { name: "PermanentDelegateNotEnabled", message: "Permanent delegate not enabled — required for seize operations" },
-  6012: { name: "AlreadyBlacklisted", message: "Address is already blacklisted" },
-  6013: { name: "NotBlacklisted", message: "Address is not blacklisted — cannot remove" },
-  6014: { name: "MathOverflow", message: "Arithmetic overflow — amount too large" },
-  6015: { name: "InvalidAuthority", message: "Invalid authority — signer is not the master authority" },
-  6016: { name: "SameAuthority", message: "Cannot transfer authority to the same address" },
-  6017: { name: "InvalidDecimals", message: "Invalid decimals — must be between 0 and 9" },
+  6005: {
+    name: "NameTooLong",
+    message: "Name exceeds maximum length (32 characters)",
+  },
+  6006: {
+    name: "SymbolTooLong",
+    message: "Symbol exceeds maximum length (10 characters)",
+  },
+  6007: {
+    name: "UriTooLong",
+    message: "URI exceeds maximum length (200 characters)",
+  },
+  6008: {
+    name: "ReasonTooLong",
+    message: "Blacklist reason exceeds maximum length (64 characters)",
+  },
+  6009: {
+    name: "InvalidRole",
+    message:
+      "Invalid role type — must be 0-4 (Minter, Burner, Pauser, Blacklister, Seizer)",
+  },
+  6010: {
+    name: "ComplianceNotEnabled",
+    message:
+      "Compliance features not enabled — this stablecoin uses SSS-1 preset (no blacklist/seize)",
+  },
+  6011: {
+    name: "PermanentDelegateNotEnabled",
+    message: "Permanent delegate not enabled — required for seize operations",
+  },
+  6012: {
+    name: "AlreadyBlacklisted",
+    message: "Address is already blacklisted",
+  },
+  6013: {
+    name: "NotBlacklisted",
+    message: "Address is not blacklisted — cannot remove",
+  },
+  6014: {
+    name: "MathOverflow",
+    message: "Arithmetic overflow — amount too large",
+  },
+  6015: {
+    name: "InvalidAuthority",
+    message: "Invalid authority — signer is not the master authority",
+  },
+  6016: {
+    name: "SameAuthority",
+    message: "Cannot transfer authority to the same address",
+  },
+  6017: {
+    name: "InvalidDecimals",
+    message: "Invalid decimals — must be between 0 and 9",
+  },
 };
 
 /**
@@ -72,9 +126,20 @@ const SSS_ERROR_CODES: Record<number, { name: string; message: string }> = {
  * @internal
  */
 const HOOK_ERROR_CODES: Record<number, { name: string; message: string }> = {
-  6000: { name: "SourceBlacklisted", message: "Source address is blacklisted — transfer blocked by compliance hook" },
-  6001: { name: "DestinationBlacklisted", message: "Destination address is blacklisted — transfer blocked by compliance hook" },
-  6002: { name: "InvalidExtraAccountMetas", message: "Invalid extra account metas — transfer hook misconfigured" },
+  6000: {
+    name: "SourceBlacklisted",
+    message:
+      "Source address is blacklisted — transfer blocked by compliance hook",
+  },
+  6001: {
+    name: "DestinationBlacklisted",
+    message:
+      "Destination address is blacklisted — transfer blocked by compliance hook",
+  },
+  6002: {
+    name: "InvalidExtraAccountMetas",
+    message: "Invalid extra account metas — transfer hook misconfigured",
+  },
 };
 
 /**
@@ -83,22 +148,71 @@ const HOOK_ERROR_CODES: Record<number, { name: string; message: string }> = {
  * @internal
  */
 const ANCHOR_ERROR_CODES: Record<number, { name: string; message: string }> = {
-  2000: { name: "ConstraintMut", message: "Account constraint violated: account is not mutable" },
-  2001: { name: "ConstraintHasOne", message: "Account constraint violated: has_one check failed" },
-  2003: { name: "ConstraintSeeds", message: "Account constraint violated: PDA seeds mismatch" },
-  2006: { name: "ConstraintOwner", message: "Account constraint violated: wrong program owner" },
-  2009: { name: "ConstraintAddress", message: "Account constraint violated: address mismatch" },
-  2012: { name: "ConstraintSpace", message: "Account constraint violated: insufficient space" },
-  2019: { name: "ConstraintTokenMint", message: "Token account mint does not match expected mint" },
-  2020: { name: "ConstraintTokenOwner", message: "Token account owner does not match expected owner" },
-  3000: { name: "AccountDiscriminatorMismatch", message: "Account discriminator mismatch — wrong account type" },
-  3001: { name: "AccountDiscriminatorNotFound", message: "Account discriminator not found — account may not be initialized" },
-  3002: { name: "AccountNotEnoughKeys", message: "Not enough account keys provided" },
-  3003: { name: "AccountNotMutable", message: "Account is not marked as mutable" },
-  3004: { name: "AccountOwnedByWrongProgram", message: "Account owned by wrong program" },
-  3007: { name: "AccountDidNotSerialize", message: "Account data failed to serialize" },
-  3008: { name: "AccountDidNotDeserialize", message: "Account data failed to deserialize — account may not exist or is corrupted" },
-  3012: { name: "AccountNotInitialized", message: "Account not initialized — may need to create it first" },
+  2000: {
+    name: "ConstraintMut",
+    message: "Account constraint violated: account is not mutable",
+  },
+  2001: {
+    name: "ConstraintHasOne",
+    message: "Account constraint violated: has_one check failed",
+  },
+  2003: {
+    name: "ConstraintSeeds",
+    message: "Account constraint violated: PDA seeds mismatch",
+  },
+  2006: {
+    name: "ConstraintOwner",
+    message: "Account constraint violated: wrong program owner",
+  },
+  2009: {
+    name: "ConstraintAddress",
+    message: "Account constraint violated: address mismatch",
+  },
+  2012: {
+    name: "ConstraintSpace",
+    message: "Account constraint violated: insufficient space",
+  },
+  2019: {
+    name: "ConstraintTokenMint",
+    message: "Token account mint does not match expected mint",
+  },
+  2020: {
+    name: "ConstraintTokenOwner",
+    message: "Token account owner does not match expected owner",
+  },
+  3000: {
+    name: "AccountDiscriminatorMismatch",
+    message: "Account discriminator mismatch — wrong account type",
+  },
+  3001: {
+    name: "AccountDiscriminatorNotFound",
+    message: "Account discriminator not found — account may not be initialized",
+  },
+  3002: {
+    name: "AccountNotEnoughKeys",
+    message: "Not enough account keys provided",
+  },
+  3003: {
+    name: "AccountNotMutable",
+    message: "Account is not marked as mutable",
+  },
+  3004: {
+    name: "AccountOwnedByWrongProgram",
+    message: "Account owned by wrong program",
+  },
+  3007: {
+    name: "AccountDidNotSerialize",
+    message: "Account data failed to serialize",
+  },
+  3008: {
+    name: "AccountDidNotDeserialize",
+    message:
+      "Account data failed to deserialize — account may not exist or is corrupted",
+  },
+  3012: {
+    name: "AccountNotInitialized",
+    message: "Account not initialized — may need to create it first",
+  },
 };
 
 /**
@@ -108,15 +222,33 @@ const ANCHOR_ERROR_CODES: Record<number, { name: string; message: string }> = {
  */
 const TOKEN_ERROR_CODES: Record<number, { name: string; message: string }> = {
   0: { name: "NotRentExempt", message: "Token account is not rent-exempt" },
-  1: { name: "InsufficientFunds", message: "Insufficient token balance for this operation" },
-  2: { name: "InvalidMint", message: "Invalid mint — token account mint does not match" },
+  1: {
+    name: "InsufficientFunds",
+    message: "Insufficient token balance for this operation",
+  },
+  2: {
+    name: "InvalidMint",
+    message: "Invalid mint — token account mint does not match",
+  },
   3: { name: "MintMismatch", message: "Mint mismatch between accounts" },
   4: { name: "OwnerMismatch", message: "Token account owner mismatch" },
-  5: { name: "FixedSupply", message: "Token has a fixed supply — minting not allowed" },
+  5: {
+    name: "FixedSupply",
+    message: "Token has a fixed supply — minting not allowed",
+  },
   6: { name: "AlreadyInUse", message: "Account already in use" },
-  10: { name: "AccountFrozen", message: "Token account is frozen — thaw it before transferring" },
-  13: { name: "MintCannotFreeze", message: "Mint cannot freeze — freeze authority not set" },
-  14: { name: "AccountBusy", message: "Token account has a pending transaction" },
+  10: {
+    name: "AccountFrozen",
+    message: "Token account is frozen — thaw it before transferring",
+  },
+  13: {
+    name: "MintCannotFreeze",
+    message: "Mint cannot freeze — freeze authority not set",
+  },
+  14: {
+    name: "AccountBusy",
+    message: "Token account has a pending transaction",
+  },
   17: { name: "MintDecimalsMismatch", message: "Mint decimals mismatch" },
 };
 
@@ -171,13 +303,15 @@ export interface SimulationResult {
  *
  * @internal
  */
-function extractCustomErrorCode(logs: string[]): { code: number; programId: string } | null {
+function extractCustomErrorCode(
+  logs: string[],
+): { code: number; programId: string } | null {
   for (let i = logs.length - 1; i >= 0; i--) {
     const line = logs[i];
 
     // Anchor / BPF custom program error pattern
     const customMatch = line.match(
-      /Program (\w+) failed: custom program error: 0x([0-9a-fA-F]+)/
+      /Program (\w+) failed: custom program error: 0x([0-9a-fA-F]+)/,
     );
     if (customMatch) {
       return {
@@ -275,7 +409,7 @@ function extractRuntimeError(logs: string[]): string | null {
 function parseProgramError(
   code: number,
   programId: string,
-  logs: string[]
+  logs: string[],
 ): ProgramError | null {
   // Check SSS program errors first (most common for this SDK)
   const sssError = SSS_ERROR_CODES[code];
@@ -286,7 +420,8 @@ function parseProgramError(
   // Check if it's from a transfer hook program
   const isHook =
     logs.some((l) => l.includes(programId) && l.includes("transfer_hook")) ||
-    programId !== logs.find((l) => l.includes("Program log: Instruction:"))?.split(" ")[1];
+    programId !==
+      logs.find((l) => l.includes("Program log: Instruction:"))?.split(" ")[1];
 
   // If the code is in the hook range and it looks like a hook invocation
   const hookError = HOOK_ERROR_CODES[code];
@@ -347,7 +482,7 @@ function parseProgramError(
  */
 export async function simulateTransaction(
   connection: Connection,
-  transaction: Transaction
+  transaction: Transaction,
 ): Promise<SimulationResult> {
   const raw = await connection.simulateTransaction(transaction);
   const logs = raw.value.logs ?? [];
@@ -453,7 +588,9 @@ export function formatSimulationError(result: SimulationResult): string {
 
   if (result.programError) {
     lines.push(`Program: ${result.programError.program}`);
-    lines.push(`Code: ${result.programError.code} (${result.programError.name})`);
+    lines.push(
+      `Code: ${result.programError.code} (${result.programError.name})`,
+    );
   }
 
   lines.push(`Compute Units: ${result.unitsConsumed}`);

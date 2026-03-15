@@ -58,7 +58,7 @@ import {
 
 /** SPL Memo Program v2 address. */
 const MEMO_PROGRAM_ID = new PublicKey(
-  "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"
+  "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr",
 );
 
 // ---------------------------------------------------------------------------
@@ -299,14 +299,14 @@ export abstract class OperationBuilder {
 
     if (this._computeUnits !== undefined) {
       tx.add(
-        ComputeBudgetProgram.setComputeUnitLimit({ units: this._computeUnits })
+        ComputeBudgetProgram.setComputeUnitLimit({ units: this._computeUnits }),
       );
     }
     if (this._priorityFee !== undefined) {
       tx.add(
         ComputeBudgetProgram.setComputeUnitPrice({
           microLamports: this._priorityFee,
-        })
+        }),
       );
     }
 
@@ -329,7 +329,7 @@ export abstract class OperationBuilder {
           keys: [{ pubkey: feePayer, isSigner: true, isWritable: false }],
           programId: MEMO_PROGRAM_ID,
           data: Buffer.from(this._memo, "utf-8"),
-        })
+        }),
       );
     }
 
@@ -360,7 +360,7 @@ export abstract class OperationBuilder {
   async send(
     payer: Keypair,
     signers?: Keypair[],
-    opts?: ConfirmOptions
+    opts?: ConfirmOptions,
   ): Promise<string> {
     // Pre-flight simulation: catch errors before spending SOL
     if (this._simulateBeforeSend) {
@@ -383,7 +383,7 @@ export abstract class OperationBuilder {
         connection,
         tx,
         allSigners,
-        opts ?? { commitment: "confirmed" }
+        opts ?? { commitment: "confirmed" },
       );
     };
 
@@ -514,7 +514,7 @@ export class MintBuilder extends OperationBuilder {
     this._recipientWallet = wallet;
     this._recipientTokenAccount = getAssociatedTokenAddress(
       this.ctx.mintAddress,
-      wallet
+      wallet,
     );
     return this;
   }
@@ -553,7 +553,7 @@ export class MintBuilder extends OperationBuilder {
   protected async buildCoreInstructions(): Promise<TransactionInstruction[]> {
     if (!this._recipientTokenAccount) {
       throw new Error(
-        "MintBuilder: recipient not set. Call .to(wallet) or .toAccount(ata)"
+        "MintBuilder: recipient not set. Call .to(wallet) or .toAccount(ata)",
       );
     }
     if (!this._minter) {
@@ -565,7 +565,11 @@ export class MintBuilder extends OperationBuilder {
     if (this._createATA && this._recipientWallet) {
       const payer = this._ataPayer ?? this._minter;
       instructions.push(
-        createATAInstruction(payer, this._recipientWallet, this.ctx.mintAddress)
+        createATAInstruction(
+          payer,
+          this._recipientWallet,
+          this.ctx.mintAddress,
+        ),
       );
     }
 
@@ -573,12 +577,12 @@ export class MintBuilder extends OperationBuilder {
       this.ctx.program.programId,
       this.ctx.configAddress,
       RoleType.Minter,
-      this._minter
+      this._minter,
     );
     const [minterQuota] = getMinterQuotaAddress(
       this.ctx.program.programId,
       this.ctx.configAddress,
-      this._minter
+      this._minter,
     );
 
     const ix = await this.ctx.program.methods
@@ -632,7 +636,7 @@ export class BurnBuilder extends OperationBuilder {
   from(wallet: PublicKey): this {
     this._fromTokenAccount = getAssociatedTokenAddress(
       this.ctx.mintAddress,
-      wallet
+      wallet,
     );
     return this;
   }
@@ -660,7 +664,7 @@ export class BurnBuilder extends OperationBuilder {
   protected async buildCoreInstructions(): Promise<TransactionInstruction[]> {
     if (!this._fromTokenAccount) {
       throw new Error(
-        "BurnBuilder: source not set. Call .from(wallet) or .fromAccount(ata)"
+        "BurnBuilder: source not set. Call .from(wallet) or .fromAccount(ata)",
       );
     }
     if (!this._burner) {
@@ -671,7 +675,7 @@ export class BurnBuilder extends OperationBuilder {
       this.ctx.program.programId,
       this.ctx.configAddress,
       RoleType.Burner,
-      this._burner
+      this._burner,
     );
 
     const ix = await this.ctx.program.methods
@@ -743,7 +747,7 @@ export class FreezeBuilder extends OperationBuilder {
       this.ctx.program.programId,
       this.ctx.configAddress,
       RoleType.Pauser,
-      this._authority
+      this._authority,
     );
 
     const ix = await this.ctx.program.methods
@@ -815,7 +819,7 @@ export class ThawBuilder extends OperationBuilder {
       this.ctx.program.programId,
       this.ctx.configAddress,
       RoleType.Pauser,
-      this._authority
+      this._authority,
     );
 
     const ix = await this.ctx.program.methods
@@ -877,7 +881,7 @@ export class PauseBuilder extends OperationBuilder {
       this.ctx.program.programId,
       this.ctx.configAddress,
       RoleType.Pauser,
-      this._authority
+      this._authority,
     );
 
     const method = this._unpause
@@ -941,7 +945,7 @@ export class AssignRoleBuilder extends OperationBuilder {
   protected async buildCoreInstructions(): Promise<TransactionInstruction[]> {
     if (!this._authority) {
       throw new Error(
-        "AssignRoleBuilder: authority not set. Call .by(authority)"
+        "AssignRoleBuilder: authority not set. Call .by(authority)",
       );
     }
 
@@ -949,7 +953,7 @@ export class AssignRoleBuilder extends OperationBuilder {
       this.ctx.program.programId,
       this.ctx.configAddress,
       this._roleType,
-      this._user
+      this._user,
     );
 
     const ix = await this.ctx.program.methods
@@ -1020,7 +1024,7 @@ export class UpdateRoleBuilder extends OperationBuilder {
   protected async buildCoreInstructions(): Promise<TransactionInstruction[]> {
     if (!this._authority) {
       throw new Error(
-        "UpdateRoleBuilder: authority not set. Call .by(authority)"
+        "UpdateRoleBuilder: authority not set. Call .by(authority)",
       );
     }
 
@@ -1028,7 +1032,7 @@ export class UpdateRoleBuilder extends OperationBuilder {
       this.ctx.program.programId,
       this.ctx.configAddress,
       this._roleType,
-      this._user
+      this._user,
     );
 
     const ix = await this.ctx.program.methods
@@ -1099,19 +1103,19 @@ export class UpdateMinterBuilder extends OperationBuilder {
   protected async buildCoreInstructions(): Promise<TransactionInstruction[]> {
     if (this._quota === undefined) {
       throw new Error(
-        "UpdateMinterBuilder: quota not set. Call .quota(amount)"
+        "UpdateMinterBuilder: quota not set. Call .quota(amount)",
       );
     }
     if (!this._authority) {
       throw new Error(
-        "UpdateMinterBuilder: authority not set. Call .by(authority)"
+        "UpdateMinterBuilder: authority not set. Call .by(authority)",
       );
     }
 
     const [minterQuota] = getMinterQuotaAddress(
       this.ctx.program.programId,
       this.ctx.configAddress,
-      this._minter
+      this._minter,
     );
 
     const ix = await this.ctx.program.methods
@@ -1129,32 +1133,47 @@ export class UpdateMinterBuilder extends OperationBuilder {
 }
 
 // ---------------------------------------------------------------------------
-// TransferAuthorityBuilder
+// CreateMinterBuilder
 // ---------------------------------------------------------------------------
 
 /**
- * Fluent builder for authority transfer.
+ * Fluent builder for creating a new minter with a quota.
+ *
+ * Uses the on-chain `create_minter` instruction which initializes
+ * a new MinterQuota PDA. Fails if the minter already exists.
+ * To update an existing minter's quota, use {@link UpdateMinterBuilder}.
  *
  * @example
  * ```ts
- * await stablecoin.transferAuthority(newAuthorityPubkey)
- *   .by(currentAuthorityKeypair)
+ * await stablecoin.createMinter(minterPubkey)
+ *   .quota(1_000_000)
+ *   .by(masterAuthorityKeypair)
  *   .send(payerKeypair);
  * ```
  */
-export class TransferAuthorityBuilder extends OperationBuilder {
-  private readonly _newAuthority: PublicKey;
+export class CreateMinterBuilder extends OperationBuilder {
+  private readonly _minter: PublicKey;
+  private _quota?: BN;
   private _authority?: PublicKey;
 
   /** @internal */
-  constructor(ctx: BuilderContext, newAuthority: PublicKey) {
+  constructor(ctx: BuilderContext, minter: PublicKey) {
     super(ctx);
-    this._newAuthority = newAuthority;
+    this._minter = minter;
   }
 
   /**
-   * Set the current master authority. Accepts PublicKey or Keypair.
-   * @param authority - The current master authority
+   * Set the minter's initial quota.
+   * @param amount - Maximum mint amount
+   */
+  quota(amount: BN | number): this {
+    this._quota = new BN(amount.toString());
+    return this;
+  }
+
+  /**
+   * Set the master authority. Accepts PublicKey or Keypair.
+   * @param authority - The master authority
    */
   by(authority: PublicKey | Keypair): this {
     this._authority = toPublicKey(authority);
@@ -1164,17 +1183,30 @@ export class TransferAuthorityBuilder extends OperationBuilder {
   }
 
   protected async buildCoreInstructions(): Promise<TransactionInstruction[]> {
+    if (this._quota === undefined) {
+      throw new Error(
+        "CreateMinterBuilder: quota not set. Call .quota(amount)",
+      );
+    }
     if (!this._authority) {
       throw new Error(
-        "TransferAuthorityBuilder: authority not set. Call .by(authority)"
+        "CreateMinterBuilder: authority not set. Call .by(authority)",
       );
     }
 
+    const [minterQuota] = getMinterQuotaAddress(
+      this.ctx.program.programId,
+      this.ctx.configAddress,
+      this._minter,
+    );
+
     const ix = await this.ctx.program.methods
-      .transferAuthority(this._newAuthority)
+      .createMinter(this._minter, this._quota)
       .accountsStrict({
         authority: this._authority,
         config: this.ctx.configAddress,
+        minterQuota,
+        systemProgram: SystemProgram.programId,
       })
       .instruction();
 
@@ -1183,7 +1215,7 @@ export class TransferAuthorityBuilder extends OperationBuilder {
 }
 
 // ---------------------------------------------------------------------------
-// ProposeAuthorityBuilder
+// ProposeAuthorityTransferBuilder
 // ---------------------------------------------------------------------------
 
 /**
@@ -1191,12 +1223,12 @@ export class TransferAuthorityBuilder extends OperationBuilder {
  *
  * @example
  * ```ts
- * await stablecoin.proposeAuthority(newAuthorityPubkey)
+ * await stablecoin.proposeAuthorityTransfer(newAuthorityPubkey)
  *   .by(currentAuthorityKeypair)
  *   .send(payerKeypair);
  * ```
  */
-export class ProposeAuthorityBuilder extends OperationBuilder {
+export class ProposeAuthorityTransferBuilder extends OperationBuilder {
   private readonly _newAuthority: PublicKey;
   private _authority?: PublicKey;
 
@@ -1220,7 +1252,7 @@ export class ProposeAuthorityBuilder extends OperationBuilder {
   protected async buildCoreInstructions(): Promise<TransactionInstruction[]> {
     if (!this._authority) {
       throw new Error(
-        "ProposeAuthorityBuilder: authority not set. Call .by(authority)"
+        "ProposeAuthorityTransferBuilder: authority not set. Call .by(authority)",
       );
     }
 
@@ -1236,8 +1268,13 @@ export class ProposeAuthorityBuilder extends OperationBuilder {
   }
 }
 
+/** @deprecated Use {@link ProposeAuthorityTransferBuilder} instead. */
+export const ProposeAuthorityBuilder = ProposeAuthorityTransferBuilder;
+/** @deprecated Use {@link ProposeAuthorityTransferBuilder} instead. */
+export type ProposeAuthorityBuilder = ProposeAuthorityTransferBuilder;
+
 // ---------------------------------------------------------------------------
-// AcceptAuthorityBuilder
+// AcceptAuthorityTransferBuilder
 // ---------------------------------------------------------------------------
 
 /**
@@ -1245,12 +1282,12 @@ export class ProposeAuthorityBuilder extends OperationBuilder {
  *
  * @example
  * ```ts
- * await stablecoin.acceptAuthority()
+ * await stablecoin.acceptAuthorityTransfer()
  *   .by(newAuthorityKeypair)
  *   .send(payerKeypair);
  * ```
  */
-export class AcceptAuthorityBuilder extends OperationBuilder {
+export class AcceptAuthorityTransferBuilder extends OperationBuilder {
   private _newAuthority?: PublicKey;
 
   /** @internal */
@@ -1272,7 +1309,7 @@ export class AcceptAuthorityBuilder extends OperationBuilder {
   protected async buildCoreInstructions(): Promise<TransactionInstruction[]> {
     if (!this._newAuthority) {
       throw new Error(
-        "AcceptAuthorityBuilder: new authority not set. Call .by(newAuthority)"
+        "AcceptAuthorityTransferBuilder: new authority not set. Call .by(newAuthority)",
       );
     }
 
@@ -1288,8 +1325,13 @@ export class AcceptAuthorityBuilder extends OperationBuilder {
   }
 }
 
+/** @deprecated Use {@link AcceptAuthorityTransferBuilder} instead. */
+export const AcceptAuthorityBuilder = AcceptAuthorityTransferBuilder;
+/** @deprecated Use {@link AcceptAuthorityTransferBuilder} instead. */
+export type AcceptAuthorityBuilder = AcceptAuthorityTransferBuilder;
+
 // ---------------------------------------------------------------------------
-// CancelAuthorityBuilder
+// CancelAuthorityTransferBuilder
 // ---------------------------------------------------------------------------
 
 /**
@@ -1297,12 +1339,12 @@ export class AcceptAuthorityBuilder extends OperationBuilder {
  *
  * @example
  * ```ts
- * await stablecoin.cancelAuthority()
+ * await stablecoin.cancelAuthorityTransfer()
  *   .by(currentAuthorityKeypair)
  *   .send(payerKeypair);
  * ```
  */
-export class CancelAuthorityBuilder extends OperationBuilder {
+export class CancelAuthorityTransferBuilder extends OperationBuilder {
   private _authority?: PublicKey;
 
   /** @internal */
@@ -1324,7 +1366,7 @@ export class CancelAuthorityBuilder extends OperationBuilder {
   protected async buildCoreInstructions(): Promise<TransactionInstruction[]> {
     if (!this._authority) {
       throw new Error(
-        "CancelAuthorityBuilder: authority not set. Call .by(authority)"
+        "CancelAuthorityTransferBuilder: authority not set. Call .by(authority)",
       );
     }
 
@@ -1339,6 +1381,11 @@ export class CancelAuthorityBuilder extends OperationBuilder {
     return [ix];
   }
 }
+
+/** @deprecated Use {@link CancelAuthorityTransferBuilder} instead. */
+export const CancelAuthorityBuilder = CancelAuthorityTransferBuilder;
+/** @deprecated Use {@link CancelAuthorityTransferBuilder} instead. */
+export type CancelAuthorityBuilder = CancelAuthorityTransferBuilder;
 
 // ---------------------------------------------------------------------------
 // BlacklistAddBuilder
@@ -1358,6 +1405,8 @@ export class CancelAuthorityBuilder extends OperationBuilder {
 export class BlacklistAddBuilder extends OperationBuilder {
   private readonly _address: PublicKey;
   private _reason = "";
+  private _evidenceHash: number[] = Array(32).fill(0);
+  private _evidenceUri = "";
   private _authority?: PublicKey;
 
   /** @internal */
@@ -1376,6 +1425,17 @@ export class BlacklistAddBuilder extends OperationBuilder {
   }
 
   /**
+   * Set supporting evidence for the blacklist entry.
+   * @param hash - SHA-256 hash of the evidence document ([u8; 32])
+   * @param uri - URI pointing to the evidence document
+   */
+  evidence(hash: Uint8Array | number[], uri: string): this {
+    this._evidenceHash = Array.from(hash);
+    this._evidenceUri = uri;
+    return this;
+  }
+
+  /**
    * Set the blacklister authority. Accepts PublicKey or Keypair.
    * @param authority - Authority with Blacklister role
    */
@@ -1389,7 +1449,7 @@ export class BlacklistAddBuilder extends OperationBuilder {
   protected async buildCoreInstructions(): Promise<TransactionInstruction[]> {
     if (!this._authority) {
       throw new Error(
-        "BlacklistAddBuilder: authority not set. Call .by(authority)"
+        "BlacklistAddBuilder: authority not set. Call .by(authority)",
       );
     }
 
@@ -1397,16 +1457,16 @@ export class BlacklistAddBuilder extends OperationBuilder {
       this.ctx.program.programId,
       this.ctx.configAddress,
       RoleType.Blacklister,
-      this._authority
+      this._authority,
     );
     const [blacklistEntry] = getBlacklistEntryAddress(
       this.ctx.program.programId,
       this.ctx.configAddress,
-      this._address
+      this._address,
     );
 
     const ix = await this.ctx.program.methods
-      .addToBlacklist(this._address, this._reason)
+      .addToBlacklist(this._address, this._reason, this._evidenceHash, this._evidenceUri)
       .accountsStrict({
         authority: this._authority,
         config: this.ctx.configAddress,
@@ -1458,7 +1518,7 @@ export class BlacklistRemoveBuilder extends OperationBuilder {
   protected async buildCoreInstructions(): Promise<TransactionInstruction[]> {
     if (!this._authority) {
       throw new Error(
-        "BlacklistRemoveBuilder: authority not set. Call .by(authority)"
+        "BlacklistRemoveBuilder: authority not set. Call .by(authority)",
       );
     }
 
@@ -1466,16 +1526,106 @@ export class BlacklistRemoveBuilder extends OperationBuilder {
       this.ctx.program.programId,
       this.ctx.configAddress,
       RoleType.Blacklister,
-      this._authority
+      this._authority,
     );
     const [blacklistEntry] = getBlacklistEntryAddress(
       this.ctx.program.programId,
       this.ctx.configAddress,
-      this._address
+      this._address,
     );
 
     const ix = await this.ctx.program.methods
       .removeFromBlacklist(this._address)
+      .accountsStrict({
+        authority: this._authority,
+        config: this.ctx.configAddress,
+        roleAccount,
+        blacklistEntry,
+      })
+      .instruction();
+
+    return [ix];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// UpdateEvidenceBuilder
+// ---------------------------------------------------------------------------
+
+/**
+ * Fluent builder for updating evidence on an existing blacklist entry (SSS-2).
+ *
+ * @example
+ * ```ts
+ * await stablecoin.compliance.updateEvidence(blacklistedAddress)
+ *   .hash(sha256Hash)
+ *   .uri("https://example.com/evidence/123.pdf")
+ *   .by(blacklisterKeypair)
+ *   .send(payerKeypair);
+ * ```
+ */
+export class UpdateEvidenceBuilder extends OperationBuilder {
+  private readonly _address: PublicKey;
+  private _evidenceHash: number[] = Array(32).fill(0);
+  private _evidenceUri = "";
+  private _authority?: PublicKey;
+
+  /** @internal */
+  constructor(ctx: BuilderContext, address: PublicKey) {
+    super(ctx);
+    this._address = address;
+  }
+
+  /**
+   * Set the evidence hash.
+   * @param hash - SHA-256 hash of the evidence document ([u8; 32])
+   */
+  hash(hash: Uint8Array | number[]): this {
+    this._evidenceHash = Array.from(hash);
+    return this;
+  }
+
+  /**
+   * Set the evidence URI.
+   * @param uri - URI pointing to the evidence document
+   */
+  uri(uri: string): this {
+    this._evidenceUri = uri;
+    return this;
+  }
+
+  /**
+   * Set the blacklister authority. Accepts PublicKey or Keypair.
+   * @param authority - Authority with Blacklister role
+   */
+  by(authority: PublicKey | Keypair): this {
+    this._authority = toPublicKey(authority);
+    const kp = collectKeypair(authority);
+    if (kp) this._additionalSigners.push(kp);
+    return this;
+  }
+
+  protected async buildCoreInstructions(): Promise<TransactionInstruction[]> {
+    if (!this._authority) {
+      throw new Error(
+        "UpdateEvidenceBuilder: authority not set. Call .by(authority)",
+      );
+    }
+
+    const [roleAccount] = getRoleAddress(
+      this.ctx.program.programId,
+      this.ctx.configAddress,
+      RoleType.Blacklister,
+      this._authority,
+    );
+    const [blacklistEntry] = getBlacklistEntryAddress(
+      this.ctx.program.programId,
+      this.ctx.configAddress,
+      this._address,
+    );
+
+    const ix = await this.ctx.program.methods
+      .updateBlacklistEvidence(this._address, this._evidenceHash, this._evidenceUri)
       .accountsStrict({
         authority: this._authority,
         config: this.ctx.configAddress,
@@ -1535,7 +1685,7 @@ export class SeizeBuilder extends OperationBuilder {
     this._fromWallet = wallet;
     this._fromTokenAccount = getAssociatedTokenAddress(
       this.ctx.mintAddress,
-      wallet
+      wallet,
     );
     return this;
   }
@@ -1556,7 +1706,7 @@ export class SeizeBuilder extends OperationBuilder {
   to(wallet: PublicKey): this {
     this._toTokenAccount = getAssociatedTokenAddress(
       this.ctx.mintAddress,
-      wallet
+      wallet,
     );
     return this;
   }
@@ -1584,12 +1734,12 @@ export class SeizeBuilder extends OperationBuilder {
   protected async buildCoreInstructions(): Promise<TransactionInstruction[]> {
     if (!this._fromTokenAccount) {
       throw new Error(
-        "SeizeBuilder: source not set. Call .from(wallet) or .fromAccount(ata)"
+        "SeizeBuilder: source not set. Call .from(wallet) or .fromAccount(ata)",
       );
     }
     if (!this._toTokenAccount) {
       throw new Error(
-        "SeizeBuilder: destination not set. Call .to(wallet) or .toAccount(ata)"
+        "SeizeBuilder: destination not set. Call .to(wallet) or .toAccount(ata)",
       );
     }
     if (!this._authority) {
@@ -1600,7 +1750,7 @@ export class SeizeBuilder extends OperationBuilder {
       this.ctx.program.programId,
       this.ctx.configAddress,
       RoleType.Seizer,
-      this._authority
+      this._authority,
     );
 
     // Resolve the blacklisted owner: use stored wallet or fetch from chain
@@ -1609,9 +1759,13 @@ export class SeizeBuilder extends OperationBuilder {
       blacklistedOwner = this._fromWallet;
     } else {
       const connection = (this.ctx.program.provider as any).connection;
-      const accountInfo = await connection.getAccountInfo(this._fromTokenAccount);
+      const accountInfo = await connection.getAccountInfo(
+        this._fromTokenAccount,
+      );
       if (!accountInfo) {
-        throw new Error("SeizeBuilder: source token account not found on chain");
+        throw new Error(
+          "SeizeBuilder: source token account not found on chain",
+        );
       }
       // Token-2022 account layout: owner is at offset 32 (32 bytes)
       blacklistedOwner = new PublicKey(accountInfo.data.subarray(32, 64));
@@ -1620,13 +1774,12 @@ export class SeizeBuilder extends OperationBuilder {
     const [blacklistEntry] = getBlacklistEntryAddress(
       this.ctx.program.programId,
       this.ctx.configAddress,
-      blacklistedOwner
+      blacklistedOwner,
     );
 
-    const stablecoinConfig =
-      await (this.ctx.program.account as any).stablecoinConfig.fetch(
-        this.ctx.configAddress
-      );
+    const stablecoinConfig = await (
+      this.ctx.program.account as any
+    ).stablecoinConfig.fetch(this.ctx.configAddress);
     const seizeBuilder = this.ctx.program.methods
       .seize(this._amount)
       .accountsStrict({
@@ -1654,7 +1807,7 @@ export class SeizeBuilder extends OperationBuilder {
       BigInt(this._amount.toString()),
       stablecoinConfig.decimals,
       [],
-      TOKEN_2022_PROGRAM_ID
+      TOKEN_2022_PROGRAM_ID,
     );
 
     await addExtraAccountMetasForExecute(
@@ -1666,7 +1819,7 @@ export class SeizeBuilder extends OperationBuilder {
       this._toTokenAccount,
       this.ctx.configAddress,
       BigInt(this._amount.toString()),
-      "confirmed"
+      "confirmed",
     );
 
     const ix = await seizeBuilder

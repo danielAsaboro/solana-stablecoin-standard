@@ -47,7 +47,7 @@ import privacyIdl from "../../../target/idl/sss_privacy.json";
 
 /** Default privacy program ID (localnet/devnet). */
 export const PRIVACY_PROGRAM_ID = new PublicKey(
-  "Bmyova5VaKqiBRRDV4ft8pLsdfgMMZojafLy4sdFDWQk"
+  "Bmyova5VaKqiBRRDV4ft8pLsdfgMMZojafLy4sdFDWQk",
 );
 
 const PRIVACY_CONFIG_SEED = Buffer.from("privacy_config");
@@ -120,11 +120,11 @@ export interface InitPrivacyParams {
  */
 export function getPrivacyConfigAddress(
   privacyProgramId: PublicKey,
-  stablecoinConfig: PublicKey
+  stablecoinConfig: PublicKey,
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [PRIVACY_CONFIG_SEED, stablecoinConfig.toBuffer()],
-    privacyProgramId
+    privacyProgramId,
   );
 }
 
@@ -141,11 +141,11 @@ export function getPrivacyConfigAddress(
 export function getAllowlistEntryAddress(
   privacyProgramId: PublicKey,
   privacyConfig: PublicKey,
-  address: PublicKey
+  address: PublicKey,
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [ALLOWLIST_SEED, privacyConfig.toBuffer(), address.toBuffer()],
-    privacyProgramId
+    privacyProgramId,
   );
 }
 
@@ -188,7 +188,7 @@ export class PrivacyModule {
   private constructor(
     program: Program,
     privacyConfigAddress: PublicKey,
-    stablecoinConfig: PublicKey
+    stablecoinConfig: PublicKey,
   ) {
     this.program = program;
     this.privacyConfigAddress = privacyConfigAddress;
@@ -207,7 +207,7 @@ export class PrivacyModule {
   static async load(
     connection: Connection,
     stablecoinConfig: PublicKey,
-    privacyProgramId: PublicKey = PRIVACY_PROGRAM_ID
+    privacyProgramId: PublicKey = PRIVACY_PROGRAM_ID,
   ): Promise<PrivacyModule> {
     const provider = new AnchorProvider(
       connection,
@@ -216,13 +216,13 @@ export class PrivacyModule {
         signTransaction: async (tx) => tx,
         signAllTransactions: async (txs) => txs,
       } as Wallet,
-      { commitment: "confirmed" }
+      { commitment: "confirmed" },
     );
     const program = new Program(privacyIdl as Idl, provider);
 
     const [privacyConfigAddress] = getPrivacyConfigAddress(
       privacyProgramId,
-      stablecoinConfig
+      stablecoinConfig,
     );
 
     return new PrivacyModule(program, privacyConfigAddress, stablecoinConfig);
@@ -237,11 +237,11 @@ export class PrivacyModule {
    */
   static fromProgram(
     program: Program,
-    stablecoinConfig: PublicKey
+    stablecoinConfig: PublicKey,
   ): PrivacyModule {
     const [privacyConfigAddress] = getPrivacyConfigAddress(
       program.programId,
-      stablecoinConfig
+      stablecoinConfig,
     );
     return new PrivacyModule(program, privacyConfigAddress, stablecoinConfig);
   }
@@ -281,12 +281,12 @@ export class PrivacyModule {
    * @returns The allowlist entry data, or `null` if not on the allowlist
    */
   async getAllowlistEntry(
-    address: PublicKey
+    address: PublicKey,
   ): Promise<AllowlistEntryData | null> {
     const [entryAddress] = getAllowlistEntryAddress(
       this.programId,
       this.privacyConfigAddress,
-      address
+      address,
     );
 
     try {
@@ -332,17 +332,15 @@ export class PrivacyModule {
    */
   async initialize(
     authority: PublicKey,
-    params: InitPrivacyParams
+    params: InitPrivacyParams,
   ): Promise<TransactionInstruction> {
     return await (
       this.program.methods as Record<
         string,
-        (
-          ...args: unknown[]
-        ) => {
-          accounts: (
-            accts: Record<string, PublicKey>
-          ) => { instruction: () => Promise<TransactionInstruction> };
+        (...args: unknown[]) => {
+          accounts: (accts: Record<string, PublicKey>) => {
+            instruction: () => Promise<TransactionInstruction>;
+          };
         }
       >
     )
@@ -367,17 +365,15 @@ export class PrivacyModule {
    */
   async updateConfig(
     authority: PublicKey,
-    autoApprove: boolean | null
+    autoApprove: boolean | null,
   ): Promise<TransactionInstruction> {
     return await (
       this.program.methods as Record<
         string,
-        (
-          ...args: unknown[]
-        ) => {
-          accounts: (
-            accts: Record<string, PublicKey>
-          ) => { instruction: () => Promise<TransactionInstruction> };
+        (...args: unknown[]) => {
+          accounts: (accts: Record<string, PublicKey>) => {
+            instruction: () => Promise<TransactionInstruction>;
+          };
         }
       >
     )
@@ -402,23 +398,21 @@ export class PrivacyModule {
   async addToAllowlist(
     authority: PublicKey,
     address: PublicKey,
-    label: string = ""
+    label: string = "",
   ): Promise<TransactionInstruction> {
     const [allowlistEntry] = getAllowlistEntryAddress(
       this.programId,
       this.privacyConfigAddress,
-      address
+      address,
     );
 
     return await (
       this.program.methods as Record<
         string,
-        (
-          ...args: unknown[]
-        ) => {
-          accounts: (
-            accts: Record<string, PublicKey>
-          ) => { instruction: () => Promise<TransactionInstruction> };
+        (...args: unknown[]) => {
+          accounts: (accts: Record<string, PublicKey>) => {
+            instruction: () => Promise<TransactionInstruction>;
+          };
         }
       >
     )
@@ -446,23 +440,21 @@ export class PrivacyModule {
    */
   async removeFromAllowlist(
     authority: PublicKey,
-    address: PublicKey
+    address: PublicKey,
   ): Promise<TransactionInstruction> {
     const [allowlistEntry] = getAllowlistEntryAddress(
       this.programId,
       this.privacyConfigAddress,
-      address
+      address,
     );
 
     return await (
       this.program.methods as Record<
         string,
-        (
-          ...args: unknown[]
-        ) => {
-          accounts: (
-            accts: Record<string, PublicKey>
-          ) => { instruction: () => Promise<TransactionInstruction> };
+        (...args: unknown[]) => {
+          accounts: (accts: Record<string, PublicKey>) => {
+            instruction: () => Promise<TransactionInstruction>;
+          };
         }
       >
     )

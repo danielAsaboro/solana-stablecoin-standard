@@ -161,6 +161,11 @@ impl MinterQuota {
 /// transfers involving blacklisted addresses. When removed, the PDA is closed
 /// via `close = authority` and rent is returned.
 ///
+/// Evidence fields provide a cryptographic link to off-chain legal documents
+/// (court orders, OFAC filings, SAR reports). Anyone can fetch the document at
+/// `evidence_uri`, SHA-256 it, and compare against `evidence_hash` to verify
+/// the document has not been tampered with since blacklisting.
+///
 /// Seeds: `["blacklist", config_pubkey, address_pubkey]`
 #[account]
 pub struct BlacklistEntry {
@@ -174,6 +179,10 @@ pub struct BlacklistEntry {
     pub blacklisted_at: i64,
     /// Authority who blacklisted the address
     pub blacklisted_by: Pubkey,
+    /// SHA-256 hash of the evidence document. `[0; 32]` means no evidence attached.
+    pub evidence_hash: [u8; 32],
+    /// URI pointing to the evidence document (IPFS, Arweave, HTTPS). Empty means none.
+    pub evidence_uri: String,
     /// PDA bump seed
     pub bump: u8,
 }
@@ -185,6 +194,8 @@ impl BlacklistEntry {
         + (4 + MAX_REASON_LEN)  // reason
         + 8   // blacklisted_at
         + 32  // blacklisted_by
+        + 32  // evidence_hash
+        + (4 + MAX_EVIDENCE_URI_LEN) // evidence_uri
         + 1; // bump
 
     pub const SEED_PREFIX: &'static [u8] = BLACKLIST_SEED;

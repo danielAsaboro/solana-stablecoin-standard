@@ -137,12 +137,13 @@ npm run test:cli          # CLI smoke tests (17 tests)
 
 | Suite | Count | Command |
 |-------|------:|---------|
-| Anchor integration | 141 | `anchor test --skip-build` |
+| Anchor integration | 190 | `anchor test --skip-build --skip-deploy --skip-local-validator` |
+| LiteSVM (Rust) | 52 | `cargo test --manifest-path tests/litesvm/Cargo.toml` |
 | SDK unit tests | 58 | `npm run test:sdk` |
 | CLI smoke tests | 17 | `npm run test:cli` |
-| Backend (Rust) | 53 | `cargo test --manifest-path backend/Cargo.toml` |
-| Fuzz (Trident) | 21 | `cd trident-tests && cargo test` |
-| **Total** | **290** | |
+| Backend (Rust) | 67 | `cargo test --manifest-path backend/Cargo.toml` |
+| Fuzz (Trident) | 28 | `cargo test --manifest-path trident-tests/Cargo.toml` |
+| **Total** | **412** | |
 
 ---
 
@@ -285,7 +286,7 @@ See [docs/API.md](docs/API.md) for the full API reference.
 | [API Reference](docs/API.md) | Backend REST API |
 | [Devnet Deployment](docs/DEVNET_DEPLOYMENT.md) | Program IDs, tx signatures, Explorer links |
 | [Testing Guide](docs/TESTING.md) | Test pyramid, fuzz tests |
-| [Security Audit](docs/SECURITY_AUDIT.md) | Comprehensive security checklist |
+| [Security Checklist](docs/SECURITY_CHECKLIST.md) | Internal security review checklist |
 | [GENIUS Act Mapping](docs/GENIUS-ACT.md) | Regulatory alignment |
 
 ---

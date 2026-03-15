@@ -299,11 +299,13 @@ fn system_program_id() -> Pubkey {
 /// 4. blacklist_entry (writable) — BlacklistEntry PDA to be created (`init`)
 /// 5. system_program — for PDA account creation
 ///
-/// Data: `[discriminator("add_to_blacklist"), address: Pubkey, reason_len: u32, reason: bytes]`
+/// Data: `[discriminator("add_to_blacklist"), address: Pubkey, reason: String, evidence_hash: [u8; 32], evidence_uri: String]`
 pub fn build_add_to_blacklist_instruction(
     ctx: &SolanaContext,
     address: &Pubkey,
     reason: &str,
+    evidence_hash: [u8; 32],
+    evidence_uri: &str,
 ) -> Instruction {
     let authority = ctx.keypair.pubkey();
     let (role_pda, _) =
@@ -313,11 +315,16 @@ pub fn build_add_to_blacklist_instruction(
 
     let reason_bytes = reason.as_bytes();
     let reason_len = reason_bytes.len() as u32;
-    let mut data = Vec::with_capacity(8 + 32 + 4 + reason_bytes.len());
+    let evidence_uri_bytes = evidence_uri.as_bytes();
+    let evidence_uri_len = evidence_uri_bytes.len() as u32;
+    let mut data = Vec::with_capacity(8 + 32 + 4 + reason_bytes.len() + 32 + 4 + evidence_uri_bytes.len());
     data.extend_from_slice(&anchor_discriminator("add_to_blacklist"));
     data.extend_from_slice(address.as_ref());
     data.extend_from_slice(&reason_len.to_le_bytes());
     data.extend_from_slice(reason_bytes);
+    data.extend_from_slice(&evidence_hash);
+    data.extend_from_slice(&evidence_uri_len.to_le_bytes());
+    data.extend_from_slice(evidence_uri_bytes);
 
     Instruction {
         program_id: ctx.program_id,

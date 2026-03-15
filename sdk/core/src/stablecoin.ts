@@ -6,13 +6,7 @@ import {
   SYSVAR_RENT_PUBKEY,
   TransactionInstruction,
 } from "@solana/web3.js";
-import {
-  Program,
-  AnchorProvider,
-  BN,
-  Idl,
-  Wallet,
-} from "@coral-xyz/anchor";
+import { Program, AnchorProvider, BN, Idl, Wallet } from "@coral-xyz/anchor";
 import {
   TOKEN_2022_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -36,11 +30,15 @@ import {
   AssignRoleParams,
   UpdateRoleParams,
   UpdateRolesParams,
+  CreateMinterParams,
   UpdateMinterParams,
-  TransferAuthorityParams,
+  ProposeAuthorityTransferParams,
+  AcceptAuthorityTransferParams,
+  CancelAuthorityTransferParams,
   BlacklistAddParams,
   BlacklistRemoveParams,
   SeizeParams,
+  UpdateEvidenceParams,
   BlacklistEntry,
   MinterQuota as MinterQuotaType,
   ExtensionsConfig,
@@ -59,14 +57,15 @@ import {
   PauseBuilder,
   AssignRoleBuilder,
   UpdateRoleBuilder,
+  CreateMinterBuilder,
   UpdateMinterBuilder,
-  TransferAuthorityBuilder,
-  ProposeAuthorityBuilder,
-  AcceptAuthorityBuilder,
-  CancelAuthorityBuilder,
+  ProposeAuthorityTransferBuilder,
+  AcceptAuthorityTransferBuilder,
+  CancelAuthorityTransferBuilder,
   BlacklistAddBuilder,
   BlacklistRemoveBuilder,
   SeizeBuilder,
+  UpdateEvidenceBuilder,
 } from "./builder";
 import {
   BatchBuilder,
@@ -90,10 +89,10 @@ import sssIdl from "../../../target/idl/sss.json";
 // Program IDs
 // ---------------------------------------------------------------------------
 const SSS_PROGRAM_ID = new PublicKey(
-  "DNfk1e2vMJrxHm4BwoRTVqQxcfYjZLHggxr11hMZ5Dyu"
+  "DNfk1e2vMJrxHm4BwoRTVqQxcfYjZLHggxr11hMZ5Dyu",
 );
 const TRANSFER_HOOK_PROGRAM_ID = new PublicKey(
-  "Gcd58Ng9gqRg1XtiU1i8KopwX1u82Mt9VmxKbLJ8RANH"
+  "Gcd58Ng9gqRg1XtiU1i8KopwX1u82Mt9VmxKbLJ8RANH",
 );
 
 // ---------------------------------------------------------------------------
@@ -154,32 +153,35 @@ export class ComplianceModule {
   blacklistAdd(address: PublicKey, reason?: string): BlacklistAddBuilder;
   blacklistAdd(
     paramsOrAddress: BlacklistAddParams | PublicKey,
-    reason?: string
+    reason?: string,
   ): Promise<TransactionInstruction> | BlacklistAddBuilder {
     if (paramsOrAddress instanceof PublicKey) {
-      const builder = new BlacklistAddBuilder(this.builderCtx(), paramsOrAddress);
+      const builder = new BlacklistAddBuilder(
+        this.builderCtx(),
+        paramsOrAddress,
+      );
       return reason !== undefined ? builder.reason(reason) : builder;
     }
     return this._blacklistAddImpl(paramsOrAddress);
   }
 
   private async _blacklistAddImpl(
-    params: BlacklistAddParams
+    params: BlacklistAddParams,
   ): Promise<TransactionInstruction> {
     const [roleAccount] = getRoleAddress(
       this.program.programId,
       this.configAddress,
       RoleType.Blacklister,
-      params.authority
+      params.authority,
     );
     const [blacklistEntry] = getBlacklistEntryAddress(
       this.program.programId,
       this.configAddress,
-      params.address
+      params.address,
     );
 
     return await this.program.methods
-      .addToBlacklist(params.address, params.reason)
+      .addToBlacklist(params.address, params.reason, params.evidenceHash ?? Array(32).fill(0), params.evidenceUri ?? "")
       .accountsStrict({
         authority: params.authority,
         config: this.configAddress,
@@ -191,16 +193,80 @@ export class ComplianceModule {
   }
 
   /**
+   * Update evidence on an existing blacklist entry.
+   *
+   * **Overloaded:**
+   * - `updateEvidence(params)` — returns a TransactionInstruction (original API)
+   * - `updateEvidence(address)` — returns an {@link UpdateEvidenceBuilder} (fluent API)
+   *
+   * @example
+   * ```ts
+   * // Fluent API
+   * await stablecoin.compliance.updateEvidence(blacklistedAddress)
+   *   .hash(sha256Hash)
+   *   .uri("https://example.com/evidence/123.pdf")
+   *   .by(blacklisterKeypair)
+   *   .send(payerKeypair);
+   *
+   * // Original API
+   * const ix = await stablecoin.compliance.updateEvidence({
+   *   address: suspect,
+   *   evidenceHash: sha256Hash,
+   *   evidenceUri: "https://example.com/evidence/123.pdf",
+   *   authority: blacklister,
+   * });
+   * ```
+   */
+  updateEvidence(params: UpdateEvidenceParams): Promise<TransactionInstruction>;
+  updateEvidence(address: PublicKey): UpdateEvidenceBuilder;
+  updateEvidence(
+    paramsOrAddress: UpdateEvidenceParams | PublicKey,
+  ): Promise<TransactionInstruction> | UpdateEvidenceBuilder {
+    if (paramsOrAddress instanceof PublicKey) {
+      return new UpdateEvidenceBuilder(this.builderCtx(), paramsOrAddress);
+    }
+    return this._updateEvidenceImpl(paramsOrAddress);
+  }
+
+  private async _updateEvidenceImpl(
+    params: UpdateEvidenceParams,
+  ): Promise<TransactionInstruction> {
+    const [roleAccount] = getRoleAddress(
+      this.program.programId,
+      this.configAddress,
+      RoleType.Blacklister,
+      params.authority,
+    );
+    const [blacklistEntry] = getBlacklistEntryAddress(
+      this.program.programId,
+      this.configAddress,
+      params.address,
+    );
+
+    return await this.program.methods
+      .updateBlacklistEvidence(params.address, params.evidenceHash, params.evidenceUri)
+      .accountsStrict({
+        authority: params.authority,
+        config: this.configAddress,
+        roleAccount,
+        blacklistEntry,
+      })
+      .instruction();
+  }
+
+  /**
    * Remove an address from the blacklist.
    *
    * **Overloaded:**
    * - `blacklistRemove(params)` — returns a TransactionInstruction
    * - `blacklistRemove(address)` — returns a {@link BlacklistRemoveBuilder}
    */
-  blacklistRemove(params: BlacklistRemoveParams): Promise<TransactionInstruction>;
+  blacklistRemove(
+    params: BlacklistRemoveParams,
+  ): Promise<TransactionInstruction>;
   blacklistRemove(address: PublicKey): BlacklistRemoveBuilder;
   blacklistRemove(
-    paramsOrAddress: BlacklistRemoveParams | PublicKey
+    paramsOrAddress: BlacklistRemoveParams | PublicKey,
   ): Promise<TransactionInstruction> | BlacklistRemoveBuilder {
     if (paramsOrAddress instanceof PublicKey) {
       return new BlacklistRemoveBuilder(this.builderCtx(), paramsOrAddress);
@@ -209,18 +275,18 @@ export class ComplianceModule {
   }
 
   private async _blacklistRemoveImpl(
-    params: BlacklistRemoveParams
+    params: BlacklistRemoveParams,
   ): Promise<TransactionInstruction> {
     const [roleAccount] = getRoleAddress(
       this.program.programId,
       this.configAddress,
       RoleType.Blacklister,
-      params.authority
+      params.authority,
     );
     const [blacklistEntry] = getBlacklistEntryAddress(
       this.program.programId,
       this.configAddress,
-      params.address
+      params.address,
     );
 
     return await this.program.methods
@@ -263,7 +329,7 @@ export class ComplianceModule {
   seize(fromWallet: PublicKey, toWallet: PublicKey): SeizeBuilder;
   seize(
     paramsOrAmountOrFrom: SeizeParams | number | BN | PublicKey,
-    toWallet?: PublicKey
+    toWallet?: PublicKey,
   ): Promise<TransactionInstruction> | SeizeBuilder {
     if (paramsOrAmountOrFrom instanceof PublicKey && toWallet !== undefined) {
       // seize(fromWallet, toWallet) shorthand — returns builder with from/to pre-set
@@ -271,27 +337,32 @@ export class ComplianceModule {
         .from(paramsOrAmountOrFrom)
         .to(toWallet);
     }
-    if (typeof paramsOrAmountOrFrom === "number" || BN.isBN(paramsOrAmountOrFrom)) {
+    if (
+      typeof paramsOrAmountOrFrom === "number" ||
+      BN.isBN(paramsOrAmountOrFrom)
+    ) {
       return new SeizeBuilder(
         this.builderCtx(),
-        new BN(paramsOrAmountOrFrom.toString())
+        new BN(paramsOrAmountOrFrom.toString()),
       );
     }
     return this._seizeImpl(paramsOrAmountOrFrom as SeizeParams);
   }
 
   private async _seizeImpl(
-    params: SeizeParams
+    params: SeizeParams,
   ): Promise<TransactionInstruction> {
     const [roleAccount] = getRoleAddress(
       this.program.programId,
       this.configAddress,
       RoleType.Seizer,
-      params.authority
+      params.authority,
     );
 
     // Resolve the blacklisted owner from the token account on chain
-    const accountInfo = await this.connection.getAccountInfo(params.fromTokenAccount);
+    const accountInfo = await this.connection.getAccountInfo(
+      params.fromTokenAccount,
+    );
     if (!accountInfo) {
       throw new Error("Source token account not found on chain");
     }
@@ -300,7 +371,7 @@ export class ComplianceModule {
     const [blacklistEntry] = getBlacklistEntryAddress(
       this.program.programId,
       this.configAddress,
-      blacklistedOwner
+      blacklistedOwner,
     );
 
     return await this.program.methods
@@ -329,7 +400,7 @@ export class ComplianceModule {
     const [blacklistEntry] = getBlacklistEntryAddress(
       this.program.programId,
       this.configAddress,
-      address
+      address,
     );
     return accountExists(this.connection, blacklistEntry);
   }
@@ -402,11 +473,11 @@ export class ComplianceModule {
     const [blacklistEntry] = getBlacklistEntryAddress(
       this.program.programId,
       this.configAddress,
-      address
+      address,
     );
     try {
       const data = await (this.program.account as any).blacklistEntry.fetch(
-        blacklistEntry
+        blacklistEntry,
       );
       return data as unknown as BlacklistEntry;
     } catch {
@@ -492,7 +563,7 @@ export class SolanaStablecoin {
     const provider = new AnchorProvider(
       connection,
       dummyWallet,
-      AnchorProvider.defaultOptions()
+      AnchorProvider.defaultOptions(),
     );
     return new Program(sssIdl as Idl, provider);
   }
@@ -514,7 +585,7 @@ export class SolanaStablecoin {
    */
   static async create(
     connection: Connection,
-    params: CreateStablecoinParams
+    params: CreateStablecoinParams,
   ): Promise<{
     stablecoin: SolanaStablecoin;
     mintKeypair: Keypair;
@@ -526,7 +597,7 @@ export class SolanaStablecoin {
 
     const [configAddress, configBump] = getConfigAddress(
       program.programId,
-      mint
+      mint,
     );
 
     // Extract authority PublicKey (accept both PublicKey and Keypair)
@@ -590,7 +661,7 @@ export class SolanaStablecoin {
       program,
       mint,
       configAddress,
-      configBump
+      configBump,
     );
 
     return { stablecoin, mintKeypair, instruction };
@@ -605,21 +676,21 @@ export class SolanaStablecoin {
    */
   static async load(
     connection: Connection,
-    mintAddress: PublicKey
+    mintAddress: PublicKey,
   ): Promise<SolanaStablecoin> {
     const program = SolanaStablecoin.buildProgram(connection);
     const [configAddress, configBump] = getConfigAddress(
       program.programId,
-      mintAddress
+      mintAddress,
     );
 
     // Verify the config account exists
     const configAccount = await (program.account as any).stablecoinConfig.fetch(
-      configAddress
+      configAddress,
     );
     if (!configAccount) {
       throw new Error(
-        `StablecoinConfig not found for mint ${mintAddress.toBase58()}`
+        `StablecoinConfig not found for mint ${mintAddress.toBase58()}`,
       );
     }
 
@@ -642,7 +713,7 @@ export class SolanaStablecoin {
    */
   async getConfig(): Promise<StablecoinConfig> {
     const data = await (this.program.account as any).stablecoinConfig.fetch(
-      this.configAddress
+      this.configAddress,
     );
     return data as unknown as StablecoinConfig;
   }
@@ -680,10 +751,12 @@ export class SolanaStablecoin {
     const [quotaAddress] = getMinterQuotaAddress(
       this.program.programId,
       this.configAddress,
-      minter
+      minter,
     );
     try {
-      const data = await (this.program.account as any).minterQuota.fetch(quotaAddress);
+      const data = await (this.program.account as any).minterQuota.fetch(
+        quotaAddress,
+      );
       return data as unknown as MinterQuotaType;
     } catch {
       return null;
@@ -699,7 +772,7 @@ export class SolanaStablecoin {
    */
   async getRole(
     roleType: RoleType,
-    user: PublicKey
+    user: PublicKey,
   ): Promise<{
     config: PublicKey;
     user: PublicKey;
@@ -711,10 +784,12 @@ export class SolanaStablecoin {
       this.program.programId,
       this.configAddress,
       roleType,
-      user
+      user,
     );
     try {
-      const data = await (this.program.account as any).roleAccount.fetch(roleAddress);
+      const data = await (this.program.account as any).roleAccount.fetch(
+        roleAddress,
+      );
       return data as unknown as {
         config: PublicKey;
         user: PublicKey;
@@ -754,7 +829,7 @@ export class SolanaStablecoin {
   mint(params: MintParams): Promise<TransactionInstruction>;
   mint(amount: number | BN): MintBuilder;
   mint(
-    paramsOrAmount: MintParams | number | BN
+    paramsOrAmount: MintParams | number | BN,
   ): Promise<TransactionInstruction> | MintBuilder {
     if (typeof paramsOrAmount === "number" || BN.isBN(paramsOrAmount)) {
       return new MintBuilder(this, new BN(paramsOrAmount.toString()));
@@ -762,15 +837,17 @@ export class SolanaStablecoin {
     return this._mintImpl(paramsOrAmount);
   }
 
-  private async _mintImpl(
-    params: MintParams
-  ): Promise<TransactionInstruction> {
+  private async _mintImpl(params: MintParams): Promise<TransactionInstruction> {
     // Resolve recipient: wallet address → ATA, or use direct token account
     const recipientTokenAccount = params.recipientTokenAccount
       ? params.recipientTokenAccount
       : params.recipient
         ? getAssociatedTokenAddress(this.mintAddress, params.recipient)
-        : (() => { throw new Error("MintParams requires either `recipient` (wallet) or `recipientTokenAccount`"); })();
+        : (() => {
+            throw new Error(
+              "MintParams requires either `recipient` (wallet) or `recipientTokenAccount`",
+            );
+          })();
 
     // Normalize amount to BN
     const amount = BN.isBN(params.amount)
@@ -781,12 +858,12 @@ export class SolanaStablecoin {
       this.program.programId,
       this.configAddress,
       RoleType.Minter,
-      params.minter
+      params.minter,
     );
     const [minterQuota] = getMinterQuotaAddress(
       this.program.programId,
       this.configAddress,
-      params.minter
+      params.minter,
     );
 
     return await this.program.methods
@@ -813,7 +890,7 @@ export class SolanaStablecoin {
   burn(params: BurnParams): Promise<TransactionInstruction>;
   burn(amount: number | BN): BurnBuilder;
   burn(
-    paramsOrAmount: BurnParams | number | BN
+    paramsOrAmount: BurnParams | number | BN,
   ): Promise<TransactionInstruction> | BurnBuilder {
     if (typeof paramsOrAmount === "number" || BN.isBN(paramsOrAmount)) {
       return new BurnBuilder(this, new BN(paramsOrAmount.toString()));
@@ -821,14 +898,12 @@ export class SolanaStablecoin {
     return this._burnImpl(paramsOrAmount);
   }
 
-  private async _burnImpl(
-    params: BurnParams
-  ): Promise<TransactionInstruction> {
+  private async _burnImpl(params: BurnParams): Promise<TransactionInstruction> {
     const [roleAccount] = getRoleAddress(
       this.program.programId,
       this.configAddress,
       RoleType.Burner,
-      params.burner
+      params.burner,
     );
 
     return await this.program.methods
@@ -854,7 +929,7 @@ export class SolanaStablecoin {
   freeze(params: FreezeParams): Promise<TransactionInstruction>;
   freeze(wallet: PublicKey): FreezeBuilder;
   freeze(
-    paramsOrWallet: FreezeParams | PublicKey
+    paramsOrWallet: FreezeParams | PublicKey,
   ): Promise<TransactionInstruction> | FreezeBuilder {
     if (paramsOrWallet instanceof PublicKey) {
       return new FreezeBuilder(this, paramsOrWallet);
@@ -863,13 +938,13 @@ export class SolanaStablecoin {
   }
 
   private async _freezeImpl(
-    params: FreezeParams
+    params: FreezeParams,
   ): Promise<TransactionInstruction> {
     const [roleAccount] = getRoleAddress(
       this.program.programId,
       this.configAddress,
       RoleType.Pauser,
-      params.authority
+      params.authority,
     );
 
     return await this.program.methods
@@ -895,7 +970,7 @@ export class SolanaStablecoin {
   thaw(params: ThawParams): Promise<TransactionInstruction>;
   thaw(wallet: PublicKey): ThawBuilder;
   thaw(
-    paramsOrWallet: ThawParams | PublicKey
+    paramsOrWallet: ThawParams | PublicKey,
   ): Promise<TransactionInstruction> | ThawBuilder {
     if (paramsOrWallet instanceof PublicKey) {
       return new ThawBuilder(this, paramsOrWallet);
@@ -903,14 +978,12 @@ export class SolanaStablecoin {
     return this._thawImpl(paramsOrWallet);
   }
 
-  private async _thawImpl(
-    params: ThawParams
-  ): Promise<TransactionInstruction> {
+  private async _thawImpl(params: ThawParams): Promise<TransactionInstruction> {
     const [roleAccount] = getRoleAddress(
       this.program.programId,
       this.configAddress,
       RoleType.Pauser,
-      params.authority
+      params.authority,
     );
 
     return await this.program.methods
@@ -941,13 +1014,13 @@ export class SolanaStablecoin {
   }
 
   private async _pauseImpl(
-    params: PauseParams
+    params: PauseParams,
   ): Promise<TransactionInstruction> {
     const [roleAccount] = getRoleAddress(
       this.program.programId,
       this.configAddress,
       RoleType.Pauser,
-      params.authority
+      params.authority,
     );
 
     return await this.program.methods
@@ -970,20 +1043,20 @@ export class SolanaStablecoin {
   unpause(params: PauseParams): Promise<TransactionInstruction>;
   unpause(): PauseBuilder;
   unpause(
-    params?: PauseParams
+    params?: PauseParams,
   ): Promise<TransactionInstruction> | PauseBuilder {
     if (params) return this._unpauseImpl(params);
     return new PauseBuilder(this, true);
   }
 
   private async _unpauseImpl(
-    params: PauseParams
+    params: PauseParams,
   ): Promise<TransactionInstruction> {
     const [roleAccount] = getRoleAddress(
       this.program.programId,
       this.configAddress,
       RoleType.Pauser,
-      params.authority
+      params.authority,
     );
 
     return await this.program.methods
@@ -1008,7 +1081,7 @@ export class SolanaStablecoin {
   assignRole(roleType: RoleType, user: PublicKey): AssignRoleBuilder;
   assignRole(
     paramsOrRole: AssignRoleParams | RoleType,
-    user?: PublicKey
+    user?: PublicKey,
   ): Promise<TransactionInstruction> | AssignRoleBuilder {
     if (typeof paramsOrRole === "number" && user) {
       return new AssignRoleBuilder(this, paramsOrRole, user);
@@ -1017,13 +1090,13 @@ export class SolanaStablecoin {
   }
 
   private async _assignRoleImpl(
-    params: AssignRoleParams
+    params: AssignRoleParams,
   ): Promise<TransactionInstruction> {
     const [roleAccount] = getRoleAddress(
       this.program.programId,
       this.configAddress,
       params.roleType,
-      params.user
+      params.user,
     );
 
     return await this.program.methods
@@ -1049,7 +1122,7 @@ export class SolanaStablecoin {
   updateRole(roleType: RoleType, user: PublicKey): UpdateRoleBuilder;
   updateRole(
     paramsOrRole: UpdateRoleParams | RoleType,
-    user?: PublicKey
+    user?: PublicKey,
   ): Promise<TransactionInstruction> | UpdateRoleBuilder {
     if (typeof paramsOrRole === "number" && user) {
       return new UpdateRoleBuilder(this, paramsOrRole, user);
@@ -1058,13 +1131,13 @@ export class SolanaStablecoin {
   }
 
   private async _updateRoleImpl(
-    params: UpdateRoleParams
+    params: UpdateRoleParams,
   ): Promise<TransactionInstruction> {
     const [roleAccount] = getRoleAddress(
       this.program.programId,
       this.configAddress,
       params.roleType,
-      params.user
+      params.user,
     );
 
     return await this.program.methods
@@ -1088,7 +1161,7 @@ export class SolanaStablecoin {
   updateRoles(roleType: RoleType, user: PublicKey): AssignRoleBuilder;
   updateRoles(
     paramsOrRole: UpdateRolesParams | RoleType,
-    user?: PublicKey
+    user?: PublicKey,
   ): Promise<TransactionInstruction> | AssignRoleBuilder {
     if (typeof paramsOrRole === "number" && user) {
       return new AssignRoleBuilder(this, paramsOrRole, user);
@@ -1097,18 +1170,18 @@ export class SolanaStablecoin {
   }
 
   private async _updateRolesCompat(
-    params: UpdateRolesParams
+    params: UpdateRolesParams,
   ): Promise<TransactionInstruction> {
     const [roleAccount] = getRoleAddress(
       this.program.programId,
       this.configAddress,
       params.roleType,
-      params.user
+      params.user,
     );
 
     const exists = await accountExists(
       this.program.provider.connection,
-      roleAccount
+      roleAccount,
     );
 
     if (exists) {
@@ -1128,7 +1201,51 @@ export class SolanaStablecoin {
   }
 
   /**
+   * Build a create_minter instruction, or start a fluent {@link CreateMinterBuilder}.
+   *
+   * Creates a new MinterQuota PDA (uses `init`). Fails if the minter
+   * already exists. To update an existing minter, use {@link updateMinter}.
+   *
+   * **Overloaded:**
+   * - `createMinter(params)` — returns a TransactionInstruction
+   * - `createMinter(minter)` — returns a {@link CreateMinterBuilder}
+   */
+  createMinter(params: CreateMinterParams): Promise<TransactionInstruction>;
+  createMinter(minter: PublicKey): CreateMinterBuilder;
+  createMinter(
+    paramsOrMinter: CreateMinterParams | PublicKey,
+  ): Promise<TransactionInstruction> | CreateMinterBuilder {
+    if (paramsOrMinter instanceof PublicKey) {
+      return new CreateMinterBuilder(this, paramsOrMinter);
+    }
+    return this._createMinterImpl(paramsOrMinter);
+  }
+
+  private async _createMinterImpl(
+    params: CreateMinterParams,
+  ): Promise<TransactionInstruction> {
+    const [minterQuota] = getMinterQuotaAddress(
+      this.program.programId,
+      this.configAddress,
+      params.minter,
+    );
+
+    return await this.program.methods
+      .createMinter(params.minter, params.quota)
+      .accountsStrict({
+        authority: params.authority,
+        config: this.configAddress,
+        minterQuota,
+        systemProgram: SystemProgram.programId,
+      })
+      .instruction();
+  }
+
+  /**
    * Build an update_minter instruction, or start a fluent {@link UpdateMinterBuilder}.
+   *
+   * Updates an existing MinterQuota PDA (uses `mut`). Fails if the minter
+   * does not exist. To create a new minter, use {@link createMinter}.
    *
    * **Overloaded:**
    * - `updateMinter(params)` — returns a TransactionInstruction
@@ -1137,7 +1254,7 @@ export class SolanaStablecoin {
   updateMinter(params: UpdateMinterParams): Promise<TransactionInstruction>;
   updateMinter(minter: PublicKey): UpdateMinterBuilder;
   updateMinter(
-    paramsOrMinter: UpdateMinterParams | PublicKey
+    paramsOrMinter: UpdateMinterParams | PublicKey,
   ): Promise<TransactionInstruction> | UpdateMinterBuilder {
     if (paramsOrMinter instanceof PublicKey) {
       return new UpdateMinterBuilder(this, paramsOrMinter);
@@ -1146,12 +1263,12 @@ export class SolanaStablecoin {
   }
 
   private async _updateMinterImpl(
-    params: UpdateMinterParams
+    params: UpdateMinterParams,
   ): Promise<TransactionInstruction> {
     const [minterQuota] = getMinterQuotaAddress(
       this.program.programId,
       this.configAddress,
-      params.minter
+      params.minter,
     );
 
     return await this.program.methods
@@ -1166,55 +1283,34 @@ export class SolanaStablecoin {
   }
 
   /**
-   * Build a transfer_authority instruction, or start a fluent {@link TransferAuthorityBuilder}.
-   *
-   * **Overloaded:**
-   * - `transferAuthority(params)` — returns a TransactionInstruction
-   * - `transferAuthority(newAuthority)` — returns a {@link TransferAuthorityBuilder}
-   */
-  transferAuthority(params: TransferAuthorityParams): Promise<TransactionInstruction>;
-  transferAuthority(newAuthority: PublicKey): TransferAuthorityBuilder;
-  transferAuthority(
-    paramsOrNewAuth: TransferAuthorityParams | PublicKey
-  ): Promise<TransactionInstruction> | TransferAuthorityBuilder {
-    if (paramsOrNewAuth instanceof PublicKey) {
-      return new TransferAuthorityBuilder(this, paramsOrNewAuth);
-    }
-    return this._transferAuthorityImpl(paramsOrNewAuth);
-  }
-
-  private async _transferAuthorityImpl(
-    params: TransferAuthorityParams
-  ): Promise<TransactionInstruction> {
-    return await this.program.methods
-      .transferAuthority(params.newAuthority)
-      .accountsStrict({
-        authority: params.authority,
-        config: this.configAddress,
-      })
-      .instruction();
-  }
-
-  /**
    * Propose an authority transfer (two-step: propose then accept).
    *
+   * The on-chain program only supports two-step authority transfer:
+   * 1. Current authority calls `proposeAuthorityTransfer(newAuthority)`
+   * 2. New authority calls `acceptAuthorityTransfer()`
+   * 3. Optionally, current authority can call `cancelAuthorityTransfer()`
+   *
    * **Overloaded:**
-   * - `proposeAuthority(params)` — returns a TransactionInstruction
-   * - `proposeAuthority(newAuthority)` — returns a {@link ProposeAuthorityBuilder}
+   * - `proposeAuthorityTransfer(params)` — returns a TransactionInstruction
+   * - `proposeAuthorityTransfer(newAuthority)` — returns a {@link ProposeAuthorityTransferBuilder}
    */
-  proposeAuthority(params: TransferAuthorityParams): Promise<TransactionInstruction>;
-  proposeAuthority(newAuthority: PublicKey): ProposeAuthorityBuilder;
-  proposeAuthority(
-    paramsOrNewAuth: TransferAuthorityParams | PublicKey
-  ): Promise<TransactionInstruction> | ProposeAuthorityBuilder {
+  proposeAuthorityTransfer(
+    params: ProposeAuthorityTransferParams,
+  ): Promise<TransactionInstruction>;
+  proposeAuthorityTransfer(
+    newAuthority: PublicKey,
+  ): ProposeAuthorityTransferBuilder;
+  proposeAuthorityTransfer(
+    paramsOrNewAuth: ProposeAuthorityTransferParams | PublicKey,
+  ): Promise<TransactionInstruction> | ProposeAuthorityTransferBuilder {
     if (paramsOrNewAuth instanceof PublicKey) {
-      return new ProposeAuthorityBuilder(this, paramsOrNewAuth);
+      return new ProposeAuthorityTransferBuilder(this, paramsOrNewAuth);
     }
-    return this._proposeAuthorityImpl(paramsOrNewAuth);
+    return this._proposeAuthorityTransferImpl(paramsOrNewAuth);
   }
 
-  private async _proposeAuthorityImpl(
-    params: TransferAuthorityParams
+  private async _proposeAuthorityTransferImpl(
+    params: ProposeAuthorityTransferParams,
   ): Promise<TransactionInstruction> {
     return await this.program.methods
       .proposeAuthorityTransfer(params.newAuthority)
@@ -1229,20 +1325,22 @@ export class SolanaStablecoin {
    * Accept a pending authority transfer (must be called by the proposed new authority).
    *
    * **Overloaded:**
-   * - `acceptAuthority(params)` — returns a TransactionInstruction
-   * - `acceptAuthority()` — returns an {@link AcceptAuthorityBuilder}
+   * - `acceptAuthorityTransfer(params)` — returns a TransactionInstruction
+   * - `acceptAuthorityTransfer()` — returns an {@link AcceptAuthorityTransferBuilder}
    */
-  acceptAuthority(params: PauseParams): Promise<TransactionInstruction>;
-  acceptAuthority(): AcceptAuthorityBuilder;
-  acceptAuthority(
-    params?: PauseParams
-  ): Promise<TransactionInstruction> | AcceptAuthorityBuilder {
-    if (params) return this._acceptAuthorityImpl(params);
-    return new AcceptAuthorityBuilder(this);
+  acceptAuthorityTransfer(
+    params: AcceptAuthorityTransferParams,
+  ): Promise<TransactionInstruction>;
+  acceptAuthorityTransfer(): AcceptAuthorityTransferBuilder;
+  acceptAuthorityTransfer(
+    params?: AcceptAuthorityTransferParams,
+  ): Promise<TransactionInstruction> | AcceptAuthorityTransferBuilder {
+    if (params) return this._acceptAuthorityTransferImpl(params);
+    return new AcceptAuthorityTransferBuilder(this);
   }
 
-  private async _acceptAuthorityImpl(
-    params: PauseParams
+  private async _acceptAuthorityTransferImpl(
+    params: AcceptAuthorityTransferParams,
   ): Promise<TransactionInstruction> {
     return await this.program.methods
       .acceptAuthorityTransfer()
@@ -1257,20 +1355,22 @@ export class SolanaStablecoin {
    * Cancel a pending authority transfer (must be called by the current authority).
    *
    * **Overloaded:**
-   * - `cancelAuthority(params)` — returns a TransactionInstruction
-   * - `cancelAuthority()` — returns a {@link CancelAuthorityBuilder}
+   * - `cancelAuthorityTransfer(params)` — returns a TransactionInstruction
+   * - `cancelAuthorityTransfer()` — returns a {@link CancelAuthorityTransferBuilder}
    */
-  cancelAuthority(params: PauseParams): Promise<TransactionInstruction>;
-  cancelAuthority(): CancelAuthorityBuilder;
-  cancelAuthority(
-    params?: PauseParams
-  ): Promise<TransactionInstruction> | CancelAuthorityBuilder {
-    if (params) return this._cancelAuthorityImpl(params);
-    return new CancelAuthorityBuilder(this);
+  cancelAuthorityTransfer(
+    params: CancelAuthorityTransferParams,
+  ): Promise<TransactionInstruction>;
+  cancelAuthorityTransfer(): CancelAuthorityTransferBuilder;
+  cancelAuthorityTransfer(
+    params?: CancelAuthorityTransferParams,
+  ): Promise<TransactionInstruction> | CancelAuthorityTransferBuilder {
+    if (params) return this._cancelAuthorityTransferImpl(params);
+    return new CancelAuthorityTransferBuilder(this);
   }
 
-  private async _cancelAuthorityImpl(
-    params: PauseParams
+  private async _cancelAuthorityTransferImpl(
+    params: CancelAuthorityTransferParams,
   ): Promise<TransactionInstruction> {
     return await this.program.methods
       .cancelAuthorityTransfer()
@@ -1435,7 +1535,7 @@ export class SolanaStablecoin {
             },
           },
         ],
-      }
+      },
     );
 
     const holders: Array<{
@@ -1470,7 +1570,9 @@ export class SolanaStablecoin {
     }
 
     // Sort by balance descending
-    holders.sort((a, b) => (b.balance.gt(a.balance) ? 1 : b.balance.lt(a.balance) ? -1 : 0));
+    holders.sort((a, b) =>
+      b.balance.gt(a.balance) ? 1 : b.balance.lt(a.balance) ? -1 : 0,
+    );
 
     if (opts?.limit) {
       return holders.slice(0, opts.limit);

@@ -147,7 +147,7 @@ describe("SSS-1: Token Transfers", () => {
 
     // Set minter quota
     await program.methods
-      .updateMinter(authority.publicKey, new anchor.BN(1_000_000_000))
+      .createMinter(authority.publicKey, new anchor.BN(1_000_000_000))
       .accountsStrict({
         authority: authority.publicKey,
         config: configPda,
@@ -469,7 +469,7 @@ describe("SSS-2: Transfer Hook Enforcement", () => {
 
     // Set minter quota
     await program.methods
-      .updateMinter(authority.publicKey, new anchor.BN(5_000_000_000))
+      .createMinter(authority.publicKey, new anchor.BN(5_000_000_000))
       .accountsStrict({
         authority: authority.publicKey,
         config: configPda,
@@ -585,7 +585,7 @@ describe("SSS-2: Transfer Hook Enforcement", () => {
       program.programId
     );
     await program.methods
-      .addToBlacklist(alice.publicKey, "Suspicious activity")
+      .addToBlacklist(alice.publicKey, "Suspicious activity", Array(32).fill(0), "")
       .accountsStrict({
         authority: authority.publicKey,
         config: configPda,
@@ -648,7 +648,7 @@ describe("SSS-2: Transfer Hook Enforcement", () => {
       program.programId
     );
     await program.methods
-      .addToBlacklist(bob.publicKey, "Under investigation")
+      .addToBlacklist(bob.publicKey, "Under investigation", Array(32).fill(0), "")
       .accountsStrict({
         authority: authority.publicKey,
         config: configPda,
@@ -748,7 +748,7 @@ describe("SSS-2: Transfer Hook Enforcement", () => {
       program.programId
     );
     await program.methods
-      .addToBlacklist(alice.publicKey, "Sanctions compliance")
+      .addToBlacklist(alice.publicKey, "Sanctions compliance", Array(32).fill(0), "")
       .accountsStrict({
         authority: authority.publicKey,
         config: configPda,

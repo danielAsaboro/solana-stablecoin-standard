@@ -3,6 +3,8 @@
 # SSS Demo Recording Script
 # =============================================================================
 # Runs the full SSS-2 enforcement flow against localnet (Surfpool).
+# Covers: mint quotas, pause/unpause, freeze/thaw, blacklist, seize,
+# access control, authority transfer, and supply conservation.
 #
 # Prerequisites:
 #   1. Surfpool running from project root: npm run surfpool:start
@@ -89,6 +91,12 @@ run_sss() {
   $CLI -u "$RPC_URL" -k "$AUTHORITY_KEYPAIR" -y "$@"
 }
 
+run_sss_as() {
+  local keyfile="$1"; shift
+  cmd "npx sss-token $*"
+  $CLI -u "$RPC_URL" -k "$keyfile" -y "$@"
+}
+
 expect_fail() {
   local desc="$1"; shift
   cmd "$*"
@@ -148,7 +156,7 @@ info "Authority: $AUTHORITY"
 rm -f "$ROOT_DIR/.sss-token.json"
 
 # =============================================================================
-# WALLET SETUP
+# STEP 1: Generate Demo Wallets
 # =============================================================================
 step "Generate Demo Wallets"
 
@@ -166,7 +174,9 @@ info "Bob:      $BOB"
 info "Victim:   $VICTIM"
 info "Treasury: $AUTHORITY (authority)"
 
-# Fund wallets
+# =============================================================================
+# STEP 2: Fund Wallets
+# =============================================================================
 step "Fund Wallets"
 
 if [[ "$USE_DEVNET" == "true" ]]; then
@@ -202,7 +212,7 @@ fi
 pause
 
 # =============================================================================
-# STEP 1: Initialize Stablecoin
+# STEP 3: Initialize SSS-2 Stablecoin
 # =============================================================================
 step "Initialize SSS-2 Stablecoin"
 
@@ -217,7 +227,7 @@ info "Mint: $MINT"
 pause
 
 # =============================================================================
-# STEP 2: Setup Roles & Minter Quota
+# STEP 4: Setup Authority Roles
 # =============================================================================
 step "Setup Authority Roles"
 
@@ -228,6 +238,9 @@ run_sss minters add "$AUTHORITY" --quota 1000000000000
 info "Adding burner role..."
 run_sss roles add burner "$AUTHORITY"
 
+info "Adding pauser role..."
+run_sss roles add pauser "$AUTHORITY"
+
 info "Adding blacklister role..."
 run_sss roles add blacklister "$AUTHORITY"
 
@@ -235,11 +248,12 @@ info "Adding seizer role..."
 run_sss roles add seizer "$AUTHORITY"
 
 info "All roles assigned to authority."
+run_sss status
 
 pause
 
 # =============================================================================
-# STEP 3: Create Token Accounts
+# STEP 5: Create Token Accounts (ATAs)
 # =============================================================================
 step "Create Token Accounts (ATAs)"
 
@@ -256,7 +270,7 @@ done
 pause
 
 # =============================================================================
-# STEP 4: Mint Tokens
+# STEP 6: Mint Tokens to Alice and Bob
 # =============================================================================
 step "Mint Tokens to Alice and Bob"
 
@@ -271,7 +285,32 @@ run_sss mint "$BOB" 5000000
 pause
 
 # =============================================================================
-# STEP 5: Supply Check
+# STEP 7: Quota Enforcement
+# =============================================================================
+step "Quota Enforcement"
+
+echo -e "${BOLD}▸ Add Alice as minter with 1 DUSD quota${RESET}"
+run_sss roles add minter "$ALICE"
+run_sss minters add "$ALICE" --quota 1000000
+
+echo ""
+echo -e "${BOLD}▸ Alice mints 0.5 DUSD to Bob — within quota:${RESET}"
+run_sss_as "$ALICE_KEY" mint "$BOB" 500000
+info "Alice minted 0.5 DUSD (within 1 DUSD quota)"
+
+echo ""
+echo -e "${BOLD}▸ Alice tries to mint 1 DUSD more — exceeds quota:${RESET}"
+expect_fail "quota exceeded" $CLI -u "$RPC_URL" -k "$ALICE_KEY" -y mint "$BOB" 1000000
+
+echo ""
+echo -e "${BOLD}▸ Authority updates Alice's quota to 5 DUSD:${RESET}"
+run_sss minters add "$ALICE" --quota 5000000
+info "Quota updated — Alice can now mint more."
+
+pause
+
+# =============================================================================
+# STEP 8: Supply Check
 # =============================================================================
 step "Check Total Supply"
 
@@ -280,7 +319,7 @@ run_sss supply
 pause
 
 # =============================================================================
-# STEP 6: Happy-Path Transfers (before blacklist)
+# STEP 9: Happy-Path Transfers
 # =============================================================================
 step "Normal Transfers (Happy Path)"
 
@@ -313,7 +352,73 @@ echo -e "${GREEN}Transfers work normally — no restrictions yet.${RESET}"
 pause
 
 # =============================================================================
-# STEP 7: Blacklist Bob
+# STEP 10: Pause/Unpause
+# =============================================================================
+step "Pause / Unpause"
+
+echo -e "${BOLD}▸ Pause the stablecoin — all mints blocked:${RESET}"
+run_sss pause
+
+echo ""
+echo -e "${BOLD}▸ Authority tries to mint while paused:${RESET}"
+expect_fail "paused" $CLI -u "$RPC_URL" -k "$AUTHORITY_KEYPAIR" -y mint "$ALICE" 1000000
+
+echo ""
+echo -e "${BOLD}▸ Unpause — mints work again:${RESET}"
+run_sss unpause
+run_sss mint "$ALICE" 1000000
+info "Minted 1 DUSD to Alice after unpause."
+
+pause
+
+# =============================================================================
+# STEP 11: Freeze/Thaw
+# =============================================================================
+step "Freeze / Thaw"
+
+echo -e "${BOLD}▸ Freeze Bob's account — outbound transfers blocked:${RESET}"
+run_sss freeze "$BOB"
+
+echo ""
+echo -e "${BOLD}▸ Bob tries to send 1 DUSD to Alice:${RESET}"
+expect_fail "account frozen" \
+  spl-token transfer "$MINT" 1 "$ALICE" \
+    --owner "$BOB_KEY" \
+    --url "$RPC_URL" \
+    --fee-payer "$BOB_KEY" \
+    --program-id "$T22" \
+    --allow-unfunded-recipient
+
+echo ""
+echo -e "${BOLD}▸ Thaw Bob's account — transfers work again:${RESET}"
+run_sss thaw "$BOB"
+
+cmd "spl-token transfer $MINT 1 $ALICE --owner ~/demo-bob.json"
+spl-token transfer "$MINT" 1 "$ALICE" \
+  --owner "$BOB_KEY" \
+  --url "$RPC_URL" \
+  --fee-payer "$BOB_KEY" \
+  --program-id "$T22" \
+  --allow-unfunded-recipient 2>&1
+info "Transfer succeeded after thaw! Bob → Alice: 1 DUSD"
+
+pause
+
+# =============================================================================
+# STEP 12: Access Control (Unauthorized)
+# =============================================================================
+step "Access Control (Unauthorized)"
+
+echo -e "${BOLD}▸ Alice tries to assign minter role to Bob — should fail:${RESET}"
+expect_fail "unauthorized" $CLI -u "$RPC_URL" -k "$ALICE_KEY" -y roles add minter "$BOB"
+
+echo ""
+echo -e "${GREEN}Only the master authority can manage roles.${RESET}"
+
+pause
+
+# =============================================================================
+# STEP 13: Blacklist Bob
 # =============================================================================
 step "Blacklist Bob"
 
@@ -325,7 +430,7 @@ run_sss blacklist add "$BOB" --reason "FBI Case #2024-1847 - Fraud proceeds"
 pause
 
 # =============================================================================
-# STEP 8: Transfer Rejections (Sad Path)
+# STEP 14: Blocked Transfers (Sad Path)
 # =============================================================================
 step "Blocked Transfers (Sad Path)"
 
@@ -356,51 +461,107 @@ echo -e "${GREEN}Both directions blocked by the transfer hook.${RESET}"
 pause
 
 # =============================================================================
-# STEP 9: Seize Tokens
+# STEP 15: Blacklist Removal
+# =============================================================================
+step "Blacklist Removal"
+
+echo -e "${BOLD}▸ Remove Bob from blacklist:${RESET}"
+run_sss blacklist remove "$BOB"
+
+echo ""
+echo -e "${BOLD}▸ Bob can transfer again:${RESET}"
+cmd "spl-token transfer $MINT 1 $ALICE --owner ~/demo-bob.json"
+spl-token transfer "$MINT" 1 "$ALICE" \
+  --owner "$BOB_KEY" \
+  --url "$RPC_URL" \
+  --fee-payer "$BOB_KEY" \
+  --program-id "$T22" \
+  --allow-unfunded-recipient 2>&1
+info "Transfer succeeded after blacklist removal! Bob → Alice: 1 DUSD"
+
+echo ""
+echo -e "${BOLD}▸ Re-blacklist Bob for seizure demo:${RESET}"
+run_sss blacklist add "$BOB" --reason "FBI Case #2024-1847 - Fraud proceeds"
+
+pause
+
+# =============================================================================
+# STEP 16: Seize Bob's Tokens
 # =============================================================================
 step "Seize Bob's Tokens"
 
 echo -e "${BOLD}▸ Permanent delegate pulls all tokens from Bob → Treasury${RESET}"
 echo ""
 
-run_sss seize "$BOB" --to "$AUTHORITY" --amount 5000000
+run_sss seize "$BOB" --to "$AUTHORITY" --amount 3500000
 
 pause
 
 # =============================================================================
-# STEP 10: Burn & Reissue (Victim Restitution)
+# STEP 17: Burn Seized Tokens & Reissue to Victim
 # =============================================================================
 step "Burn Seized Tokens & Reissue to Victim"
 
-echo -e "${BOLD}▸ Burn 5 DUSD (seized tokens)${RESET}"
-run_sss burn 5000000
+echo -e "${BOLD}▸ Burn 3.5 DUSD (seized tokens)${RESET}"
+run_sss burn 3500000
 
 echo ""
-echo -e "${BOLD}▸ Mint 5 DUSD to victim${RESET}"
-run_sss mint "$VICTIM" 5000000
+echo -e "${BOLD}▸ Mint 3.5 DUSD to victim${RESET}"
+run_sss mint "$VICTIM" 3500000
 
 info "Victim restitution complete."
 
 pause
 
 # =============================================================================
-# STEP 11: Supply Conservation
+# STEP 18: Supply Conservation
 # =============================================================================
 step "Verify Supply Conservation"
 
 run_sss supply
 
 echo ""
-echo -e "${GREEN}Supply should still be 15,000,000 (15.00 DUSD)${RESET}"
+echo -e "${GREEN}Supply should be 16,500,000 (16.50 DUSD)${RESET}"
+echo -e "${DIM}  Original: 10M (Alice) + 5M (Bob) = 15M${RESET}"
+echo -e "${DIM}  + Step 7:  Alice minted 0.5M to Bob${RESET}"
+echo -e "${DIM}  + Step 10: Authority minted 1M to Alice after unpause${RESET}"
+echo -e "${DIM}  + Step 17: Burned 3.5M, minted 3.5M (net zero)${RESET}"
+echo -e "${DIM}  = Total: 16.5M base units = 16.50 DUSD${RESET}"
 
 pause
 
 # =============================================================================
-# STEP 12: Audit Trail
+# STEP 19: Authority Transfer (Two-Step)
+# =============================================================================
+step "Authority Transfer (Two-Step)"
+
+echo -e "${BOLD}▸ Authority proposes Alice as new authority:${RESET}"
+run_sss authority propose "$ALICE"
+
+echo ""
+echo -e "${BOLD}▸ Alice accepts the authority transfer:${RESET}"
+run_sss_as "$ALICE_KEY" authority accept
+
+info "Alice is now the master authority!"
+
+echo ""
+echo -e "${BOLD}▸ Alice proposes authority back to original:${RESET}"
+$CLI -u "$RPC_URL" -k "$ALICE_KEY" -y authority propose "$AUTHORITY"
+
+echo ""
+echo -e "${BOLD}▸ Original authority accepts:${RESET}"
+run_sss authority accept
+
+info "Authority restored to original."
+
+pause
+
+# =============================================================================
+# STEP 20: Audit Trail
 # =============================================================================
 step "Query Audit Trail"
 
-run_sss audit-log --action all --limit 10
+run_sss audit-log --action all --limit 25
 
 pause
 

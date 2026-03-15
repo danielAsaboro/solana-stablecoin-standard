@@ -133,7 +133,7 @@ describe("SSS-2: Compliant Stablecoin Lifecycle", () => {
         program.programId
       );
       await program.methods
-        .updateMinter(authority.publicKey, new anchor.BN(1_000_000_000_000))
+        .createMinter(authority.publicKey, new anchor.BN(1_000_000_000_000))
         .accountsStrict({
           authority: authority.publicKey,
           config: configPda,
@@ -208,7 +208,7 @@ describe("SSS-2: Compliant Stablecoin Lifecycle", () => {
       );
 
       await program.methods
-        .addToBlacklist(targetUser.publicKey, "Suspicious activity")
+        .addToBlacklist(targetUser.publicKey, "Suspicious activity", Array(32).fill(0), "")
         .accountsStrict({
           authority: authority.publicKey,
           config: configPda,
@@ -294,7 +294,7 @@ describe("SSS-2: Compliant Stablecoin Lifecycle", () => {
         program.programId
       );
       await program.methods
-        .addToBlacklist(targetUser.publicKey, "Seize target")
+        .addToBlacklist(targetUser.publicKey, "Seize target", Array(32).fill(0), "")
         .accountsStrict({
           authority: authority.publicKey,
           config: configPda,
@@ -538,7 +538,7 @@ describe("SSS-2: Compliant Stablecoin Lifecycle", () => {
 
       try {
         await program.methods
-          .addToBlacklist(randomTarget.publicKey, "impostor attempt")
+          .addToBlacklist(randomTarget.publicKey, "impostor attempt", Array(32).fill(0), "")
           .accountsStrict({
             authority: impostor.publicKey,
             config: configPda,

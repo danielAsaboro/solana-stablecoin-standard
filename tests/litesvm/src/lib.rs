@@ -221,6 +221,29 @@ mod helpers {
         }
     }
 
+    pub fn build_create_minter_ix(
+        authority: &Pubkey,
+        config: &Pubkey,
+        minter_quota: &Pubkey,
+        minter: &Pubkey,
+        quota: u64,
+    ) -> Instruction {
+        let mut data = anchor_discriminator("create_minter").to_vec();
+        push_pubkey(&mut data, minter);
+        push_u64(&mut data, quota);
+
+        Instruction {
+            program_id: sss_program_id(),
+            accounts: vec![
+                AccountMeta::new(*authority, true),
+                AccountMeta::new_readonly(*config, false),
+                AccountMeta::new(*minter_quota, false),
+                AccountMeta::new_readonly(system_program::ID, false),
+            ],
+            data,
+        }
+    }
+
     pub fn build_update_minter_ix(
         authority: &Pubkey,
         config: &Pubkey,
@@ -399,24 +422,6 @@ mod helpers {
         }
     }
 
-    pub fn build_transfer_authority_ix(
-        authority: &Pubkey,
-        config: &Pubkey,
-        new_authority: &Pubkey,
-    ) -> Instruction {
-        let mut data = anchor_discriminator("transfer_authority").to_vec();
-        push_pubkey(&mut data, new_authority);
-
-        Instruction {
-            program_id: sss_program_id(),
-            accounts: vec![
-                AccountMeta::new_readonly(*authority, true),
-                AccountMeta::new(*config, false),
-            ],
-            data,
-        }
-    }
-
     pub fn build_add_to_blacklist_ix(
         authority: &Pubkey,
         config: &Pubkey,
@@ -424,10 +429,14 @@ mod helpers {
         blacklist_entry: &Pubkey,
         address: &Pubkey,
         reason: &str,
+        evidence_hash: [u8; 32],
+        evidence_uri: &str,
     ) -> Instruction {
         let mut data = anchor_discriminator("add_to_blacklist").to_vec();
         push_pubkey(&mut data, address);
         push_string(&mut data, reason);
+        data.extend_from_slice(&evidence_hash);
+        push_string(&mut data, evidence_uri);
 
         Instruction {
             program_id: sss_program_id(),
@@ -686,6 +695,8 @@ mod helpers {
         pub reason: String,
         pub blacklisted_at: i64,
         pub blacklisted_by: Pubkey,
+        pub evidence_hash: [u8; 32],
+        pub evidence_uri: String,
         pub bump: u8,
     }
 
@@ -696,6 +707,12 @@ mod helpers {
         let reason = read_string(data, &mut offset);
         let blacklisted_at = read_i64(data, &mut offset);
         let blacklisted_by = read_pubkey(data, &mut offset);
+
+        let mut evidence_hash = [0u8; 32];
+        evidence_hash.copy_from_slice(&data[offset..offset + 32]);
+        offset += 32;
+
+        let evidence_uri = read_string(data, &mut offset);
         let bump = read_u8(data, &mut offset);
 
         BlacklistData {
@@ -704,7 +721,36 @@ mod helpers {
             reason,
             blacklisted_at,
             blacklisted_by,
+            evidence_hash,
+            evidence_uri,
             bump,
+        }
+    }
+
+    pub fn build_update_blacklist_evidence_ix(
+        authority: &Pubkey,
+        config: &Pubkey,
+        role_account: &Pubkey,
+        blacklist_entry: &Pubkey,
+        address: &Pubkey,
+        evidence_hash: [u8; 32],
+        evidence_uri: &str,
+    ) -> Instruction {
+        let mut data = anchor_discriminator("update_blacklist_evidence").to_vec();
+        push_pubkey(&mut data, address);
+        data.extend_from_slice(&evidence_hash);
+        push_string(&mut data, evidence_uri);
+
+        Instruction {
+            program_id: sss_program_id(),
+            accounts: vec![
+                AccountMeta::new(*authority, true),
+                AccountMeta::new_readonly(*config, false),
+                AccountMeta::new_readonly(*role_account, false),
+                AccountMeta::new(*blacklist_entry, false),
+                AccountMeta::new_readonly(system_program::ID, false),
+            ],
+            data,
         }
     }
 
@@ -789,8 +835,8 @@ mod helpers {
         send_tx(svm, &[assign_ix], authority, &[authority]).expect("assign minter role failed");
 
         let quota_ix =
-            build_update_minter_ix(&authority.pubkey(), config, &quota_pda, minter, quota);
-        send_tx(svm, &[quota_ix], authority, &[authority]).expect("update minter quota failed");
+            build_create_minter_ix(&authority.pubkey(), config, &quota_pda, minter, quota);
+        send_tx(svm, &[quota_ix], authority, &[authority]).expect("create minter quota failed");
 
         (role_pda, quota_pda)
     }
@@ -1567,29 +1613,6 @@ mod authority {
     }
 
     #[test]
-    fn test_immediate_authority_transfer() {
-        let (mut svm, authority, _mint, config_pda) = setup_sss1();
-        let new_auth = Keypair::new();
-        airdrop(&mut svm, &new_auth.pubkey(), SOL);
-
-        let ix = build_transfer_authority_ix(&authority.pubkey(), &config_pda, &new_auth.pubkey());
-        send_tx(&mut svm, &[ix], &authority, &[&authority]).expect("transfer_authority failed");
-
-        let data = read_account_data(&svm, &config_pda).unwrap();
-        let config = deserialize_config(&data);
-        assert_eq!(config.master_authority, new_auth.pubkey());
-    }
-
-    #[test]
-    fn test_immediate_transfer_same_authority_rejected() {
-        let (mut svm, authority, _mint, config_pda) = setup_sss1();
-
-        let ix = build_transfer_authority_ix(&authority.pubkey(), &config_pda, &authority.pubkey());
-        let result = send_tx(&mut svm, &[ix], &authority, &[&authority]);
-        assert!(result.is_err(), "immediate transfer to self should fail");
-    }
-
-    #[test]
     fn test_duplicate_propose_rejected() {
         let (mut svm, authority, _mint, config_pda) = setup_sss1();
         let new_auth_a = Keypair::new();
@@ -1731,6 +1754,146 @@ mod minter_quota {
         );
         send_tx(&mut svm, &[mint_again], &minter_kp, &[&minter_kp])
             .expect("mint after reset should succeed");
+    }
+}
+
+#[cfg(test)]
+mod create_update_minter_split {
+    use super::helpers::*;
+    use solana_sdk::signature::{Keypair, Signer};
+
+    #[test]
+    fn test_create_minter_happy() {
+        let (mut svm, authority, _mint, config_pda) = setup_sss1();
+        let minter_kp = Keypair::new();
+        airdrop(&mut svm, &minter_kp.pubkey(), SOL);
+
+        let (quota_pda, _) = find_minter_quota_pda(&config_pda, &minter_kp.pubkey());
+
+        let ix = build_create_minter_ix(
+            &authority.pubkey(),
+            &config_pda,
+            &quota_pda,
+            &minter_kp.pubkey(),
+            5_000,
+        );
+        send_tx(&mut svm, &[ix], &authority, &[&authority]).expect("create_minter failed");
+
+        let data = read_account_data(&svm, &quota_pda).expect("minter quota PDA missing");
+        let quota = deserialize_minter_quota(&data);
+        assert_eq!(quota.config, config_pda);
+        assert_eq!(quota.minter, minter_kp.pubkey());
+        assert_eq!(quota.quota, 5_000);
+        assert_eq!(quota.minted, 0);
+    }
+
+    #[test]
+    fn test_create_minter_duplicate_fails() {
+        let (mut svm, authority, _mint, config_pda) = setup_sss1();
+        let minter_kp = Keypair::new();
+        airdrop(&mut svm, &minter_kp.pubkey(), SOL);
+
+        let (quota_pda, _) = find_minter_quota_pda(&config_pda, &minter_kp.pubkey());
+
+        let ix1 = build_create_minter_ix(
+            &authority.pubkey(),
+            &config_pda,
+            &quota_pda,
+            &minter_kp.pubkey(),
+            1_000,
+        );
+        send_tx(&mut svm, &[ix1], &authority, &[&authority]).expect("first create_minter failed");
+
+        let ix2 = build_create_minter_ix(
+            &authority.pubkey(),
+            &config_pda,
+            &quota_pda,
+            &minter_kp.pubkey(),
+            2_000,
+        );
+        let result = send_tx(&mut svm, &[ix2], &authority, &[&authority]);
+        assert!(
+            result.is_err(),
+            "creating the same minter twice should fail"
+        );
+    }
+
+    #[test]
+    fn test_update_minter_nonexistent_fails() {
+        let (mut svm, authority, _mint, config_pda) = setup_sss1();
+        let minter_kp = Keypair::new();
+        airdrop(&mut svm, &minter_kp.pubkey(), SOL);
+
+        let (quota_pda, _) = find_minter_quota_pda(&config_pda, &minter_kp.pubkey());
+
+        let ix = build_update_minter_ix(
+            &authority.pubkey(),
+            &config_pda,
+            &quota_pda,
+            &minter_kp.pubkey(),
+            1_000,
+        );
+        let result = send_tx(&mut svm, &[ix], &authority, &[&authority]);
+        assert!(result.is_err(), "updating a nonexistent minter should fail");
+    }
+
+    #[test]
+    fn test_create_then_update_minter() {
+        let (mut svm, authority, mint, config_pda) = setup_sss1();
+        let minter_kp = Keypair::new();
+        airdrop(&mut svm, &minter_kp.pubkey(), 5 * SOL);
+
+        // Assign minter role
+        let (role_pda, _) = find_role_pda(&config_pda, ROLE_MINTER, &minter_kp.pubkey());
+        let assign_ix = build_assign_role_ix(
+            &authority.pubkey(),
+            &config_pda,
+            &role_pda,
+            ROLE_MINTER,
+            &minter_kp.pubkey(),
+        );
+        send_tx(&mut svm, &[assign_ix], &authority, &[&authority])
+            .expect("assign minter role failed");
+
+        // Create minter quota
+        let (quota_pda, _) = find_minter_quota_pda(&config_pda, &minter_kp.pubkey());
+        let create_ix = build_create_minter_ix(
+            &authority.pubkey(),
+            &config_pda,
+            &quota_pda,
+            &minter_kp.pubkey(),
+            1_000,
+        );
+        send_tx(&mut svm, &[create_ix], &authority, &[&authority]).expect("create_minter failed");
+
+        // Mint 400 tokens
+        let ata = create_ata(&mut svm, &authority, &minter_kp.pubkey(), &mint.pubkey());
+        let mint_ix = build_mint_tokens_ix(
+            &minter_kp.pubkey(),
+            &config_pda,
+            &role_pda,
+            &quota_pda,
+            &mint.pubkey(),
+            &ata,
+            400,
+        );
+        send_tx(&mut svm, &[mint_ix], &minter_kp, &[&minter_kp]).expect("mint failed");
+
+        // Update quota to 5_000
+        let update_ix = build_update_minter_ix(
+            &authority.pubkey(),
+            &config_pda,
+            &quota_pda,
+            &minter_kp.pubkey(),
+            5_000,
+        );
+        send_tx(&mut svm, &[update_ix], &authority, &[&authority]).expect("update_minter failed");
+
+        // Verify quota updated but minted preserved
+        let data = read_account_data(&svm, &quota_pda).expect("quota PDA missing");
+        let quota = deserialize_minter_quota(&data);
+        assert_eq!(quota.quota, 5_000);
+        assert_eq!(quota.minted, 400);
     }
 }
 
@@ -1895,6 +2058,8 @@ mod blacklist {
             &bl_pda,
             &target,
             "sanctions compliance",
+            [0u8; 32],
+            "",
         );
         send_tx(&mut svm, &[ix], &blacklister, &[&blacklister]).expect("add_to_blacklist failed");
 
@@ -1926,6 +2091,8 @@ mod blacklist {
             &bl_pda,
             &target,
             "temporary hold",
+            [0u8; 32],
+            "",
         );
         send_tx(&mut svm, &[add_ix], &blacklister, &[&blacklister])
             .expect("add_to_blacklist failed");
@@ -1969,6 +2136,8 @@ mod blacklist {
             &bl_pda,
             &target,
             "should fail",
+            [0u8; 32],
+            "",
         );
         let result = send_tx(&mut svm, &[ix], &impostor, &[&impostor]);
         assert!(
@@ -1995,6 +2164,8 @@ mod blacklist {
             &bl_pda,
             &target,
             "first",
+            [0u8; 32],
+            "",
         );
         send_tx(&mut svm, &[ix], &blacklister, &[&blacklister])
             .expect("first blacklist should succeed");
@@ -2007,6 +2178,8 @@ mod blacklist {
             &bl_pda,
             &target,
             "second",
+            [0u8; 32],
+            "",
         );
         let result = send_tx(&mut svm, &[ix2], &blacklister, &[&blacklister]);
         assert!(
@@ -2620,5 +2793,400 @@ mod minter_quota_sad_paths {
         let data = read_account_data(&svm, &quota_pda).expect("quota missing");
         let quota = deserialize_minter_quota(&data);
         assert_eq!(quota.minted, 500);
+    }
+}
+
+#[cfg(test)]
+mod evidence_chain {
+    use super::helpers::*;
+    use solana_sdk::{
+        pubkey::Pubkey,
+        signature::{Keypair, Signer},
+    };
+
+    fn setup_sss2() -> (litesvm::LiteSVM, Keypair, Keypair, Pubkey) {
+        let mut svm = setup_svm();
+        let authority = Keypair::new();
+        let mint = Keypair::new();
+        airdrop(&mut svm, &authority.pubkey(), 10 * SOL);
+
+        let (config_pda, _) = find_config_pda(&mint.pubkey());
+        let dummy_hook = Pubkey::new_unique();
+
+        let ix = build_initialize_ix(
+            &authority.pubkey(),
+            &mint.pubkey(),
+            &config_pda,
+            "Evidence Test",
+            "EVD",
+            "",
+            6,
+            true,
+            true,
+            false,
+            false,
+            Some(dummy_hook),
+            0,
+        );
+        send_tx(&mut svm, &[ix], &authority, &[&authority, &mint])
+            .expect("initialize SSS-2 failed");
+        (svm, authority, mint, config_pda)
+    }
+
+    fn setup_blacklister(
+        svm: &mut litesvm::LiteSVM,
+        authority: &Keypair,
+        config: &Pubkey,
+        blacklister: &Pubkey,
+    ) -> Pubkey {
+        let (role_pda, _) = find_role_pda(config, ROLE_BLACKLISTER, blacklister);
+        let ix = build_assign_role_ix(
+            &authority.pubkey(),
+            config,
+            &role_pda,
+            ROLE_BLACKLISTER,
+            blacklister,
+        );
+        send_tx(svm, &[ix], authority, &[authority]).expect("assign blacklister failed");
+        role_pda
+    }
+
+    fn sample_evidence_hash() -> [u8; 32] {
+        let mut h = [0u8; 32];
+        // SHA-256 of "court-order-2024-1847.pdf" (fake but deterministic)
+        for (i, b) in h.iter_mut().enumerate() {
+            *b = (i as u8).wrapping_mul(7).wrapping_add(0xAB);
+        }
+        h
+    }
+
+    // ── Happy path ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_blacklist_with_evidence() {
+        let (mut svm, authority, _mint, config_pda) = setup_sss2();
+        let blacklister = Keypair::new();
+        airdrop(&mut svm, &blacklister.pubkey(), 5 * SOL);
+        let role_pda = setup_blacklister(&mut svm, &authority, &config_pda, &blacklister.pubkey());
+
+        let target = Pubkey::new_unique();
+        let (bl_pda, _) = find_blacklist_pda(&config_pda, &target);
+        let hash = sample_evidence_hash();
+
+        let ix = build_add_to_blacklist_ix(
+            &blacklister.pubkey(),
+            &config_pda,
+            &role_pda,
+            &bl_pda,
+            &target,
+            "OFAC SDN Match",
+            hash,
+            "ipfs://QmFakeHashForCourtOrder123456789",
+        );
+        send_tx(&mut svm, &[ix], &blacklister, &[&blacklister])
+            .expect("blacklist with evidence failed");
+
+        let data = read_account_data(&svm, &bl_pda).expect("entry not found");
+        let entry = deserialize_blacklist(&data);
+        assert_eq!(entry.reason, "OFAC SDN Match");
+        assert_eq!(entry.evidence_hash, hash);
+        assert_eq!(
+            entry.evidence_uri,
+            "ipfs://QmFakeHashForCourtOrder123456789"
+        );
+    }
+
+    #[test]
+    fn test_blacklist_without_evidence_backward_compat() {
+        let (mut svm, authority, _mint, config_pda) = setup_sss2();
+        let blacklister = Keypair::new();
+        airdrop(&mut svm, &blacklister.pubkey(), 5 * SOL);
+        let role_pda = setup_blacklister(&mut svm, &authority, &config_pda, &blacklister.pubkey());
+
+        let target = Pubkey::new_unique();
+        let (bl_pda, _) = find_blacklist_pda(&config_pda, &target);
+
+        let ix = build_add_to_blacklist_ix(
+            &blacklister.pubkey(),
+            &config_pda,
+            &role_pda,
+            &bl_pda,
+            &target,
+            "no evidence needed",
+            [0u8; 32],
+            "",
+        );
+        send_tx(&mut svm, &[ix], &blacklister, &[&blacklister])
+            .expect("blacklist without evidence failed");
+
+        let data = read_account_data(&svm, &bl_pda).expect("entry not found");
+        let entry = deserialize_blacklist(&data);
+        assert_eq!(entry.evidence_hash, [0u8; 32]);
+        assert_eq!(entry.evidence_uri, "");
+    }
+
+    #[test]
+    fn test_update_evidence_on_existing_entry() {
+        let (mut svm, authority, _mint, config_pda) = setup_sss2();
+        let blacklister = Keypair::new();
+        airdrop(&mut svm, &blacklister.pubkey(), 5 * SOL);
+        let role_pda = setup_blacklister(&mut svm, &authority, &config_pda, &blacklister.pubkey());
+
+        let target = Pubkey::new_unique();
+        let (bl_pda, _) = find_blacklist_pda(&config_pda, &target);
+
+        // Blacklist without evidence first
+        let add_ix = build_add_to_blacklist_ix(
+            &blacklister.pubkey(),
+            &config_pda,
+            &role_pda,
+            &bl_pda,
+            &target,
+            "pending evidence",
+            [0u8; 32],
+            "",
+        );
+        send_tx(&mut svm, &[add_ix], &blacklister, &[&blacklister])
+            .expect("initial blacklist failed");
+
+        // Now attach evidence
+        let hash = sample_evidence_hash();
+        let update_ix = build_update_blacklist_evidence_ix(
+            &blacklister.pubkey(),
+            &config_pda,
+            &role_pda,
+            &bl_pda,
+            &target,
+            hash,
+            "ar://TxId_CourtOrder_2024",
+        );
+        send_tx(&mut svm, &[update_ix], &blacklister, &[&blacklister])
+            .expect("update evidence failed");
+
+        let data = read_account_data(&svm, &bl_pda).expect("entry not found");
+        let entry = deserialize_blacklist(&data);
+        assert_eq!(entry.evidence_hash, hash);
+        assert_eq!(entry.evidence_uri, "ar://TxId_CourtOrder_2024");
+        // Original fields preserved
+        assert_eq!(entry.reason, "pending evidence");
+        assert_eq!(entry.blacklisted_by, blacklister.pubkey());
+    }
+
+    #[test]
+    fn test_update_evidence_overwrites_previous() {
+        let (mut svm, authority, _mint, config_pda) = setup_sss2();
+        let blacklister = Keypair::new();
+        airdrop(&mut svm, &blacklister.pubkey(), 5 * SOL);
+        let role_pda = setup_blacklister(&mut svm, &authority, &config_pda, &blacklister.pubkey());
+
+        let target = Pubkey::new_unique();
+        let (bl_pda, _) = find_blacklist_pda(&config_pda, &target);
+
+        let hash1 = sample_evidence_hash();
+        let add_ix = build_add_to_blacklist_ix(
+            &blacklister.pubkey(),
+            &config_pda,
+            &role_pda,
+            &bl_pda,
+            &target,
+            "fraud case",
+            hash1,
+            "ipfs://QmFirst",
+        );
+        send_tx(&mut svm, &[add_ix], &blacklister, &[&blacklister])
+            .expect("initial blacklist failed");
+
+        // Overwrite with new evidence
+        let mut hash2 = [0u8; 32];
+        hash2[0] = 0xFF;
+        hash2[31] = 0x01;
+        let update_ix = build_update_blacklist_evidence_ix(
+            &blacklister.pubkey(),
+            &config_pda,
+            &role_pda,
+            &bl_pda,
+            &target,
+            hash2,
+            "ipfs://QmSecondUpdated",
+        );
+        send_tx(&mut svm, &[update_ix], &blacklister, &[&blacklister])
+            .expect("evidence update failed");
+
+        let data = read_account_data(&svm, &bl_pda).expect("entry not found");
+        let entry = deserialize_blacklist(&data);
+        assert_eq!(entry.evidence_hash, hash2);
+        assert_eq!(entry.evidence_uri, "ipfs://QmSecondUpdated");
+    }
+
+    // ── Sad path ────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_update_evidence_zero_hash_rejected() {
+        let (mut svm, authority, _mint, config_pda) = setup_sss2();
+        let blacklister = Keypair::new();
+        airdrop(&mut svm, &blacklister.pubkey(), 5 * SOL);
+        let role_pda = setup_blacklister(&mut svm, &authority, &config_pda, &blacklister.pubkey());
+
+        let target = Pubkey::new_unique();
+        let (bl_pda, _) = find_blacklist_pda(&config_pda, &target);
+
+        let add_ix = build_add_to_blacklist_ix(
+            &blacklister.pubkey(),
+            &config_pda,
+            &role_pda,
+            &bl_pda,
+            &target,
+            "test",
+            [0u8; 32],
+            "",
+        );
+        send_tx(&mut svm, &[add_ix], &blacklister, &[&blacklister]).expect("blacklist failed");
+
+        // Try to update with zero hash — should fail
+        let update_ix = build_update_blacklist_evidence_ix(
+            &blacklister.pubkey(),
+            &config_pda,
+            &role_pda,
+            &bl_pda,
+            &target,
+            [0u8; 32],
+            "ipfs://Qm...",
+        );
+        let result = send_tx(&mut svm, &[update_ix], &blacklister, &[&blacklister]);
+        assert!(result.is_err(), "zero evidence hash should be rejected");
+    }
+
+    #[test]
+    fn test_update_evidence_uri_too_long_rejected() {
+        let (mut svm, authority, _mint, config_pda) = setup_sss2();
+        let blacklister = Keypair::new();
+        airdrop(&mut svm, &blacklister.pubkey(), 5 * SOL);
+        let role_pda = setup_blacklister(&mut svm, &authority, &config_pda, &blacklister.pubkey());
+
+        let target = Pubkey::new_unique();
+        let (bl_pda, _) = find_blacklist_pda(&config_pda, &target);
+
+        let add_ix = build_add_to_blacklist_ix(
+            &blacklister.pubkey(),
+            &config_pda,
+            &role_pda,
+            &bl_pda,
+            &target,
+            "test",
+            [0u8; 32],
+            "",
+        );
+        send_tx(&mut svm, &[add_ix], &blacklister, &[&blacklister]).expect("blacklist failed");
+
+        // URI exceeds MAX_EVIDENCE_URI_LEN (128)
+        let long_uri = "x".repeat(129);
+        let update_ix = build_update_blacklist_evidence_ix(
+            &blacklister.pubkey(),
+            &config_pda,
+            &role_pda,
+            &bl_pda,
+            &target,
+            sample_evidence_hash(),
+            &long_uri,
+        );
+        let result = send_tx(&mut svm, &[update_ix], &blacklister, &[&blacklister]);
+        assert!(
+            result.is_err(),
+            "URI exceeding 128 bytes should be rejected"
+        );
+    }
+
+    #[test]
+    fn test_add_blacklist_evidence_uri_too_long_rejected() {
+        let (mut svm, authority, _mint, config_pda) = setup_sss2();
+        let blacklister = Keypair::new();
+        airdrop(&mut svm, &blacklister.pubkey(), 5 * SOL);
+        let role_pda = setup_blacklister(&mut svm, &authority, &config_pda, &blacklister.pubkey());
+
+        let target = Pubkey::new_unique();
+        let (bl_pda, _) = find_blacklist_pda(&config_pda, &target);
+
+        let long_uri = "x".repeat(129);
+        let ix = build_add_to_blacklist_ix(
+            &blacklister.pubkey(),
+            &config_pda,
+            &role_pda,
+            &bl_pda,
+            &target,
+            "test",
+            sample_evidence_hash(),
+            &long_uri,
+        );
+        let result = send_tx(&mut svm, &[ix], &blacklister, &[&blacklister]);
+        assert!(result.is_err(), "URI too long should be rejected on add");
+    }
+
+    #[test]
+    fn test_non_blacklister_cannot_update_evidence() {
+        let (mut svm, authority, _mint, config_pda) = setup_sss2();
+        let blacklister = Keypair::new();
+        let impostor = Keypair::new();
+        airdrop(&mut svm, &blacklister.pubkey(), 5 * SOL);
+        airdrop(&mut svm, &impostor.pubkey(), 5 * SOL);
+        let role_pda = setup_blacklister(&mut svm, &authority, &config_pda, &blacklister.pubkey());
+
+        let target = Pubkey::new_unique();
+        let (bl_pda, _) = find_blacklist_pda(&config_pda, &target);
+
+        let add_ix = build_add_to_blacklist_ix(
+            &blacklister.pubkey(),
+            &config_pda,
+            &role_pda,
+            &bl_pda,
+            &target,
+            "test",
+            [0u8; 32],
+            "",
+        );
+        send_tx(&mut svm, &[add_ix], &blacklister, &[&blacklister]).expect("blacklist failed");
+
+        // Impostor tries to update evidence — no role PDA
+        let (fake_role, _) = find_role_pda(&config_pda, ROLE_BLACKLISTER, &impostor.pubkey());
+        let update_ix = build_update_blacklist_evidence_ix(
+            &impostor.pubkey(),
+            &config_pda,
+            &fake_role,
+            &bl_pda,
+            &target,
+            sample_evidence_hash(),
+            "ipfs://QmEvil",
+        );
+        let result = send_tx(&mut svm, &[update_ix], &impostor, &[&impostor]);
+        assert!(
+            result.is_err(),
+            "non-blacklister should not update evidence"
+        );
+    }
+
+    #[test]
+    fn test_update_evidence_on_nonexistent_entry_fails() {
+        let (mut svm, authority, _mint, config_pda) = setup_sss2();
+        let blacklister = Keypair::new();
+        airdrop(&mut svm, &blacklister.pubkey(), 5 * SOL);
+        let role_pda = setup_blacklister(&mut svm, &authority, &config_pda, &blacklister.pubkey());
+
+        let target = Pubkey::new_unique();
+        let (bl_pda, _) = find_blacklist_pda(&config_pda, &target);
+
+        // Try to update evidence on an entry that doesn't exist
+        let update_ix = build_update_blacklist_evidence_ix(
+            &blacklister.pubkey(),
+            &config_pda,
+            &role_pda,
+            &bl_pda,
+            &target,
+            sample_evidence_hash(),
+            "ipfs://QmGhost",
+        );
+        let result = send_tx(&mut svm, &[update_ix], &blacklister, &[&blacklister]);
+        assert!(
+            result.is_err(),
+            "updating evidence on nonexistent entry should fail"
+        );
     }
 }

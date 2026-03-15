@@ -169,7 +169,7 @@ describe("SSS-1: Minimal Stablecoin Lifecycle", () => {
 
     it("sets minter quota", async () => {
       await program.methods
-        .updateMinter(authority.publicKey, new anchor.BN(1_000_000_000))
+        .createMinter(authority.publicKey, new anchor.BN(1_000_000_000))
         .accountsStrict({
           authority: authority.publicKey,
           config: configPda,
@@ -428,7 +428,7 @@ describe("SSS-1: Minimal Stablecoin Lifecycle", () => {
         })
         .rpc({ commitment: "confirmed" });
       await program.methods
-        .updateMinter(testUser.publicKey, new anchor.BN(500_000_000))
+        .createMinter(testUser.publicKey, new anchor.BN(500_000_000))
         .accountsStrict({
           authority: authority.publicKey,
           config: configPda,
@@ -470,38 +470,53 @@ describe("SSS-1: Minimal Stablecoin Lifecycle", () => {
   });
 
   describe("Transfer Authority", () => {
-    it("transfers master authority", async () => {
+    it("transfers master authority via two-step propose + accept", async () => {
       const newAuthority = Keypair.generate();
 
-      await program.methods
-        .transferAuthority(newAuthority.publicKey)
-        .accountsStrict({
-          authority: authority.publicKey,
-          config: configPda,
-        })
-        .rpc();
-
-      const config = await program.account.stablecoinConfig.fetch(configPda);
-      expect(config.masterAuthority.toBase58()).to.equal(newAuthority.publicKey.toBase58());
-
-      // Transfer back for further tests
-      // Fund new authority
-      const tx = new anchor.web3.Transaction().add(
+      // Fund new authority so it can sign the accept transaction
+      const fundTx = new anchor.web3.Transaction().add(
         anchor.web3.SystemProgram.transfer({
           fromPubkey: authority.publicKey,
           toPubkey: newAuthority.publicKey,
           lamports: 100_000_000,
         })
       );
-      await provider.sendAndConfirm(tx);
+      await provider.sendAndConfirm(fundTx);
 
       await program.methods
-        .transferAuthority(authority.publicKey)
+        .proposeAuthorityTransfer(newAuthority.publicKey)
+        .accountsStrict({
+          authority: authority.publicKey,
+          config: configPda,
+        })
+        .rpc();
+      await program.methods
+        .acceptAuthorityTransfer()
+        .accountsStrict({
+          newAuthority: newAuthority.publicKey,
+          config: configPda,
+        })
+        .signers([newAuthority])
+        .rpc();
+
+      const config = await program.account.stablecoinConfig.fetch(configPda);
+      expect(config.masterAuthority.toBase58()).to.equal(newAuthority.publicKey.toBase58());
+
+      // Transfer back for further tests
+      await program.methods
+        .proposeAuthorityTransfer(authority.publicKey)
         .accountsStrict({
           authority: newAuthority.publicKey,
           config: configPda,
         })
         .signers([newAuthority])
+        .rpc();
+      await program.methods
+        .acceptAuthorityTransfer()
+        .accountsStrict({
+          newAuthority: authority.publicKey,
+          config: configPda,
+        })
         .rpc();
     });
   });

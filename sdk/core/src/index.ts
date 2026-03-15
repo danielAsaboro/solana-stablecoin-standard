@@ -65,11 +65,16 @@ export {
   type AssignRoleParams,
   type UpdateRoleParams,
   type UpdateRolesParams,
+  type CreateMinterParams,
   type UpdateMinterParams,
+  type ProposeAuthorityTransferParams,
+  type AcceptAuthorityTransferParams,
+  type CancelAuthorityTransferParams,
   type TransferAuthorityParams,
   type BlacklistAddParams,
   type BlacklistRemoveParams,
   type SeizeParams,
+  type UpdateEvidenceParams,
   type StablecoinInitializedEvent,
   type TokensMintedEvent,
   type TokensBurnedEvent,
@@ -83,6 +88,7 @@ export {
   type AddressBlacklistedEvent,
   type AddressUnblacklistedEvent,
   type TokensSeizedEvent,
+  type EvidenceAttachedEvent,
 } from "./types";
 
 // Preset configurations
@@ -113,13 +119,17 @@ export {
   AssignRoleBuilder,
   UpdateRoleBuilder,
   UpdateRolesBuilder,
+  CreateMinterBuilder,
   UpdateMinterBuilder,
-  TransferAuthorityBuilder,
+  ProposeAuthorityTransferBuilder,
   ProposeAuthorityBuilder,
+  AcceptAuthorityTransferBuilder,
   AcceptAuthorityBuilder,
+  CancelAuthorityTransferBuilder,
   CancelAuthorityBuilder,
   BlacklistAddBuilder,
   BlacklistRemoveBuilder,
+  UpdateEvidenceBuilder,
   SeizeBuilder,
 } from "./builder";
 

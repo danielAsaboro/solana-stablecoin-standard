@@ -6,9 +6,9 @@ import {
   loadKeypair,
   getConnection,
   loadConfig,
+  loadSssProgram,
   deriveRolePDA,
   getATA,
-  SSS_PROGRAM_ID,
   ROLE_PAUSER,
 } from "../helpers";
 import {
@@ -69,12 +69,7 @@ async function handleFreeze(addressStr: string, globalOpts: any): Promise<void> 
   const [rolePDA] = deriveRolePDA(configPDA, ROLE_PAUSER, keypair.publicKey);
   infoMsg(`Freezing token account for ${targetPubkey.toBase58()}...`);
 
-  const idl = await anchor.Program.fetchIdl(SSS_PROGRAM_ID, provider);
-  if (!idl) {
-    errorMsg("Could not fetch IDL.");
-    return;
-  }
-  const program = new anchor.Program(idl, provider);
+  const program = await loadSssProgram(provider);
 
   const spinner = spin("Sending freeze transaction...");
   let tx: string;
@@ -122,12 +117,7 @@ async function handleThaw(addressStr: string, globalOpts: any): Promise<void> {
   const [rolePDA] = deriveRolePDA(configPDA, ROLE_PAUSER, keypair.publicKey);
   infoMsg(`Thawing token account for ${targetPubkey.toBase58()}...`);
 
-  const idl = await anchor.Program.fetchIdl(SSS_PROGRAM_ID, provider);
-  if (!idl) {
-    errorMsg("Could not fetch IDL.");
-    return;
-  }
-  const program = new anchor.Program(idl, provider);
+  const program = await loadSssProgram(provider);
 
   const spinner = spin("Sending thaw transaction...");
   let tx: string;

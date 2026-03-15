@@ -25,9 +25,6 @@ pub struct ProposeAuthorityTransfer<'info> {
 /// [`accept_authority_transfer`](crate::sss::accept_authority_transfer) to
 /// complete the handoff. Only one transfer may be in flight at a time.
 ///
-/// The existing [`transfer_authority`](crate::sss::transfer_authority) remains
-/// available as an emergency immediate-transfer path.
-///
 /// Emits [`AuthorityTransferProposed`].
 pub fn handler(ctx: Context<ProposeAuthorityTransfer>, new_authority: Pubkey) -> Result<()> {
     let config = &mut ctx.accounts.config;

@@ -56,8 +56,12 @@ describe("Preset Configurations", () => {
     });
 
     it("SSS_1 and SSS_2 differ in compliance features", () => {
-      expect(Presets.SSS_1.permanentDelegate).to.not.equal(Presets.SSS_2.permanentDelegate);
-      expect(Presets.SSS_1.transferHook).to.not.equal(Presets.SSS_2.transferHook);
+      expect(Presets.SSS_1.permanentDelegate).to.not.equal(
+        Presets.SSS_2.permanentDelegate,
+      );
+      expect(Presets.SSS_1.transferHook).to.not.equal(
+        Presets.SSS_2.transferHook,
+      );
     });
 
     it("SSS_2 and SSS_3 have different feature profiles", () => {

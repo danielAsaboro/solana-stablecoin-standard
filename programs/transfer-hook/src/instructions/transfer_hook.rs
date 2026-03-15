@@ -1,5 +1,9 @@
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::program_error::ProgramError;
+use spl_token_2022::extension::{
+    transfer_hook::TransferHookAccount, BaseStateWithExtensions, StateWithExtensions,
+};
+use spl_token_2022::state::Account as Token2022Account;
 
 use crate::error::TransferHookError;
 
@@ -33,6 +37,24 @@ fn is_config_paused(config: &AccountInfo) -> Result<bool> {
     }
 
     Ok(data[offset] != 0)
+}
+
+/// Verify the source token account has the `transferring` flag set by Token-2022.
+///
+/// Token-2022 sets this flag on the source account only during `transfer_checked`.
+/// If the hook is called directly (not via Token-2022 CPI), this flag will be false
+/// and the hook rejects the call. This prevents probing blacklist state or other
+/// side effects via direct invocation.
+fn check_is_transferring(source_token: &AccountInfo) -> Result<()> {
+    let data = source_token.try_borrow_data()?;
+    let account = StateWithExtensions::<Token2022Account>::unpack(&data)?;
+    let hook_account = account.get_extension::<TransferHookAccount>()?;
+
+    if !bool::from(hook_account.transferring) {
+        return Err(TransferHookError::NotTransferring.into());
+    }
+
+    Ok(())
 }
 
 /// Transfer hook handler — called by Token-2022 on every transfer_checked.
@@ -82,9 +104,10 @@ pub struct TransferHookAccounts<'info> {
 /// Seizure transfers (where the authority is the config PDA / permanent delegate)
 /// are allowed unconditionally.
 pub fn handler(ctx: Context<TransferHookAccounts>, _amount: u64) -> Result<()> {
+    // Reject direct calls — only Token-2022 may invoke this hook
+    check_is_transferring(&ctx.accounts.source_token)?;
+
     // Check if this is a seizure by the permanent delegate (config PDA)
-    // The authority is the 4th standard account (index 3)
-    // Extra accounts: [sss_program, config_pda, source_blacklist, dest_blacklist]
     let sss_program_key = ctx.accounts.sss_program.key;
     let (expected_config, _) = Pubkey::find_program_address(
         &[b"stablecoin", ctx.accounts.mint.key.as_ref()],
@@ -142,11 +165,15 @@ pub fn execute_transfer_hook<'info>(
         return Err(ProgramError::NotEnoughAccountKeys.into());
     }
 
+    let source_token = &accounts[0];
     let mint = &accounts[1];
     let owner_delegate = &accounts[3];
     let sss_program = &accounts[5];
     let source_blacklist = &accounts[7];
     let dest_blacklist = &accounts[8];
+
+    // Reject direct calls — only Token-2022 may invoke this hook
+    check_is_transferring(source_token)?;
 
     // Check if this is a seizure by the permanent delegate (config PDA).
     // If the owner/delegate is the config PDA, allow the transfer unconditionally.

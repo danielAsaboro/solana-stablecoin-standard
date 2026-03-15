@@ -208,7 +208,7 @@ describe("Full Lifecycle: SSS-2 Compliant Stablecoin", () => {
 
   it("3. sets minter quota", async () => {
     await program.methods
-      .updateMinter(authority.publicKey, new anchor.BN(10_000_000_000))
+      .createMinter(authority.publicKey, new anchor.BN(10_000_000_000))
       .accountsStrict({
         authority: authority.publicKey,
         config: configPda,
@@ -345,7 +345,7 @@ describe("Full Lifecycle: SSS-2 Compliant Stablecoin", () => {
     );
 
     await program.methods
-      .addToBlacklist(alice.publicKey, "Sanctions list match")
+      .addToBlacklist(alice.publicKey, "Sanctions list match", Array(32).fill(0), "")
       .accountsStrict({
         authority: authority.publicKey,
         config: configPda,

@@ -176,7 +176,7 @@ impl ComplianceService {
         );
 
         let instruction =
-            build_add_to_blacklist_instruction(&self.ctx, &address_pubkey, reason);
+            build_add_to_blacklist_instruction(&self.ctx, &address_pubkey, reason, [0u8; 32], "");
 
         match self.ctx.send_transaction(vec![instruction]).await {
             Ok(signature) => {

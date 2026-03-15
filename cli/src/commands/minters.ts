@@ -150,20 +150,34 @@ async function handleMintersAdd(addressStr: string, quotaStr: string, globalOpts
 
   spinner.text = "Setting minter quota...";
 
-  // Then set the quota
+  // Then set the quota — use createMinter for new PDAs, updateMinter for existing
   const [quotaPDA] = deriveMinterQuotaPDA(configPDA, minterPubkey);
+  const quotaAccountInfo = await connection.getAccountInfo(quotaPDA);
+  const quotaExists = quotaAccountInfo !== null;
 
   let tx2: string;
   try {
-    tx2 = await program.methods
-      .updateMinter(minterPubkey, quota)
-      .accounts({
-        authority: keypair.publicKey,
-        config: configPDA,
-        minterQuota: quotaPDA,
-        systemProgram: SystemProgram.programId,
-      })
-      .rpc();
+    if (quotaExists) {
+      tx2 = await program.methods
+        .updateMinter(minterPubkey, quota)
+        .accounts({
+          authority: keypair.publicKey,
+          config: configPDA,
+          minterQuota: quotaPDA,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+    } else {
+      tx2 = await program.methods
+        .createMinter(minterPubkey, quota)
+        .accounts({
+          authority: keypair.publicKey,
+          config: configPDA,
+          minterQuota: quotaPDA,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+    }
   } catch (err) {
     spinner.fail("Failed to set minter quota");
     throw err;

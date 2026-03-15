@@ -106,7 +106,12 @@ pub mod sss {
         instructions::update_role::handler(ctx, role_type, user, active)
     }
 
-    /// Set or update a minter's quota. Master authority only.
+    /// Create a new minter with the given quota. Master authority only.
+    pub fn create_minter(ctx: Context<CreateMinter>, minter: Pubkey, quota: u64) -> Result<()> {
+        instructions::create_minter::handler(ctx, minter, quota)
+    }
+
+    /// Update an existing minter's quota. Master authority only.
     pub fn update_minter(ctx: Context<UpdateMinter>, minter: Pubkey, quota: u64) -> Result<()> {
         instructions::update_minter::handler(ctx, minter, quota)
     }
@@ -115,14 +120,6 @@ pub mod sss {
     /// Allows the minter to issue up to their full quota again. Master authority only.
     pub fn reset_minter_quota(ctx: Context<ResetMinterQuota>, minter: Pubkey) -> Result<()> {
         instructions::reset_minter_quota::handler(ctx, minter)
-    }
-
-    /// Transfer master authority to a new address (immediate, emergency path).
-    pub fn transfer_authority(
-        ctx: Context<TransferAuthority>,
-        new_authority: Pubkey,
-    ) -> Result<()> {
-        instructions::transfer_authority::handler(ctx, new_authority)
     }
 
     /// Propose a 2-step authority transfer. The new authority must call
@@ -148,18 +145,32 @@ pub mod sss {
 
     /// Add an address to the blacklist. Requires Blacklister role.
     /// Only available on SSS-2 configs (transfer hook enabled).
+    /// Pass `[0; 32]` for `evidence_hash` and `""` for `evidence_uri` to omit evidence.
     pub fn add_to_blacklist(
         ctx: Context<AddToBlacklist>,
         address: Pubkey,
         reason: String,
+        evidence_hash: [u8; 32],
+        evidence_uri: String,
     ) -> Result<()> {
-        instructions::add_to_blacklist::handler(ctx, address, reason)
+        instructions::add_to_blacklist::handler(ctx, address, reason, evidence_hash, evidence_uri)
     }
 
     /// Remove an address from the blacklist. Requires Blacklister role.
     /// Closes the BlacklistEntry PDA and returns rent.
     pub fn remove_from_blacklist(ctx: Context<RemoveFromBlacklist>, address: Pubkey) -> Result<()> {
         instructions::remove_from_blacklist::handler(ctx, address)
+    }
+
+    /// Attach or update evidence on an existing blacklist entry. Requires Blacklister role.
+    /// Preserves the previous evidence hash in the emitted event for audit trail.
+    pub fn update_blacklist_evidence(
+        ctx: Context<UpdateBlacklistEvidence>,
+        address: Pubkey,
+        evidence_hash: [u8; 32],
+        evidence_uri: String,
+    ) -> Result<()> {
+        instructions::update_blacklist_evidence::handler(ctx, address, evidence_hash, evidence_uri)
     }
 
     /// Seize tokens from an account using the permanent delegate.

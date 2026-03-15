@@ -9,7 +9,9 @@ describe("Event System", () => {
     });
 
     it("event names match on-chain event names", () => {
-      expect(SSSEventName.StablecoinInitialized).to.equal("StablecoinInitialized");
+      expect(SSSEventName.StablecoinInitialized).to.equal(
+        "StablecoinInitialized",
+      );
       expect(SSSEventName.TokensMinted).to.equal("TokensMinted");
       expect(SSSEventName.TokensBurned).to.equal("TokensBurned");
       expect(SSSEventName.AccountFrozen).to.equal("AccountFrozen");
@@ -18,9 +20,13 @@ describe("Event System", () => {
       expect(SSSEventName.StablecoinUnpaused).to.equal("StablecoinUnpaused");
       expect(SSSEventName.RoleUpdated).to.equal("RoleUpdated");
       expect(SSSEventName.MinterQuotaUpdated).to.equal("MinterQuotaUpdated");
-      expect(SSSEventName.AuthorityTransferred).to.equal("AuthorityTransferred");
+      expect(SSSEventName.AuthorityTransferred).to.equal(
+        "AuthorityTransferred",
+      );
       expect(SSSEventName.AddressBlacklisted).to.equal("AddressBlacklisted");
-      expect(SSSEventName.AddressUnblacklisted).to.equal("AddressUnblacklisted");
+      expect(SSSEventName.AddressUnblacklisted).to.equal(
+        "AddressUnblacklisted",
+      );
       expect(SSSEventName.TokensSeized).to.equal("TokensSeized");
     });
 

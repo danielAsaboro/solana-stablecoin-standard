@@ -5,14 +5,14 @@ use crate::error::StablecoinError;
 use crate::events::MinterQuotaUpdated;
 use crate::state::{MinterQuota, StablecoinConfig};
 
-/// Accounts required to update an existing minter's quota.
+/// Accounts required to create a new minter quota.
 ///
 /// Only the master authority can call this instruction. The minter quota PDA
-/// must already exist (created via [`create_minter`](crate::sss::create_minter)).
-/// Updating the quota does not reset the `minted` counter, preserving the audit trail.
+/// is created with `init`, preventing reinitialization of existing minters.
+/// To update an existing minter's quota, use [`update_minter`](crate::sss::update_minter).
 #[derive(Accounts)]
 #[instruction(minter: Pubkey)]
-pub struct UpdateMinter<'info> {
+pub struct CreateMinter<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
 
@@ -24,23 +24,27 @@ pub struct UpdateMinter<'info> {
     pub config: Account<'info, StablecoinConfig>,
 
     #[account(
-        mut,
+        init,
+        payer = authority,
+        space = MinterQuota::LEN,
         seeds = [MINTER_QUOTA_SEED, config.key().as_ref(), minter.as_ref()],
-        bump = minter_quota.bump,
-        constraint = minter_quota.config == config.key() @ StablecoinError::InvalidAuthority,
+        bump,
     )]
     pub minter_quota: Account<'info, MinterQuota>,
 
     pub system_program: Program<'info, System>,
 }
 
-/// Update an existing minter's quota.
+/// Create a new minter with the given quota.
 ///
-/// The `minted` counter is intentionally preserved so that increasing the quota
-/// after partial minting does not erase history. Emits [`MinterQuotaUpdated`].
-pub fn handler(ctx: Context<UpdateMinter>, minter: Pubkey, quota: u64) -> Result<()> {
+/// Fails if the minter already exists. Emits [`MinterQuotaUpdated`].
+pub fn handler(ctx: Context<CreateMinter>, minter: Pubkey, quota: u64) -> Result<()> {
     let minter_quota = &mut ctx.accounts.minter_quota;
+    minter_quota.config = ctx.accounts.config.key();
+    minter_quota.minter = minter;
     minter_quota.quota = quota;
+    minter_quota.minted = 0;
+    minter_quota.bump = ctx.bumps.minter_quota;
 
     emit!(MinterQuotaUpdated {
         config: ctx.accounts.config.key(),

@@ -181,7 +181,7 @@ export interface SSSEventDataMap {
 
 /** Set of all valid SSS event names for fast membership checks. */
 const VALID_EVENT_NAMES: ReadonlySet<string> = new Set(
-  Object.values(SSSEventName)
+  Object.values(SSSEventName),
 );
 
 // ---------------------------------------------------------------------------

@@ -220,7 +220,7 @@ with three presets: SSS-1 (Minimal Stablecoin), SSS-2 (Compliant Stablecoin), an
   - Service unavailability (503) testing for graceful degradation
 
 #### Security
-- `SECURITY_AUDIT.md` — 13-section audit document covering threat model, access
+- `SECURITY_CHECKLIST.md` — 13-section security review document covering threat model, access
   control matrix, PDA validation, account constraints, arithmetic safety, CPI
   security, reentrancy analysis, feature gating, transfer hook security, input
   validation, event emission, known limitations, and deployment checklist
@@ -242,7 +242,7 @@ with three presets: SSS-1 (Minimal Stablecoin), SSS-2 (Compliant Stablecoin), an
 - `docs/OPERATIONS.md` — Operator runbook for all stablecoin operations
 - `docs/COMPLIANCE.md` — Regulatory considerations and audit trail format
 - `docs/API.md` — Backend REST API reference
-- `docs/SECURITY_AUDIT.md` — Comprehensive security audit checklist
+- `docs/SECURITY_CHECKLIST.md` — Internal security review checklist
 - `docs/TESTING.md` — Test pyramid, categories, fuzz documentation, helper patterns
 - `docs/DEVNET_DEPLOYMENT.md` — Devnet deployment guide with automated scripts,
   example transactions, program IDs, and troubleshooting

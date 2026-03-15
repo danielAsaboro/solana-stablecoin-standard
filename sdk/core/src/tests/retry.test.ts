@@ -10,7 +10,9 @@ import { RoleType } from "../types";
 describe("Retry & Error Classification", () => {
   describe("isTransientError", () => {
     it("classifies rate limit errors as transient", () => {
-      expect(isTransientError(new Error("429 Too Many Requests"))).to.equal(true);
+      expect(isTransientError(new Error("429 Too Many Requests"))).to.equal(
+        true,
+      );
       expect(isTransientError(new Error("rate limit exceeded"))).to.equal(true);
     });
 
@@ -23,23 +25,37 @@ describe("Retry & Error Classification", () => {
 
     it("classifies Solana blockhash errors as transient", () => {
       expect(isTransientError(new Error("blockhash not found"))).to.equal(true);
-      expect(isTransientError(new Error("Transaction was not confirmed in 30 seconds"))).to.equal(true);
+      expect(
+        isTransientError(
+          new Error("Transaction was not confirmed in 30 seconds"),
+        ),
+      ).to.equal(true);
     });
 
     it("classifies HTTP 5xx errors as transient", () => {
       expect(isTransientError(new Error("502 Bad Gateway"))).to.equal(true);
-      expect(isTransientError(new Error("503 Service Unavailable"))).to.equal(true);
+      expect(isTransientError(new Error("503 Service Unavailable"))).to.equal(
+        true,
+      );
       expect(isTransientError(new Error("504 Gateway Timeout"))).to.equal(true);
     });
 
     it("classifies program errors as permanent (not transient)", () => {
-      expect(isTransientError(new Error("custom program error: 0x1770"))).to.equal(false);
-      expect(isTransientError(new Error("program error: InvalidAuthority"))).to.equal(false);
+      expect(
+        isTransientError(new Error("custom program error: 0x1770")),
+      ).to.equal(false);
+      expect(
+        isTransientError(new Error("program error: InvalidAuthority")),
+      ).to.equal(false);
     });
 
     it("classifies insufficient funds as permanent", () => {
-      expect(isTransientError(new Error("insufficient funds for rent"))).to.equal(false);
-      expect(isTransientError(new Error("insufficient lamports"))).to.equal(false);
+      expect(
+        isTransientError(new Error("insufficient funds for rent")),
+      ).to.equal(false);
+      expect(isTransientError(new Error("insufficient lamports"))).to.equal(
+        false,
+      );
     });
 
     it("classifies simulation failures as permanent", () => {
@@ -47,7 +63,9 @@ describe("Retry & Error Classification", () => {
     });
 
     it("classifies unknown errors as not transient", () => {
-      expect(isTransientError(new Error("something unexpected"))).to.equal(false);
+      expect(isTransientError(new Error("something unexpected"))).to.equal(
+        false,
+      );
     });
 
     it("handles non-Error values", () => {
@@ -58,7 +76,9 @@ describe("Retry & Error Classification", () => {
 
     it("permanent patterns take priority over transient", () => {
       // "insufficient funds" + "502" — permanent should win
-      expect(isTransientError(new Error("insufficient funds 502"))).to.equal(false);
+      expect(isTransientError(new Error("insufficient funds 502"))).to.equal(
+        false,
+      );
     });
   });
 
@@ -75,7 +95,12 @@ describe("Retry & Error Classification", () => {
   describe("SSSTransactionError", () => {
     it("captures error context", () => {
       const cause = new Error("blockhash not found");
-      const err = new SSSTransactionError("Failed after 4 attempts", cause, 4, true);
+      const err = new SSSTransactionError(
+        "Failed after 4 attempts",
+        cause,
+        4,
+        true,
+      );
       expect(err.name).to.equal("SSSTransactionError");
       expect(err.cause).to.equal(cause);
       expect(err.attempts).to.equal(4);
@@ -103,7 +128,7 @@ describe("Retry & Error Classification", () => {
           if (attempts < 3) throw new Error("ECONNRESET");
           return "success";
         },
-        { maxRetries: 5, initialDelayMs: 1, jitter: false }
+        { maxRetries: 5, initialDelayMs: 1, jitter: false },
       );
       expect(result).to.equal("success");
       expect(attempts).to.equal(3);
@@ -117,7 +142,7 @@ describe("Retry & Error Classification", () => {
             attempts++;
             throw new Error("custom program error");
           },
-          { maxRetries: 5, initialDelayMs: 1 }
+          { maxRetries: 5, initialDelayMs: 1 },
         );
         expect.fail("Should have thrown");
       } catch (err: any) {
@@ -129,8 +154,10 @@ describe("Retry & Error Classification", () => {
     it("throws SSSTransactionError after exhausting retries", async () => {
       try {
         await withRetry(
-          async () => { throw new Error("ECONNREFUSED"); },
-          { maxRetries: 2, initialDelayMs: 1, jitter: false }
+          async () => {
+            throw new Error("ECONNREFUSED");
+          },
+          { maxRetries: 2, initialDelayMs: 1, jitter: false },
         );
         expect.fail("Should have thrown");
       } catch (err: any) {
@@ -144,13 +171,15 @@ describe("Retry & Error Classification", () => {
       const retryLog: number[] = [];
       try {
         await withRetry(
-          async () => { throw new Error("ECONNRESET"); },
+          async () => {
+            throw new Error("ECONNRESET");
+          },
           {
             maxRetries: 2,
             initialDelayMs: 1,
             jitter: false,
             onRetry: (_err, attempt) => retryLog.push(attempt),
-          }
+          },
         );
       } catch {
         // Expected

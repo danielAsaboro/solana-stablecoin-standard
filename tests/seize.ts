@@ -136,7 +136,7 @@ describe("Seize", () => {
       program.programId
     );
     await program.methods
-      .updateMinter(authority.publicKey, new anchor.BN(1_000_000_000))
+      .createMinter(authority.publicKey, new anchor.BN(1_000_000_000))
       .accountsStrict({
         authority: authority.publicKey,
         config: configPda,
@@ -186,7 +186,7 @@ describe("Seize", () => {
       program.programId
     );
     await program.methods
-      .addToBlacklist(victim.publicKey, "Seize target")
+      .addToBlacklist(victim.publicKey, "Seize target", Array(32).fill(0), "")
       .accountsStrict({
         authority: authority.publicKey,
         config: configPda,

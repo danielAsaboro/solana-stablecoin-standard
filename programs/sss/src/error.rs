@@ -76,4 +76,10 @@ pub enum StablecoinError {
 
     #[msg("Only the proposed pending authority may accept the transfer")]
     InvalidPendingAuthority,
+
+    #[msg("Evidence URI exceeds maximum length")]
+    EvidenceUriTooLong,
+
+    #[msg("Evidence hash must be non-zero when attaching evidence")]
+    InvalidEvidenceHash,
 }

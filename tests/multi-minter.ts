@@ -105,7 +105,7 @@ describe("Multi-Minter", () => {
         program.programId
       );
       await program.methods
-        .updateMinter(minter.publicKey, new anchor.BN(50_000_000))
+        .createMinter(minter.publicKey, new anchor.BN(50_000_000))
         .accountsStrict({
           authority: authority.publicKey,
           config: configPda,

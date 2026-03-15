@@ -251,7 +251,12 @@ export class SSSTransactionError extends Error {
   /** Whether the final error was classified as transient. */
   public readonly wasTransient: boolean;
 
-  constructor(message: string, cause: Error, attempts: number, wasTransient: boolean) {
+  constructor(
+    message: string,
+    cause: Error,
+    attempts: number,
+    wasTransient: boolean,
+  ) {
     super(message);
     this.name = "SSSTransactionError";
     this.cause = cause;
@@ -296,7 +301,7 @@ export class SSSTransactionError extends Error {
  */
 export async function withRetry<T>(
   fn: () => Promise<T>,
-  config?: Partial<RetryConfig>
+  config?: Partial<RetryConfig>,
 ): Promise<T> {
   const resolved: RetryConfig = { ...DEFAULT_RETRY_CONFIG, ...config };
   let lastError: Error | undefined;
@@ -340,7 +345,7 @@ export async function withRetry<T>(
     `Operation failed after ${resolved.maxRetries + 1} attempts: ${lastError?.message ?? "unknown error"}`,
     lastError ?? new Error("unknown error"),
     resolved.maxRetries + 1,
-    true
+    true,
   );
 }
 

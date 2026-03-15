@@ -112,13 +112,19 @@ pub enum Operation {
         role_type: u8,
         active: bool,
     },
-    /// `update_minter` — master authority only
+    /// `create_minter` — master authority only, initializes new minter PDA
+    CreateMinter {
+        caller: u8,
+        minter: u8,
+        quota: u64,
+    },
+    /// `update_minter` — master authority only, mutates existing minter PDA
     UpdateMinter {
         caller: u8,
         minter: u8,
         quota: u64,
     },
-    /// `transfer_authority` — master authority only
+    /// `propose_authority_transfer` + `accept_authority_transfer` — master authority proposes, new authority accepts
     TransferAuthority { caller: u8, new_authority: u8 },
     /// `add_to_blacklist` — requires Blacklister role (SSS-2)
     AddToBlacklist {
@@ -277,6 +283,12 @@ impl StablecoinModel {
                 active,
             } => self.apply_update_role(*caller, *user, *role_type, *active),
 
+            Operation::CreateMinter {
+                caller,
+                minter,
+                quota,
+            } => self.apply_create_minter(*caller, *minter, *quota),
+
             Operation::UpdateMinter {
                 caller,
                 minter,
@@ -286,7 +298,7 @@ impl StablecoinModel {
             Operation::TransferAuthority {
                 caller,
                 new_authority,
-            } => self.apply_transfer_authority(*caller, *new_authority),
+            } => self.apply_propose_and_accept_authority(*caller, *new_authority),
 
             Operation::AddToBlacklist {
                 caller,
@@ -509,6 +521,28 @@ impl StablecoinModel {
         Ok(())
     }
 
+    fn apply_create_minter(
+        &mut self,
+        caller: u8,
+        minter: u8,
+        quota: u64,
+    ) -> ModelResult<()> {
+        if !self.initialized {
+            return Err(ModelError::AnchorError);
+        }
+        if !self.is_authority(caller) {
+            return Err(ModelError::InvalidAuthority);
+        }
+
+        // Minter PDA must not already exist (init constraint)
+        if self.minter_quotas.contains_key(&minter) {
+            return Err(ModelError::AnchorError);
+        }
+
+        self.minter_quotas.insert(minter, (quota, 0));
+        Ok(())
+    }
+
     fn apply_update_minter(
         &mut self,
         caller: u8,
@@ -522,18 +556,17 @@ impl StablecoinModel {
             return Err(ModelError::InvalidAuthority);
         }
 
-        // Preserve existing minted count (audit trail)
-        let existing_minted = self
-            .minter_quotas
-            .get(&minter)
-            .map(|(_, m)| *m)
-            .unwrap_or(0);
+        // Minter PDA must already exist (mut constraint, not init)
+        let existing_minted = match self.minter_quotas.get(&minter) {
+            Some((_, minted)) => *minted,
+            None => return Err(ModelError::AnchorError),
+        };
         self.minter_quotas.insert(minter, (quota, existing_minted));
 
         Ok(())
     }
 
-    fn apply_transfer_authority(
+    fn apply_propose_and_accept_authority(
         &mut self,
         caller: u8,
         new_authority: u8,
@@ -548,6 +581,8 @@ impl StablecoinModel {
             return Err(ModelError::SameAuthority);
         }
 
+        // Step 1: propose — sets pending_authority (modeled implicitly)
+        // Step 2: accept — new_authority signs and becomes master_authority
         self.master_authority = new_authority;
         Ok(())
     }
@@ -786,6 +821,10 @@ mod tests {
                     caller: c, user: u, role_type: r, active: a,
                 }),
             2 => (user_strategy.clone(), user_strategy.clone(), amount_strategy.clone())
+                .prop_map(|(c, m, q)| Operation::CreateMinter {
+                    caller: c, minter: m, quota: q,
+                }),
+            2 => (user_strategy.clone(), user_strategy.clone(), amount_strategy.clone())
                 .prop_map(|(c, m, q)| Operation::UpdateMinter {
                     caller: c, minter: m, quota: q,
                 }),
@@ -1011,13 +1050,13 @@ mod tests {
                 "Non-authority update_role by user {} should fail", caller
             );
             assert_eq!(
-                model.apply(&Operation::UpdateMinter {
+                model.apply(&Operation::CreateMinter {
                     caller,
                     minter: 5,
                     quota: 1000,
                 }),
                 Err(ModelError::InvalidAuthority),
-                "Non-authority update_minter by user {} should fail", caller
+                "Non-authority create_minter by user {} should fail", caller
             );
             assert_eq!(
                 model.apply(&Operation::TransferAuthority {
@@ -1025,7 +1064,7 @@ mod tests {
                     new_authority: 5,
                 }),
                 Err(ModelError::InvalidAuthority),
-                "Non-authority transfer_authority by user {} should fail", caller
+                "Non-authority propose_and_accept_authority by user {} should fail", caller
             );
 
             model.check_invariants();

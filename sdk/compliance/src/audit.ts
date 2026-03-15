@@ -153,7 +153,8 @@ export class AuditLog {
       if (log.includes("Instruction: AssignRole")) return "assign_role";
       if (log.includes("Instruction: UpdateRole")) return "update_role";
       if (log.includes("Instruction: UpdateMinter")) return "update_minter";
-      if (log.includes("Instruction: TransferAuthority")) return "transfer_authority";
+      if (log.includes("Instruction: ProposeAuthorityTransfer")) return "propose_authority_transfer";
+      if (log.includes("Instruction: AcceptAuthorityTransfer")) return "accept_authority_transfer";
       if (log.includes("Instruction: AddToBlacklist")) return "blacklist_add";
       if (log.includes("Instruction: RemoveFromBlacklist")) return "blacklist_remove";
       if (log.includes("Instruction: Seize")) return "seize";

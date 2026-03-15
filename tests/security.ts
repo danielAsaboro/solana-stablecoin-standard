@@ -154,7 +154,7 @@ describe("Security: SSS-1", () => {
 
     // Set minter quota
     await program.methods
-      .updateMinter(authority.publicKey, new anchor.BN(QUOTA))
+      .createMinter(authority.publicKey, new anchor.BN(QUOTA))
       .accountsStrict({
         authority: authority.publicKey,
         config: configPda,
@@ -595,7 +595,7 @@ describe("Security: SSS-2", () => {
 
     // Set minter quota
     await program.methods
-      .updateMinter(authority.publicKey, new anchor.BN(5_000_000_000))
+      .createMinter(authority.publicKey, new anchor.BN(5_000_000_000))
       .accountsStrict({
         authority: authority.publicKey,
         config: configPda,
@@ -653,7 +653,7 @@ describe("Security: SSS-2", () => {
       program.programId
     );
     await program.methods
-      .addToBlacklist(targetUser.publicKey, "Security test blacklist")
+      .addToBlacklist(targetUser.publicKey, "Security test blacklist", Array(32).fill(0), "")
       .accountsStrict({
         authority: authority.publicKey,
         config: configPda,

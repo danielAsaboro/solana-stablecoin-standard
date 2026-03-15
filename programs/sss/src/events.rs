@@ -128,7 +128,7 @@ pub struct MinterQuotaUpdated {
     pub updated_by: Pubkey,
 }
 
-/// Emitted when master authority is transferred via [`transfer_authority`](crate::sss::transfer_authority).
+/// Emitted when master authority is transferred via the two-step propose → accept flow.
 #[event]
 pub struct AuthorityTransferred {
     /// The stablecoin config PDA.
@@ -152,6 +152,32 @@ pub struct AddressBlacklisted {
     pub reason: String,
     /// The blacklister who added the entry.
     pub blacklisted_by: Pubkey,
+    /// SHA-256 hash of the evidence document (`[0; 32]` = no evidence).
+    pub evidence_hash: [u8; 32],
+    /// URI of the evidence document (empty = no evidence).
+    pub evidence_uri: String,
+}
+
+/// Emitted when evidence is attached or updated on a blacklist entry via
+/// [`update_blacklist_evidence`](crate::sss::update_blacklist_evidence).
+///
+/// SSS-2 only. The `previous_hash` field preserves the full evidence history
+/// in the transaction log — even if evidence is overwritten, the old hash is
+/// permanently recorded.
+#[event]
+pub struct EvidenceAttached {
+    /// The stablecoin config PDA.
+    pub config: Pubkey,
+    /// The blacklisted address this evidence pertains to.
+    pub address: Pubkey,
+    /// SHA-256 hash of the new evidence document.
+    pub evidence_hash: [u8; 32],
+    /// URI pointing to the new evidence document.
+    pub evidence_uri: String,
+    /// SHA-256 hash of the previous evidence (`[0; 32]` if first attachment).
+    pub previous_hash: [u8; 32],
+    /// The blacklister who attached the evidence.
+    pub attached_by: Pubkey,
 }
 
 /// Emitted when an address is removed from the blacklist via [`remove_from_blacklist`](crate::sss::remove_from_blacklist).

@@ -25,11 +25,11 @@ const EXTRA_ACCOUNT_METAS_SEED = Buffer.from("extra-account-metas");
  */
 export function getConfigAddress(
   programId: PublicKey,
-  mint: PublicKey
+  mint: PublicKey,
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [STABLECOIN_SEED, mint.toBuffer()],
-    programId
+    programId,
   );
 }
 
@@ -48,16 +48,11 @@ export function getRoleAddress(
   programId: PublicKey,
   config: PublicKey,
   roleType: number,
-  user: PublicKey
+  user: PublicKey,
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
-    [
-      ROLE_SEED,
-      config.toBuffer(),
-      Buffer.from([roleType]),
-      user.toBuffer(),
-    ],
-    programId
+    [ROLE_SEED, config.toBuffer(), Buffer.from([roleType]), user.toBuffer()],
+    programId,
   );
 }
 
@@ -74,11 +69,11 @@ export function getRoleAddress(
 export function getMinterQuotaAddress(
   programId: PublicKey,
   config: PublicKey,
-  minter: PublicKey
+  minter: PublicKey,
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [MINTER_QUOTA_SEED, config.toBuffer(), minter.toBuffer()],
-    programId
+    programId,
   );
 }
 
@@ -95,11 +90,11 @@ export function getMinterQuotaAddress(
 export function getBlacklistEntryAddress(
   programId: PublicKey,
   config: PublicKey,
-  address: PublicKey
+  address: PublicKey,
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [BLACKLIST_SEED, config.toBuffer(), address.toBuffer()],
-    programId
+    programId,
   );
 }
 
@@ -114,10 +109,10 @@ export function getBlacklistEntryAddress(
  */
 export function getExtraAccountMetasAddress(
   hookProgramId: PublicKey,
-  mint: PublicKey
+  mint: PublicKey,
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [EXTRA_ACCOUNT_METAS_SEED, mint.toBuffer()],
-    hookProgramId
+    hookProgramId,
   );
 }

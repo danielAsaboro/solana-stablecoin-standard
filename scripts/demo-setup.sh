@@ -69,7 +69,7 @@ echo "  Mint: $MINT"
 # 4. Assign roles
 echo ""
 echo "Assigning roles..."
-for role in minter burner blacklister seizer; do
+for role in minter burner pauser blacklister seizer; do
   $CLI -u "$RPC_URL" -k "$KEYPAIR" -y roles add "$role" "$AUTHORITY" 2>&1 | grep -E "assigned|✔" || true
 done
 $CLI -u "$RPC_URL" -k "$KEYPAIR" -y minters add "$AUTHORITY" --quota 1000000000000 2>&1 | grep -E "added|✔" || true
@@ -109,33 +109,77 @@ npx sss-token mint $BOB 5000000 -u $RPC_URL
 # --- STEP 3: Check supply ---
 npx sss-token supply -u $RPC_URL
 
-# --- STEP 4: Happy path — transfers work normally ---
+# --- STEP 4: Quota enforcement ---
+npx sss-token roles add minter $ALICE -u $RPC_URL
+npx sss-token minters add $ALICE --quota 1000000 -u $RPC_URL
+# Alice mints 0.5 DUSD (within quota)
+npx sss-token mint $BOB 500000 -u $RPC_URL -k ~/demo-alice.json
+# Alice tries to mint 1 DUSD more (exceeds quota — should fail)
+npx sss-token mint $BOB 1000000 -u $RPC_URL -k ~/demo-alice.json
+# Update Alice's quota to 5 DUSD
+npx sss-token minters add $ALICE --quota 5000000 -u $RPC_URL
+
+# --- STEP 5: Happy path — transfers work normally ---
 spl-token transfer $MINT 1 $ALICE --owner ~/demo-bob.json --url $RPC_URL --fee-payer ~/demo-bob.json --program-id $T22
 
 spl-token transfer $MINT 1 $BOB --owner ~/demo-alice.json --url $RPC_URL --fee-payer ~/demo-alice.json --program-id $T22
 
-# --- STEP 5: Blacklist Bob ---
+# --- STEP 6: Pause / Unpause ---
+npx sss-token pause -u $RPC_URL
+# Mint while paused (should fail)
+npx sss-token mint $ALICE 1000000 -u $RPC_URL
+npx sss-token unpause -u $RPC_URL
+# Mint after unpause (should succeed)
+npx sss-token mint $ALICE 1000000 -u $RPC_URL
+
+# --- STEP 7: Freeze / Thaw ---
+npx sss-token freeze $BOB -u $RPC_URL
+# Bob tries to send (should fail — frozen)
+spl-token transfer $MINT 1 $ALICE --owner ~/demo-bob.json --url $RPC_URL --fee-payer ~/demo-bob.json --program-id $T22
+npx sss-token thaw $BOB -u $RPC_URL
+# Bob sends after thaw (should succeed)
+spl-token transfer $MINT 1 $ALICE --owner ~/demo-bob.json --url $RPC_URL --fee-payer ~/demo-bob.json --program-id $T22
+
+# --- STEP 8: Access control (unauthorized) ---
+# Alice tries to assign role (should fail — not authority)
+npx sss-token roles add minter $BOB -u $RPC_URL -k ~/demo-alice.json
+
+# --- STEP 9: Blacklist Bob ---
 npx sss-token blacklist add $BOB --reason "FBI Case #2024-1847 - Fraud proceeds" -u $RPC_URL
 
-# --- STEP 6: Sad path — transfers now blocked ---
+# --- STEP 10: Sad path — transfers now blocked ---
 spl-token transfer $MINT 1 $ALICE --owner ~/demo-bob.json --url $RPC_URL --fee-payer ~/demo-bob.json --program-id $T22
 
 spl-token transfer $MINT 1 $BOB --owner ~/demo-alice.json --url $RPC_URL --fee-payer ~/demo-alice.json --program-id $T22
 
-# --- STEP 7: Seize ---
-npx sss-token seize $BOB --to $AUTHORITY --amount 5000000 -u $RPC_URL
+# --- STEP 11: Blacklist removal ---
+npx sss-token blacklist remove $BOB -u $RPC_URL
+# Bob can transfer again
+spl-token transfer $MINT 1 $ALICE --owner ~/demo-bob.json --url $RPC_URL --fee-payer ~/demo-bob.json --program-id $T22
+# Re-blacklist for seizure
+npx sss-token blacklist add $BOB --reason "FBI Case #2024-1847 - Fraud proceeds" -u $RPC_URL
 
-# --- STEP 8: Burn seized tokens ---
-npx sss-token burn 5000000 -u $RPC_URL
+# --- STEP 12: Seize ---
+npx sss-token seize $BOB --to $AUTHORITY --amount 3500000 -u $RPC_URL
 
-# --- STEP 9: Remint to victim ---
-npx sss-token mint $VICTIM 5000000 -u $RPC_URL
+# --- STEP 13: Burn seized tokens ---
+npx sss-token burn 3500000 -u $RPC_URL
 
-# --- STEP 10: Verify supply conservation ---
+# --- STEP 14: Remint to victim ---
+npx sss-token mint $VICTIM 3500000 -u $RPC_URL
+
+# --- STEP 15: Verify supply conservation ---
 npx sss-token supply -u $RPC_URL
 
-# --- STEP 11: Audit trail ---
-npx sss-token audit-log --action all --limit 10 -u $RPC_URL
+# --- STEP 16: Authority transfer (two-step) ---
+npx sss-token authority propose $ALICE -u $RPC_URL
+npx sss-token authority accept -u $RPC_URL -k ~/demo-alice.json
+# Alice proposes back to original authority
+npx sss-token authority propose $AUTHORITY -u $RPC_URL -k ~/demo-alice.json
+npx sss-token authority accept -u $RPC_URL
+
+# --- STEP 17: Audit trail ---
+npx sss-token audit-log --action all --limit 25 -u $RPC_URL
 CMDS
 
 echo ""

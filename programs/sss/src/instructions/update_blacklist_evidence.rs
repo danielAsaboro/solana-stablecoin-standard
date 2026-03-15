@@ -2,18 +2,17 @@ use anchor_lang::prelude::*;
 
 use crate::constants::*;
 use crate::error::StablecoinError;
-use crate::events::AddressBlacklisted;
+use crate::events::EvidenceAttached;
 use crate::state::{BlacklistEntry, RoleAccount, StablecoinConfig};
 
-/// Accounts required to add an address to the blacklist (SSS-2 only).
+/// Accounts required to attach or update evidence on an existing blacklist entry.
 ///
-/// The authority must hold an active Blacklister role and the stablecoin must
-/// have transfer hook enabled. Uses `init` (not `init_if_needed`) so that
-/// attempting to re-blacklist an already-blacklisted address fails with an
-/// Anchor account-already-in-use error.
+/// Uses `realloc` so that legacy blacklist entries (created before evidence fields
+/// existed) are transparently expanded to the new size. The payer covers any
+/// additional rent.
 #[derive(Accounts)]
 #[instruction(address: Pubkey)]
-pub struct AddToBlacklist<'info> {
+pub struct UpdateBlacklistEvidence<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
 
@@ -32,56 +31,53 @@ pub struct AddToBlacklist<'info> {
     pub role_account: Account<'info, RoleAccount>,
 
     #[account(
-        init,
-        payer = authority,
-        space = BlacklistEntry::LEN,
+        mut,
+        realloc = BlacklistEntry::LEN,
+        realloc::payer = authority,
+        realloc::zero = false,
         seeds = [BLACKLIST_SEED, config.key().as_ref(), address.as_ref()],
-        bump,
+        bump = blacklist_entry.bump,
+        constraint = blacklist_entry.config == config.key() @ StablecoinError::InvalidAuthority,
     )]
     pub blacklist_entry: Account<'info, BlacklistEntry>,
 
     pub system_program: Program<'info, System>,
 }
 
-/// Add an address to the blacklist with a reason string and optional evidence.
+/// Attach or update evidence on an existing blacklist entry.
 ///
-/// Creates a [`BlacklistEntry`] PDA that the transfer hook program checks on
-/// every `transfer_checked` call. Evidence fields provide a cryptographic link
-/// to off-chain legal documents. Emits [`AddressBlacklisted`].
+/// Requires a non-zero evidence hash (use `remove_from_blacklist` + `add_to_blacklist`
+/// to clear evidence entirely). The `previous_hash` is recorded in the
+/// [`EvidenceAttached`] event so the full evidence history is preserved in
+/// transaction logs even when evidence is overwritten.
 pub fn handler(
-    ctx: Context<AddToBlacklist>,
-    address: Pubkey,
-    reason: String,
+    ctx: Context<UpdateBlacklistEvidence>,
+    _address: Pubkey,
     evidence_hash: [u8; 32],
     evidence_uri: String,
 ) -> Result<()> {
     require!(
-        reason.len() <= MAX_REASON_LEN,
-        StablecoinError::ReasonTooLong
+        evidence_hash != [0u8; 32],
+        StablecoinError::InvalidEvidenceHash
     );
     require!(
         evidence_uri.len() <= MAX_EVIDENCE_URI_LEN,
         StablecoinError::EvidenceUriTooLong
     );
 
-    let clock = Clock::get()?;
     let entry = &mut ctx.accounts.blacklist_entry;
-    entry.config = ctx.accounts.config.key();
-    entry.address = address;
-    entry.reason = reason.clone();
-    entry.blacklisted_at = clock.unix_timestamp;
-    entry.blacklisted_by = ctx.accounts.authority.key();
+    let previous_hash = entry.evidence_hash;
+
     entry.evidence_hash = evidence_hash;
     entry.evidence_uri = evidence_uri.clone();
-    entry.bump = ctx.bumps.blacklist_entry;
 
-    emit!(AddressBlacklisted {
+    emit!(EvidenceAttached {
         config: ctx.accounts.config.key(),
-        address,
-        reason,
-        blacklisted_by: ctx.accounts.authority.key(),
+        address: entry.address,
         evidence_hash,
         evidence_uri,
+        previous_hash,
+        attached_by: ctx.accounts.authority.key(),
     });
 
     Ok(())

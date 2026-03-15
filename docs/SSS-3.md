@@ -741,4 +741,4 @@ The SSS program's `StablecoinInitialized` event already includes `enable_confide
 - [SSS-1 Specification](./SSS-1.md) -- Base stablecoin preset
 - [SSS-2 Specification](./SSS-2.md) -- Compliant stablecoin preset
 - [Architecture Overview](./ARCHITECTURE.md) -- Three-layer model and PDA layout
-- [Security Audit](./SECURITY_AUDIT.md) -- Comprehensive security analysis of on-chain programs
+- [Security Checklist](./SECURITY_CHECKLIST.md) -- Internal security review of on-chain programs

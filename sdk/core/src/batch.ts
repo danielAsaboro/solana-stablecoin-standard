@@ -120,7 +120,9 @@ export class BatchBuilder extends OperationBuilder {
 
   protected async buildCoreInstructions(): Promise<TransactionInstruction[]> {
     if (this._operations.length === 0) {
-      throw new Error("BatchBuilder: no operations added. Call .add(operation)");
+      throw new Error(
+        "BatchBuilder: no operations added. Call .add(operation)",
+      );
     }
 
     const allInstructions: TransactionInstruction[] = [];
@@ -145,7 +147,7 @@ export class BatchBuilder extends OperationBuilder {
   async send(
     payer: Keypair,
     signers?: Keypair[],
-    opts?: ConfirmOptions
+    opts?: ConfirmOptions,
   ): Promise<string> {
     // Collect signers from all sub-builders via the public accessor
     for (const op of this._operations) {
@@ -249,12 +251,12 @@ export class BatchMintBuilder extends OperationBuilder {
       this.ctx.program.programId,
       this.ctx.configAddress,
       RoleType.Minter,
-      this._minter
+      this._minter,
     );
     const [minterQuota] = getMinterQuotaAddress(
       this.ctx.program.programId,
       this.ctx.configAddress,
-      this._minter
+      this._minter,
     );
 
     const instructions: TransactionInstruction[] = [];
@@ -270,7 +272,7 @@ export class BatchMintBuilder extends OperationBuilder {
           if (!seenATAs.has(key)) {
             seenATAs.add(key);
             instructions.push(
-              createATAInstruction(payer, entry.to, this.ctx.mintAddress)
+              createATAInstruction(payer, entry.to, this.ctx.mintAddress),
             );
           }
         }
@@ -285,11 +287,11 @@ export class BatchMintBuilder extends OperationBuilder {
       } else if (entry.to) {
         recipientTokenAccount = getAssociatedTokenAddress(
           this.ctx.mintAddress,
-          entry.to
+          entry.to,
         );
       } else {
         throw new Error(
-          "BatchMintBuilder: each entry must specify either `to` or `toAccount`"
+          "BatchMintBuilder: each entry must specify either `to` or `toAccount`",
         );
       }
 
@@ -382,7 +384,7 @@ export class BatchBurnBuilder extends OperationBuilder {
       this.ctx.program.programId,
       this.ctx.configAddress,
       RoleType.Burner,
-      this._burner
+      this._burner,
     );
 
     const instructions: TransactionInstruction[] = [];
@@ -394,11 +396,11 @@ export class BatchBurnBuilder extends OperationBuilder {
       } else if (entry.from) {
         fromTokenAccount = getAssociatedTokenAddress(
           this.ctx.mintAddress,
-          entry.from
+          entry.from,
         );
       } else {
         throw new Error(
-          "BatchBurnBuilder: each entry must specify either `from` or `fromAccount`"
+          "BatchBurnBuilder: each entry must specify either `from` or `fromAccount`",
         );
       }
 
@@ -471,7 +473,7 @@ export class BatchFreezeBuilder extends OperationBuilder {
   protected async buildCoreInstructions(): Promise<TransactionInstruction[]> {
     if (!this._authority) {
       throw new Error(
-        "BatchFreezeBuilder: authority not set. Call .by(authority)"
+        "BatchFreezeBuilder: authority not set. Call .by(authority)",
       );
     }
 
@@ -479,7 +481,7 @@ export class BatchFreezeBuilder extends OperationBuilder {
       this.ctx.program.programId,
       this.ctx.configAddress,
       RoleType.Pauser,
-      this._authority
+      this._authority,
     );
 
     const instructions: TransactionInstruction[] = [];
@@ -487,7 +489,7 @@ export class BatchFreezeBuilder extends OperationBuilder {
     for (const wallet of this._wallets) {
       const tokenAccount = getAssociatedTokenAddress(
         this.ctx.mintAddress,
-        wallet
+        wallet,
       );
 
       const ix = await this.ctx.program.methods
@@ -557,7 +559,7 @@ export class BatchThawBuilder extends OperationBuilder {
   protected async buildCoreInstructions(): Promise<TransactionInstruction[]> {
     if (!this._authority) {
       throw new Error(
-        "BatchThawBuilder: authority not set. Call .by(authority)"
+        "BatchThawBuilder: authority not set. Call .by(authority)",
       );
     }
 
@@ -565,7 +567,7 @@ export class BatchThawBuilder extends OperationBuilder {
       this.ctx.program.programId,
       this.ctx.configAddress,
       RoleType.Pauser,
-      this._authority
+      this._authority,
     );
 
     const instructions: TransactionInstruction[] = [];
@@ -573,7 +575,7 @@ export class BatchThawBuilder extends OperationBuilder {
     for (const wallet of this._wallets) {
       const tokenAccount = getAssociatedTokenAddress(
         this.ctx.mintAddress,
-        wallet
+        wallet,
       );
 
       const ix = await this.ctx.program.methods
@@ -631,7 +633,7 @@ export class BatchBlacklistAddBuilder extends OperationBuilder {
     super(ctx);
     if (entries.length === 0) {
       throw new Error(
-        "BatchBlacklistAddBuilder: entries array must not be empty"
+        "BatchBlacklistAddBuilder: entries array must not be empty",
       );
     }
     this._entries = entries;
@@ -658,7 +660,7 @@ export class BatchBlacklistAddBuilder extends OperationBuilder {
   protected async buildCoreInstructions(): Promise<TransactionInstruction[]> {
     if (!this._authority) {
       throw new Error(
-        "BatchBlacklistAddBuilder: authority not set. Call .by(authority)"
+        "BatchBlacklistAddBuilder: authority not set. Call .by(authority)",
       );
     }
 
@@ -666,7 +668,7 @@ export class BatchBlacklistAddBuilder extends OperationBuilder {
       this.ctx.program.programId,
       this.ctx.configAddress,
       RoleType.Blacklister,
-      this._authority
+      this._authority,
     );
 
     const instructions: TransactionInstruction[] = [];
@@ -675,11 +677,11 @@ export class BatchBlacklistAddBuilder extends OperationBuilder {
       const [blacklistEntry] = getBlacklistEntryAddress(
         this.ctx.program.programId,
         this.ctx.configAddress,
-        entry.address
+        entry.address,
       );
 
       const ix = await this.ctx.program.methods
-        .addToBlacklist(entry.address, entry.reason ?? "")
+        .addToBlacklist(entry.address, entry.reason ?? "", Array(32).fill(0), "")
         .accountsStrict({
           authority: this._authority,
           config: this.ctx.configAddress,
@@ -719,7 +721,7 @@ export class BatchBlacklistRemoveBuilder extends OperationBuilder {
     super(ctx);
     if (addresses.length === 0) {
       throw new Error(
-        "BatchBlacklistRemoveBuilder: addresses array must not be empty"
+        "BatchBlacklistRemoveBuilder: addresses array must not be empty",
       );
     }
     this._addresses = addresses;
@@ -746,7 +748,7 @@ export class BatchBlacklistRemoveBuilder extends OperationBuilder {
   protected async buildCoreInstructions(): Promise<TransactionInstruction[]> {
     if (!this._authority) {
       throw new Error(
-        "BatchBlacklistRemoveBuilder: authority not set. Call .by(authority)"
+        "BatchBlacklistRemoveBuilder: authority not set. Call .by(authority)",
       );
     }
 
@@ -754,7 +756,7 @@ export class BatchBlacklistRemoveBuilder extends OperationBuilder {
       this.ctx.program.programId,
       this.ctx.configAddress,
       RoleType.Blacklister,
-      this._authority
+      this._authority,
     );
 
     const instructions: TransactionInstruction[] = [];
@@ -763,7 +765,7 @@ export class BatchBlacklistRemoveBuilder extends OperationBuilder {
       const [blacklistEntry] = getBlacklistEntryAddress(
         this.ctx.program.programId,
         this.ctx.configAddress,
-        address
+        address,
       );
 
       const ix = await this.ctx.program.methods

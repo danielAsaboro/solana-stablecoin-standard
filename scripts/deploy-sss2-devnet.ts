@@ -270,7 +270,7 @@ async function main() {
   );
 
   const blTx = await sssProgram.methods
-    .addToBlacklist(secondUser.publicKey, "OFAC sanctioned entity")
+    .addToBlacklist(secondUser.publicKey, "OFAC sanctioned entity", Array(32).fill(0), "")
     .accountsStrict({
       authority: authority.publicKey,
       config: configPda,

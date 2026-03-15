@@ -15,7 +15,7 @@ describe("Program ID Wiring", () => {
     });
 
     expect(stablecoin.program.programId.toBase58()).to.equal(
-      "DNfk1e2vMJrxHm4BwoRTVqQxcfYjZLHggxr11hMZ5Dyu"
+      "DNfk1e2vMJrxHm4BwoRTVqQxcfYjZLHggxr11hMZ5Dyu",
     );
   });
 });

@@ -80,7 +80,7 @@ function deriveMinterQuotaPda(
 //
 // Tests the full lifecycle of transferring master authority to a new keypair,
 // verifying the security model:
-//   - Master authority controls: assign_role, update_role, update_minter, transfer_authority
+//   - Master authority controls: assign_role, update_role, create_minter, update_minter, propose_authority_transfer
 //   - Role-based operations: mint, burn, freeze, thaw, pause, unpause
 //   - Roles persist after authority transfer until explicitly revoked
 //   - Chain transfer: A → B → C → A proves the mechanism is repeatable
@@ -168,7 +168,7 @@ describe("Authority Rotation: SSS-1 Lifecycle", () => {
 
     // Set minter quota
     await program.methods
-      .updateMinter(originalAuthority.publicKey, new anchor.BN(1_000_000_000))
+      .createMinter(originalAuthority.publicKey, new anchor.BN(1_000_000_000))
       .accountsStrict({
         authority: originalAuthority.publicKey,
         config: configPda,
@@ -203,13 +203,21 @@ describe("Authority Rotation: SSS-1 Lifecycle", () => {
   // ── Stage 1: Transfer authority ───────────────────────────────────────────
 
   describe("Stage 1: Transfer authority from original to new", () => {
-    it("transfers master authority successfully", async () => {
+    it("transfers master authority successfully via propose + accept", async () => {
       await program.methods
-        .transferAuthority(newAuthority.publicKey)
+        .proposeAuthorityTransfer(newAuthority.publicKey)
         .accountsStrict({
           authority: originalAuthority.publicKey,
           config: configPda,
         })
+        .rpc({ commitment: "confirmed" });
+      await program.methods
+        .acceptAuthorityTransfer()
+        .accountsStrict({
+          newAuthority: newAuthority.publicKey,
+          config: configPda,
+        })
+        .signers([newAuthority])
         .rpc({ commitment: "confirmed" });
 
       const config = await program.account.stablecoinConfig.fetch(configPda);
@@ -254,7 +262,7 @@ describe("Authority Rotation: SSS-1 Lifecycle", () => {
       const dummyQuotaPda = deriveMinterQuotaPda(configPda, dummyMinter.publicKey, program.programId);
       try {
         await program.methods
-          .updateMinter(dummyMinter.publicKey, new anchor.BN(500_000))
+          .createMinter(dummyMinter.publicKey, new anchor.BN(500_000))
           .accountsStrict({
             authority: originalAuthority.publicKey,
             config: configPda,
@@ -268,10 +276,10 @@ describe("Authority Rotation: SSS-1 Lifecycle", () => {
       }
     });
 
-    it("old authority cannot transfer authority again", async () => {
+    it("old authority cannot propose authority transfer again", async () => {
       try {
         await program.methods
-          .transferAuthority(originalAuthority.publicKey)
+          .proposeAuthorityTransfer(originalAuthority.publicKey)
           .accountsStrict({
             authority: originalAuthority.publicKey,
             config: configPda,
@@ -496,7 +504,7 @@ describe("Authority Rotation: SSS-1 Lifecycle", () => {
     it("new authority sets its own minter quota", async () => {
       newMinterQuota = deriveMinterQuotaPda(configPda, newAuthority.publicKey, program.programId);
       await program.methods
-        .updateMinter(newAuthority.publicKey, new anchor.BN(500_000_000))
+        .createMinter(newAuthority.publicKey, new anchor.BN(500_000_000))
         .accountsStrict({
           authority: newAuthority.publicKey,
           config: configPda,
@@ -623,14 +631,22 @@ describe("Authority Rotation: SSS-1 Lifecycle", () => {
   // ── Stage 6: Chain transfer (A → B → C → A) ──────────────────────────────
 
   describe("Stage 6: Chain transfer to third authority and back", () => {
-    it("new authority transfers to third authority", async () => {
+    it("new authority transfers to third authority via propose + accept", async () => {
       await program.methods
-        .transferAuthority(thirdAuthority.publicKey)
+        .proposeAuthorityTransfer(thirdAuthority.publicKey)
         .accountsStrict({
           authority: newAuthority.publicKey,
           config: configPda,
         })
         .signers([newAuthority])
+        .rpc({ commitment: "confirmed" });
+      await program.methods
+        .acceptAuthorityTransfer()
+        .accountsStrict({
+          newAuthority: thirdAuthority.publicKey,
+          config: configPda,
+        })
+        .signers([thirdAuthority])
         .rpc({ commitment: "confirmed" });
 
       const config = await program.account.stablecoinConfig.fetch(configPda);
@@ -675,7 +691,7 @@ describe("Authority Rotation: SSS-1 Lifecycle", () => {
 
       const thirdQuota = deriveMinterQuotaPda(configPda, thirdAuthority.publicKey, program.programId);
       await program.methods
-        .updateMinter(thirdAuthority.publicKey, new anchor.BN(999_000_000))
+        .createMinter(thirdAuthority.publicKey, new anchor.BN(999_000_000))
         .accountsStrict({
           authority: thirdAuthority.publicKey,
           config: configPda,
@@ -689,14 +705,21 @@ describe("Authority Rotation: SSS-1 Lifecycle", () => {
       expect(quota.quota.toNumber()).to.equal(999_000_000);
     });
 
-    it("third authority transfers back to original (full A→B→C→A cycle)", async () => {
+    it("third authority transfers back to original (full A->B->C->A cycle)", async () => {
       await program.methods
-        .transferAuthority(originalAuthority.publicKey)
+        .proposeAuthorityTransfer(originalAuthority.publicKey)
         .accountsStrict({
           authority: thirdAuthority.publicKey,
           config: configPda,
         })
         .signers([thirdAuthority])
+        .rpc({ commitment: "confirmed" });
+      await program.methods
+        .acceptAuthorityTransfer()
+        .accountsStrict({
+          newAuthority: originalAuthority.publicKey,
+          config: configPda,
+        })
         .rpc({ commitment: "confirmed" });
 
       const config = await program.account.stablecoinConfig.fetch(configPda);
@@ -788,7 +811,7 @@ describe("Authority Rotation: SSS-2 Compliance", () => {
     // Set minter quota and mint tokens
     const quotaPda = deriveMinterQuotaPda(configPda, originalAuthority.publicKey, program.programId);
     await program.methods
-      .updateMinter(originalAuthority.publicKey, new anchor.BN(1_000_000_000_000))
+      .createMinter(originalAuthority.publicKey, new anchor.BN(1_000_000_000_000))
       .accountsStrict({
         authority: originalAuthority.publicKey,
         config: configPda,
@@ -862,11 +885,19 @@ describe("Authority Rotation: SSS-2 Compliance", () => {
   describe("Transfer authority and verify compliance operations", () => {
     it("transfers authority and preserves compliance feature flags", async () => {
       await program.methods
-        .transferAuthority(newAuthority.publicKey)
+        .proposeAuthorityTransfer(newAuthority.publicKey)
         .accountsStrict({
           authority: originalAuthority.publicKey,
           config: configPda,
         })
+        .rpc({ commitment: "confirmed" });
+      await program.methods
+        .acceptAuthorityTransfer()
+        .accountsStrict({
+          newAuthority: newAuthority.publicKey,
+          config: configPda,
+        })
+        .signers([newAuthority])
         .rpc({ commitment: "confirmed" });
 
       const config = await program.account.stablecoinConfig.fetch(configPda);
@@ -901,7 +932,7 @@ describe("Authority Rotation: SSS-2 Compliance", () => {
       );
 
       await program.methods
-        .addToBlacklist(targetUser.publicKey, "Post-rotation blacklist")
+        .addToBlacklist(targetUser.publicKey, "Post-rotation blacklist", Array(32).fill(0), "")
         .accountsStrict({
           authority: newAuthority.publicKey,
           config: configPda,
@@ -1134,12 +1165,19 @@ describe("Two-Step Authority Transfer: Sad Paths", () => {
 
     // Transfer back so remaining tests use the original authority
     await program.methods
-      .transferAuthority(authority.publicKey)
+      .proposeAuthorityTransfer(authority.publicKey)
       .accountsStrict({
         authority: newAuth.publicKey,
         config: configPda,
       })
       .signers([newAuth])
+      .rpc({ commitment: "confirmed" });
+    await program.methods
+      .acceptAuthorityTransfer()
+      .accountsStrict({
+        newAuthority: authority.publicKey,
+        config: configPda,
+      })
       .rpc({ commitment: "confirmed" });
 
     config = await program.account.stablecoinConfig.fetch(configPda);

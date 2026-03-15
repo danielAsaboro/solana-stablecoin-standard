@@ -21,7 +21,7 @@ proptest! {
             Ok(())
         );
         assert_eq!(
-            model.apply(&Operation::UpdateMinter {
+            model.apply(&Operation::CreateMinter {
                 caller: 0,
                 minter: 1,
                 quota: first_mint + quota_reduction,
@@ -79,7 +79,7 @@ proptest! {
         }
 
         assert_eq!(
-            model.apply(&Operation::UpdateMinter {
+            model.apply(&Operation::CreateMinter {
                 caller: 0,
                 minter: 1,
                 quota: quota_a,
@@ -87,7 +87,7 @@ proptest! {
             Ok(())
         );
         assert_eq!(
-            model.apply(&Operation::UpdateMinter {
+            model.apply(&Operation::CreateMinter {
                 caller: 0,
                 minter: 2,
                 quota: quota_b,

@@ -19,7 +19,6 @@
 //! | `update_role`                  | [`update_role`]           | Master authority |
 //! | `update_minter`                | [`update_minter`]         | Master authority |
 //! | `reset_minter_quota`           | [`reset_minter_quota`]    | Master authority |
-//! | `transfer_authority`           | [`transfer_authority`]    | Master authority |
 //! | `propose_authority_transfer`   | [`propose_authority`]     | Master authority |
 //! | `accept_authority_transfer`    | [`accept_authority`]      | Pending authority|
 //! | `cancel_authority_transfer`    | [`cancel_authority`]      | Master authority |
@@ -28,9 +27,10 @@
 //!
 //! | Instruction              | Module                    | Role required |
 //! |--------------------------|---------------------------|---------------|
-//! | `add_to_blacklist`       | [`add_to_blacklist`]      | Blacklister   |
-//! | `remove_from_blacklist`  | [`remove_from_blacklist`] | Blacklister   |
-//! | `seize`                  | [`seize`]                 | Seizer        |
+//! | `add_to_blacklist`            | [`add_to_blacklist`]           | Blacklister   |
+//! | `remove_from_blacklist`       | [`remove_from_blacklist`]      | Blacklister   |
+//! | `update_blacklist_evidence`   | [`update_blacklist_evidence`]  | Blacklister   |
+//! | `seize`                       | [`seize`]                      | Seizer        |
 //!
 //! ## View instructions (read-only)
 //!
@@ -47,6 +47,7 @@ pub mod add_to_blacklist;
 pub mod assign_role;
 pub mod burn;
 pub mod cancel_authority;
+pub mod create_minter;
 pub mod freeze_account;
 pub mod initialize;
 pub mod mint;
@@ -56,8 +57,8 @@ pub mod remove_from_blacklist;
 pub mod reset_minter_quota;
 pub mod seize;
 pub mod thaw_account;
-pub mod transfer_authority;
 pub mod unpause;
+pub mod update_blacklist_evidence;
 pub mod update_minter;
 pub mod update_role;
 pub mod view;
@@ -71,6 +72,7 @@ pub use add_to_blacklist::*;
 pub use assign_role::*;
 pub use burn::*;
 pub use cancel_authority::*;
+pub use create_minter::*;
 pub use freeze_account::*;
 #[allow(ambiguous_glob_reexports)]
 pub use initialize::*;
@@ -81,8 +83,8 @@ pub use remove_from_blacklist::*;
 pub use reset_minter_quota::*;
 pub use seize::*;
 pub use thaw_account::*;
-pub use transfer_authority::*;
 pub use unpause::*;
+pub use update_blacklist_evidence::*;
 pub use update_minter::*;
 #[allow(ambiguous_glob_reexports)]
 pub use update_role::*;

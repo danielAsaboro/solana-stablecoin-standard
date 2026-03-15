@@ -43,7 +43,7 @@ import oracleIdl from "../../../target/idl/sss_oracle.json";
 
 /** Default oracle program ID (localnet/devnet). */
 export const ORACLE_PROGRAM_ID = new PublicKey(
-  "6PHWYPgkVWE7f5Saak4EXVh49rv9ZcXdz7HMfHnQdNLJ"
+  "6PHWYPgkVWE7f5Saak4EXVh49rv9ZcXdz7HMfHnQdNLJ",
 );
 
 const ORACLE_CONFIG_SEED = Buffer.from("oracle_config");
@@ -159,11 +159,11 @@ export interface UpdateOracleParams {
  */
 export function getOracleConfigAddress(
   oracleProgramId: PublicKey,
-  stablecoinConfig: PublicKey
+  stablecoinConfig: PublicKey,
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [ORACLE_CONFIG_SEED, stablecoinConfig.toBuffer()],
-    oracleProgramId
+    oracleProgramId,
   );
 }
 
@@ -206,7 +206,7 @@ export class OracleModule {
   private constructor(
     program: Program,
     oracleConfigAddress: PublicKey,
-    stablecoinConfig: PublicKey
+    stablecoinConfig: PublicKey,
   ) {
     this.program = program;
     this.oracleConfigAddress = oracleConfigAddress;
@@ -225,18 +225,22 @@ export class OracleModule {
   static async load(
     connection: Connection,
     stablecoinConfig: PublicKey,
-    oracleProgramId: PublicKey = ORACLE_PROGRAM_ID
+    oracleProgramId: PublicKey = ORACLE_PROGRAM_ID,
   ): Promise<OracleModule> {
     const provider = new AnchorProvider(
       connection,
-      { publicKey: PublicKey.default, signTransaction: async (tx) => tx, signAllTransactions: async (txs) => txs } as Wallet,
-      { commitment: "confirmed" }
+      {
+        publicKey: PublicKey.default,
+        signTransaction: async (tx) => tx,
+        signAllTransactions: async (txs) => txs,
+      } as Wallet,
+      { commitment: "confirmed" },
     );
     const program = new Program(oracleIdl as Idl, provider);
 
     const [oracleConfigAddress] = getOracleConfigAddress(
       oracleProgramId,
-      stablecoinConfig
+      stablecoinConfig,
     );
 
     return new OracleModule(program, oracleConfigAddress, stablecoinConfig);
@@ -251,11 +255,11 @@ export class OracleModule {
    */
   static fromProgram(
     program: Program,
-    stablecoinConfig: PublicKey
+    stablecoinConfig: PublicKey,
   ): OracleModule {
     const [oracleConfigAddress] = getOracleConfigAddress(
       program.programId,
-      stablecoinConfig
+      stablecoinConfig,
     );
     return new OracleModule(program, oracleConfigAddress, stablecoinConfig);
   }
@@ -269,7 +273,12 @@ export class OracleModule {
    */
   async getConfig(): Promise<OracleConfigData | null> {
     try {
-      const account = await (this.program.account as Record<string, { fetch: (addr: PublicKey) => Promise<Record<string, unknown>> }>)["oracleConfig"].fetch(this.oracleConfigAddress);
+      const account = await (
+        this.program.account as Record<
+          string,
+          { fetch: (addr: PublicKey) => Promise<Record<string, unknown>> }
+        >
+      )["oracleConfig"].fetch(this.oracleConfigAddress);
       const config: OracleConfigData = {
         authority: account.authority as PublicKey,
         stablecoinConfig: account.stablecoinConfig as PublicKey,
@@ -309,8 +318,7 @@ export class OracleModule {
     const formatted = value.toFixed(priceDecimals);
     const timestamp = config.lastTimestamp.toNumber();
     const now = Math.floor(Date.now() / 1000);
-    const isStale =
-      now - timestamp > config.stalenessThreshold.toNumber();
+    const isStale = now - timestamp > config.stalenessThreshold.toNumber();
 
     return {
       raw: config.lastPrice,
@@ -338,7 +346,7 @@ export class OracleModule {
   fiatToTokens(fiatAmount: number, tokenDecimals: number): BN {
     if (!this.cachedConfig) {
       throw new Error(
-        "Oracle config not loaded. Call getConfig() or getPrice() first."
+        "Oracle config not loaded. Call getConfig() or getPrice() first.",
       );
     }
 
@@ -367,7 +375,7 @@ export class OracleModule {
   tokensToFiat(tokenAmount: BN | number, tokenDecimals: number): number {
     if (!this.cachedConfig) {
       throw new Error(
-        "Oracle config not loaded. Call getConfig() or getPrice() first."
+        "Oracle config not loaded. Call getConfig() or getPrice() first.",
       );
     }
 
@@ -398,7 +406,7 @@ export class OracleModule {
   async initialize(
     authority: PublicKey,
     aggregator: PublicKey,
-    params: InitOracleParams
+    params: InitOracleParams,
   ): Promise<TransactionInstruction> {
     const minPrice =
       typeof params.minPrice === "number"
@@ -409,9 +417,16 @@ export class OracleModule {
         ? new BN(params.maxPrice)
         : params.maxPrice;
 
-    return await (this.program.methods as Record<string, (...args: unknown[]) => {
-      accounts: (accts: Record<string, PublicKey>) => { instruction: () => Promise<TransactionInstruction> };
-    }>)
+    return await (
+      this.program.methods as Record<
+        string,
+        (...args: unknown[]) => {
+          accounts: (accts: Record<string, PublicKey>) => {
+            instruction: () => Promise<TransactionInstruction>;
+          };
+        }
+      >
+    )
       .initializeOracle({
         baseCurrency: params.baseCurrency,
         stalenessThreshold: new BN(params.stalenessThreshold),
@@ -439,11 +454,18 @@ export class OracleModule {
    */
   async updateConfig(
     authority: PublicKey,
-    params: UpdateOracleParams
+    params: UpdateOracleParams,
   ): Promise<TransactionInstruction> {
-    return await (this.program.methods as Record<string, (...args: unknown[]) => {
-      accounts: (accts: Record<string, PublicKey>) => { instruction: () => Promise<TransactionInstruction> };
-    }>)
+    return await (
+      this.program.methods as Record<
+        string,
+        (...args: unknown[]) => {
+          accounts: (accts: Record<string, PublicKey>) => {
+            instruction: () => Promise<TransactionInstruction>;
+          };
+        }
+      >
+    )
       .updateOracleConfig({
         newAggregator: params.newAggregator ?? null,
         newStalenessThreshold: params.newStalenessThreshold
@@ -481,11 +503,18 @@ export class OracleModule {
    */
   async refreshPrice(
     caller: PublicKey,
-    aggregator: PublicKey
+    aggregator: PublicKey,
   ): Promise<TransactionInstruction> {
-    return await (this.program.methods as Record<string, (...args: unknown[]) => {
-      accounts: (accts: Record<string, PublicKey>) => { instruction: () => Promise<TransactionInstruction> };
-    }>)
+    return await (
+      this.program.methods as Record<
+        string,
+        (...args: unknown[]) => {
+          accounts: (accts: Record<string, PublicKey>) => {
+            instruction: () => Promise<TransactionInstruction>;
+          };
+        }
+      >
+    )
       .refreshPrice()
       .accounts({
         caller,
@@ -506,13 +535,20 @@ export class OracleModule {
    */
   async pushManualPrice(
     authority: PublicKey,
-    price: BN | number
+    price: BN | number,
   ): Promise<TransactionInstruction> {
     const priceBN = typeof price === "number" ? new BN(price) : price;
 
-    return await (this.program.methods as Record<string, (...args: unknown[]) => {
-      accounts: (accts: Record<string, PublicKey>) => { instruction: () => Promise<TransactionInstruction> };
-    }>)
+    return await (
+      this.program.methods as Record<
+        string,
+        (...args: unknown[]) => {
+          accounts: (accts: Record<string, PublicKey>) => {
+            instruction: () => Promise<TransactionInstruction>;
+          };
+        }
+      >
+    )
       .pushManualPrice(priceBN)
       .accounts({
         authority,

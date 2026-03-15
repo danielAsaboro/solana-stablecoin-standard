@@ -32,6 +32,9 @@ pub const MAX_URI_LEN: usize = 200;
 /// Maximum length (in bytes) for a blacklist reason string.
 pub const MAX_REASON_LEN: usize = 64;
 
+/// Maximum length (in bytes) for an evidence URI (IPFS CID, Arweave TX, HTTPS URL).
+pub const MAX_EVIDENCE_URI_LEN: usize = 128;
+
 // ── Role type identifiers ────────────────────────────────────────────────────
 
 /// Minter role — can mint tokens up to their assigned quota.

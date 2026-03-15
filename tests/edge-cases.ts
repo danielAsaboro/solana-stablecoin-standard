@@ -133,7 +133,7 @@ describe("Edge Cases: SSS-1", () => {
       program.programId
     );
     await program.methods
-      .updateMinter(authority.publicKey, new anchor.BN(100_000_000))
+      .createMinter(authority.publicKey, new anchor.BN(100_000_000))
       .accountsStrict({
         authority: authority.publicKey,
         config: configPda,
@@ -547,10 +547,10 @@ describe("Edge Cases: SSS-1", () => {
   // ── Authority Protection ──────────────────────────────────────────────────
 
   describe("Authority Protection", () => {
-    it("rejects transferring authority to same address", async () => {
+    it("rejects proposing authority transfer to same address", async () => {
       try {
         await program.methods
-          .transferAuthority(authority.publicKey)
+          .proposeAuthorityTransfer(authority.publicKey)
           .accountsStrict({
             authority: authority.publicKey,
             config: configPda,
@@ -562,7 +562,7 @@ describe("Edge Cases: SSS-1", () => {
       }
     });
 
-    it("rejects non-authority trying to transfer authority", async () => {
+    it("rejects non-authority trying to propose authority transfer", async () => {
       const impostor = Keypair.generate();
       const fundTx = new anchor.web3.Transaction().add(
         SystemProgram.transfer({
@@ -575,7 +575,7 @@ describe("Edge Cases: SSS-1", () => {
 
       try {
         await program.methods
-          .transferAuthority(impostor.publicKey)
+          .proposeAuthorityTransfer(impostor.publicKey)
           .accountsStrict({
             authority: impostor.publicKey,
             config: configPda,
@@ -605,7 +605,7 @@ describe("Edge Cases: SSS-1", () => {
 
       try {
         await program.methods
-          .addToBlacklist(target.publicKey, "test")
+          .addToBlacklist(target.publicKey, "test", Array(32).fill(0), "")
           .accountsStrict({
             authority: authority.publicKey,
             config: configPda,
@@ -738,7 +738,7 @@ describe("Edge Cases: SSS-2 Compliance", () => {
 
       // First addition should succeed
       await program.methods
-        .addToBlacklist(target.publicKey, "OFAC match")
+        .addToBlacklist(target.publicKey, "OFAC match", Array(32).fill(0), "")
         .accountsStrict({
           authority: authority.publicKey,
           config: configPda,
@@ -751,7 +751,7 @@ describe("Edge Cases: SSS-2 Compliance", () => {
       // Second addition should fail (PDA already initialized via `init`)
       try {
         await program.methods
-          .addToBlacklist(target.publicKey, "Duplicate attempt")
+          .addToBlacklist(target.publicKey, "Duplicate attempt", Array(32).fill(0), "")
           .accountsStrict({
             authority: authority.publicKey,
             config: configPda,
@@ -795,7 +795,7 @@ describe("Edge Cases: SSS-2 Compliance", () => {
 
       try {
         await program.methods
-          .addToBlacklist(target.publicKey, "A".repeat(65)) // MAX_REASON_LEN = 64
+          .addToBlacklist(target.publicKey, "A".repeat(65), Array(32).fill(0), "") // MAX_REASON_LEN = 64
           .accountsStrict({
             authority: authority.publicKey,
             config: configPda,
@@ -930,7 +930,7 @@ describe("Edge Cases: Supply Cap", () => {
       program.programId
     );
     await program.methods
-      .updateMinter(authority.publicKey, new anchor.BN(10_000))
+      .createMinter(authority.publicKey, new anchor.BN(10_000))
       .accountsStrict({
         authority: authority.publicKey,
         config: cappedConfigPda,
@@ -1079,7 +1079,7 @@ describe("Edge Cases: Supply Cap", () => {
       program.programId
     );
     await program.methods
-      .updateMinter(authority.publicKey, new anchor.BN("2000000000"))
+      .createMinter(authority.publicKey, new anchor.BN("2000000000"))
       .accountsStrict({
         authority: authority.publicKey,
         config: unlimitedConfigPda,

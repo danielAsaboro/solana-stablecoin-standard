@@ -39,9 +39,15 @@ export function registerBlacklistCommand(program: Command): void {
     .description("Add an address to the blacklist")
     .argument("<address>", "Address to blacklist")
     .option("--reason <reason>", "Reason for blacklisting", "Compliance action")
-    .action(async (address: string, opts: { reason: string }) => {
+    .option("--evidence-hash <hex>", "SHA-256 hash of evidence document (hex string)")
+    .option("--evidence-uri <uri>", "URI pointing to evidence document")
+    .action(async (address: string, opts: { reason: string; evidenceHash?: string; evidenceUri?: string }) => {
       try {
-        await handleBlacklistAdd(address, opts.reason, program.opts());
+        const evidenceHash = opts.evidenceHash
+          ? Array.from(Buffer.from(opts.evidenceHash, "hex"))
+          : Array(32).fill(0);
+        const evidenceUri = opts.evidenceUri ?? "";
+        await handleBlacklistAdd(address, opts.reason, evidenceHash, evidenceUri, program.opts());
       } catch (err: any) {
         errorMsg((err as Error).message || String(err));
       }
@@ -70,9 +76,24 @@ export function registerBlacklistCommand(program: Command): void {
         errorMsg((err as Error).message || String(err));
       }
     });
+
+  blacklist
+    .command("evidence")
+    .description("Update evidence on an existing blacklist entry")
+    .argument("<address>", "Blacklisted address")
+    .requiredOption("--hash <hex>", "SHA-256 hash of evidence document (hex string)")
+    .requiredOption("--uri <uri>", "URI pointing to evidence document")
+    .action(async (address: string, opts: { hash: string; uri: string }) => {
+      try {
+        const evidenceHash = Array.from(Buffer.from(opts.hash, "hex"));
+        await handleUpdateEvidence(address, evidenceHash, opts.uri, program.opts());
+      } catch (err: any) {
+        errorMsg((err as Error).message || String(err));
+      }
+    });
 }
 
-async function handleBlacklistAdd(addressStr: string, reason: string, globalOpts: any): Promise<void> {
+async function handleBlacklistAdd(addressStr: string, reason: string, evidenceHash: number[], evidenceUri: string, globalOpts: any): Promise<void> {
   const sssConfig = loadConfig(globalOpts.config, globalOpts.profile);
   const configPDA = new PublicKey(sssConfig.configAddress);
   const addressPubkey = new PublicKey(addressStr);
@@ -81,6 +102,7 @@ async function handleBlacklistAdd(addressStr: string, reason: string, globalOpts
     printDryRunPlan(globalOpts, "blacklist.add", {
       address: addressPubkey.toBase58(),
       reason,
+      evidenceUri: evidenceUri || "(none)",
       config: configPDA.toBase58(),
     });
     return;
@@ -101,7 +123,7 @@ async function handleBlacklistAdd(addressStr: string, reason: string, globalOpts
   let tx: string;
   try {
     tx = await program.methods
-      .addToBlacklist(addressPubkey, reason)
+      .addToBlacklist(addressPubkey, reason, evidenceHash, evidenceUri)
       .accounts({
         authority: keypair.publicKey,
         config: configPDA,
@@ -120,6 +142,56 @@ async function handleBlacklistAdd(addressStr: string, reason: string, globalOpts
     ["Transaction", tx],
     ["Address", addressPubkey.toBase58()],
     ["Reason", reason],
+  ]);
+}
+
+async function handleUpdateEvidence(addressStr: string, evidenceHash: number[], evidenceUri: string, globalOpts: any): Promise<void> {
+  const sssConfig = loadConfig(globalOpts.config, globalOpts.profile);
+  const configPDA = new PublicKey(sssConfig.configAddress);
+  const addressPubkey = new PublicKey(addressStr);
+
+  if (isDryRun(globalOpts)) {
+    printDryRunPlan(globalOpts, "blacklist.evidence", {
+      address: addressPubkey.toBase58(),
+      evidenceUri,
+      config: configPDA.toBase58(),
+    });
+    return;
+  }
+
+  const keypair = loadKeypair(globalOpts.keypair);
+  const connection = getConnection(globalOpts.rpc || sssConfig.rpcUrl);
+  const wallet = new anchor.Wallet(keypair);
+  const provider = new anchor.AnchorProvider(connection, wallet, { commitment: "confirmed" });
+  const [rolePDA] = deriveRolePDA(configPDA, ROLE_BLACKLISTER, keypair.publicKey);
+  const [blacklistPDA] = deriveBlacklistPDA(configPDA, addressPubkey);
+  infoMsg(`Updating evidence for ${addressPubkey.toBase58()}...`);
+  infoMsg(`URI: ${evidenceUri}`);
+
+  const program = await loadSssProgram(provider);
+
+  const spinner = spin("Sending update evidence transaction...");
+  let tx: string;
+  try {
+    tx = await program.methods
+      .updateBlacklistEvidence(addressPubkey, evidenceHash, evidenceUri)
+      .accounts({
+        authority: keypair.publicKey,
+        config: configPDA,
+        roleAccount: rolePDA,
+        blacklistEntry: blacklistPDA,
+      })
+      .rpc();
+    spinner.succeed("Evidence updated!");
+  } catch (err) {
+    spinner.fail("Update evidence transaction failed");
+    throw err;
+  }
+
+  printTxResult(tx, connection.rpcEndpoint, [
+    ["Transaction", tx],
+    ["Address", addressPubkey.toBase58()],
+    ["Evidence URI", evidenceUri],
   ]);
 }
 

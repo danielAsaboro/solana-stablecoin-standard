@@ -16,4 +16,7 @@ pub enum TransferHookError {
 
     #[msg("Stablecoin is paused — transfers are blocked")]
     Paused,
+
+    #[msg("Hook called outside of a Token-2022 transfer")]
+    NotTransferring,
 }

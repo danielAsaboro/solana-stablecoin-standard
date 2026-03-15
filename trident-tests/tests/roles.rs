@@ -25,7 +25,7 @@ proptest! {
             Ok(())
         );
         assert_eq!(
-            model.apply(&Operation::UpdateMinter {
+            model.apply(&Operation::CreateMinter {
                 caller: 0,
                 minter,
                 quota,

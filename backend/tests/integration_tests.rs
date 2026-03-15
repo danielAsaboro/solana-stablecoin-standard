@@ -1334,7 +1334,7 @@ fn test_add_blacklist_instruction_data_encoding() {
     let address = Pubkey::new_unique();
     let reason = "OFAC sanctions match";
 
-    let ix = solana::build_add_to_blacklist_instruction(&ctx, &address, reason);
+    let ix = solana::build_add_to_blacklist_instruction(&ctx, &address, reason, [0u8; 32], "");
 
     // Verify program_id
     assert_eq!(ix.program_id, ctx.program_id);
@@ -1351,8 +1351,8 @@ fn test_add_blacklist_instruction_data_encoding() {
     assert!(ix.accounts[0].is_signer);
     assert!(ix.accounts[0].is_writable);
 
-    // Verify data: discriminator(8) + address(32) + reason_len(4) + reason(var)
-    let expected_len = 8 + 32 + 4 + reason.len();
+    // Verify data: discriminator(8) + address(32) + reason_len(4) + reason(var) + evidence_hash(32) + evidence_uri_len(4) + evidence_uri(var)
+    let expected_len = 8 + 32 + 4 + reason.len() + 32 + 4;
     assert_eq!(ix.data.len(), expected_len);
 
     // Verify address bytes in data
@@ -1363,7 +1363,15 @@ fn test_add_blacklist_instruction_data_encoding() {
     assert_eq!(reason_len as usize, reason.len());
 
     // Verify reason bytes
-    assert_eq!(&ix.data[44..], reason.as_bytes());
+    let reason_end = 44 + reason.len();
+    assert_eq!(&ix.data[44..reason_end], reason.as_bytes());
+
+    // Verify evidence_hash (32 zero bytes)
+    assert_eq!(&ix.data[reason_end..reason_end + 32], &[0u8; 32]);
+
+    // Verify evidence_uri length (0)
+    let uri_len = u32::from_le_bytes(ix.data[reason_end + 32..reason_end + 36].try_into().unwrap());
+    assert_eq!(uri_len, 0);
 }
 
 #[test]

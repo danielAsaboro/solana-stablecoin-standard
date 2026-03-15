@@ -140,6 +140,10 @@ export interface BlacklistEntry {
   address: PublicKey;
   /** Reason for blacklisting (max 64 chars) */
   reason: string;
+  /** SHA-256 hash of supporting evidence document ([u8; 32]) */
+  evidenceHash: number[];
+  /** URI pointing to supporting evidence document */
+  evidenceUri: string;
   /** Timestamp when blacklisted */
   blacklistedAt: BN;
   /** Authority who blacklisted the address */
@@ -313,7 +317,17 @@ export interface UpdateRoleParams {
  */
 export type UpdateRolesParams = AssignRoleParams & { active: boolean };
 
-/** Parameters for updating minter quota. */
+/** Parameters for creating a new minter quota (uses `init`). */
+export interface CreateMinterParams {
+  /** The minter address */
+  minter: PublicKey;
+  /** Initial quota amount */
+  quota: BN;
+  /** The master authority */
+  authority: PublicKey;
+}
+
+/** Parameters for updating an existing minter quota (uses `mut`). */
 export interface UpdateMinterParams {
   /** The minter address */
   minter: PublicKey;
@@ -323,13 +337,31 @@ export interface UpdateMinterParams {
   authority: PublicKey;
 }
 
-/** Parameters for transferring authority. */
-export interface TransferAuthorityParams {
+/** Parameters for proposing an authority transfer (two-step). */
+export interface ProposeAuthorityTransferParams {
   /** New master authority */
   newAuthority: PublicKey;
   /** Current master authority */
   authority: PublicKey;
 }
+
+/** Parameters for accepting a proposed authority transfer (two-step). */
+export interface AcceptAuthorityTransferParams {
+  /** The new authority accepting the transfer */
+  authority: PublicKey;
+}
+
+/** Parameters for cancelling a proposed authority transfer (two-step). */
+export interface CancelAuthorityTransferParams {
+  /** The current authority cancelling the transfer */
+  authority: PublicKey;
+}
+
+/**
+ * @deprecated Use {@link ProposeAuthorityTransferParams} instead.
+ * The on-chain program no longer has a single-step `transfer_authority` instruction.
+ */
+export type TransferAuthorityParams = ProposeAuthorityTransferParams;
 
 /** Parameters for adding to blacklist (SSS-2 only). */
 export interface BlacklistAddParams {
@@ -337,6 +369,10 @@ export interface BlacklistAddParams {
   address: PublicKey;
   /** Reason for blacklisting (max 64 chars) */
   reason: string;
+  /** SHA-256 hash of supporting evidence document ([u8; 32], defaults to all zeros) */
+  evidenceHash?: number[];
+  /** URI pointing to supporting evidence document (defaults to "") */
+  evidenceUri?: string;
   /** The authority (must have Blacklister role) */
   authority: PublicKey;
 }
@@ -358,6 +394,18 @@ export interface SeizeParams {
   /** Amount to seize */
   amount: BN;
   /** The authority (must have Seizer role) */
+  authority: PublicKey;
+}
+
+/** Parameters for updating evidence on an existing blacklist entry (SSS-2 only). */
+export interface UpdateEvidenceParams {
+  /** The blacklisted address whose evidence to update */
+  address: PublicKey;
+  /** New SHA-256 hash of supporting evidence document ([u8; 32]) */
+  evidenceHash: number[];
+  /** New URI pointing to supporting evidence document */
+  evidenceUri: string;
+  /** The authority (must have Blacklister role) */
   authority: PublicKey;
 }
 
@@ -519,9 +567,9 @@ export interface MinterQuotaUpdatedEvent {
 
 /**
  * Emitted when the master authority is transferred via the
- * `transfer_authority` instruction.
+ * two-step `propose_authority_transfer` / `accept_authority_transfer` flow.
  *
- * @see {@link TransferAuthorityParams}
+ * @see {@link ProposeAuthorityTransferParams}
  */
 export interface AuthorityTransferredEvent {
   /** The stablecoin config PDA address. */
@@ -587,4 +635,25 @@ export interface TokensSeizedEvent {
   amount: BN;
   /** The authority (Seizer) who executed the seizure. */
   seizedBy: PublicKey;
+}
+
+/**
+ * Emitted when evidence is attached or updated on a blacklist entry via the
+ * `update_blacklist_evidence` instruction (SSS-2 only).
+ *
+ * @see {@link UpdateEvidenceParams}
+ */
+export interface EvidenceAttachedEvent {
+  /** The stablecoin config PDA address. */
+  config: PublicKey;
+  /** The blacklisted address whose evidence was updated. */
+  address: PublicKey;
+  /** New SHA-256 hash of evidence document. */
+  evidenceHash: number[];
+  /** New URI pointing to evidence document. */
+  evidenceUri: string;
+  /** Previous evidence hash (all zeros if none). */
+  previousHash: number[];
+  /** The authority (Blacklister) who attached the evidence. */
+  attachedBy: PublicKey;
 }

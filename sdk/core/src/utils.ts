@@ -1,8 +1,4 @@
-import {
-  Connection,
-  PublicKey,
-  TransactionInstruction,
-} from "@solana/web3.js";
+import { Connection, PublicKey, TransactionInstruction } from "@solana/web3.js";
 import {
   TOKEN_2022_PROGRAM_ID,
   getAssociatedTokenAddressSync,
@@ -26,13 +22,13 @@ export { TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
  */
 export function getAssociatedTokenAddress(
   mint: PublicKey,
-  owner: PublicKey
+  owner: PublicKey,
 ): PublicKey {
   return getAssociatedTokenAddressSync(
     mint,
     owner,
     true, // allowOwnerOffCurve
-    TOKEN_2022_PROGRAM_ID
+    TOKEN_2022_PROGRAM_ID,
   );
 }
 
@@ -48,14 +44,14 @@ export function getAssociatedTokenAddress(
 export function createATAInstruction(
   payer: PublicKey,
   owner: PublicKey,
-  mint: PublicKey
+  mint: PublicKey,
 ): TransactionInstruction {
   return createAssociatedTokenAccountIdempotentInstruction(
     payer,
     getAssociatedTokenAddress(mint, owner),
     owner,
     mint,
-    TOKEN_2022_PROGRAM_ID
+    TOKEN_2022_PROGRAM_ID,
   );
 }
 
@@ -71,7 +67,7 @@ export function createATAInstruction(
 export async function getTokenBalance(
   connection: Connection,
   mint: PublicKey,
-  owner: PublicKey
+  owner: PublicKey,
 ): Promise<number> {
   const ata = getAssociatedTokenAddress(mint, owner);
   try {
@@ -91,7 +87,7 @@ export async function getTokenBalance(
  */
 export async function getMintSupply(
   connection: Connection,
-  mint: PublicKey
+  mint: PublicKey,
 ): Promise<{ amount: string; decimals: number; uiAmount: number | null }> {
   const info = await connection.getTokenSupply(mint);
   return {
@@ -110,7 +106,7 @@ export async function getMintSupply(
  */
 export async function accountExists(
   connection: Connection,
-  address: PublicKey
+  address: PublicKey,
 ): Promise<boolean> {
   const info = await connection.getAccountInfo(address);
   return info !== null;

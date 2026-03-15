@@ -1,7 +1,8 @@
-# Security Audit Checklist
+# Security Checklist
 
-> Comprehensive security analysis of the Solana Stablecoin Standard (SSS) on-chain programs.
-> Programs audited: `sss` (main program) and `transfer-hook` (blacklist enforcement).
+> Internal security review of the Solana Stablecoin Standard (SSS) on-chain programs.
+> Programs reviewed: `sss` (main program) and `transfer-hook` (blacklist enforcement).
+> **Note:** This is an internal checklist, not a third-party audit report.
 
 ---
 

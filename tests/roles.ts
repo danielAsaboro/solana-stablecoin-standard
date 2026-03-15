@@ -44,6 +44,7 @@ describe("Roles", () => {
         defaultAccountFrozen: false,
         enableConfidentialTransfer: false,
         transferHookProgramId: null,
+        supplyCap: new anchor.BN(0),
       })
       .accountsStrict({
         authority: authority.publicKey,
@@ -66,7 +67,7 @@ describe("Roles", () => {
       );
 
       await program.methods
-        .updateRoles(roleType, authority.publicKey, true)
+        .assignRole(roleType, authority.publicKey)
         .accountsStrict({
           authority: authority.publicKey,
           config: configPda,
@@ -88,12 +89,11 @@ describe("Roles", () => {
     );
 
     await program.methods
-      .updateRoles(0, authority.publicKey, false)
+      .updateRole(0, authority.publicKey, false)
       .accountsStrict({
         authority: authority.publicKey,
         config: configPda,
         roleAccount: rolePda,
-        systemProgram: SystemProgram.programId,
       })
       .rpc();
 
@@ -120,7 +120,7 @@ describe("Roles", () => {
 
     try {
       await program.methods
-        .updateRoles(0, unauthorizedUser.publicKey, true)
+        .assignRole(0, unauthorizedUser.publicKey)
         .accountsStrict({
           authority: unauthorizedUser.publicKey,
           config: configPda,
@@ -143,7 +143,7 @@ describe("Roles", () => {
 
     try {
       await program.methods
-        .updateRoles(3, authority.publicKey, true)
+        .assignRole(3, authority.publicKey)
         .accountsStrict({
           authority: authority.publicKey,
           config: configPda,
@@ -168,7 +168,7 @@ describe("Roles", () => {
         program.programId
       );
       await program.methods
-        .updateRoles(1, user.publicKey, true)
+        .assignRole(1, user.publicKey)
         .accountsStrict({
           authority: authority.publicKey,
           config: configPda,
@@ -202,6 +202,7 @@ describe("Roles", () => {
         defaultAccountFrozen: false,
         enableConfidentialTransfer: false,
         transferHookProgramId: hookProgram.programId,
+        supplyCap: new anchor.BN(0),
       })
       .accountsStrict({
         authority: authority.publicKey,
@@ -222,7 +223,7 @@ describe("Roles", () => {
         program.programId
       );
       await program.methods
-        .updateRoles(roleType, authority.publicKey, true)
+        .assignRole(roleType, authority.publicKey)
         .accountsStrict({
           authority: authority.publicKey,
           config: sss2Config,

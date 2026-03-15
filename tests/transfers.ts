@@ -109,6 +109,7 @@ describe("SSS-1: Token Transfers", () => {
         defaultAccountFrozen: false,
         enableConfidentialTransfer: false,
         transferHookProgramId: null,
+        supplyCap: new anchor.BN(0),
       })
       .accountsStrict({
         authority: authority.publicKey,
@@ -124,7 +125,7 @@ describe("SSS-1: Token Transfers", () => {
 
     // Assign Minter role
     await program.methods
-      .updateRoles(ROLE_MINTER, authority.publicKey, true)
+      .assignRole(ROLE_MINTER, authority.publicKey)
       .accountsStrict({
         authority: authority.publicKey,
         config: configPda,
@@ -135,7 +136,7 @@ describe("SSS-1: Token Transfers", () => {
 
     // Assign Pauser role (needed for freeze/thaw)
     await program.methods
-      .updateRoles(ROLE_PAUSER, authority.publicKey, true)
+      .assignRole(ROLE_PAUSER, authority.publicKey)
       .accountsStrict({
         authority: authority.publicKey,
         config: configPda,
@@ -401,6 +402,7 @@ describe("SSS-2: Transfer Hook Enforcement", () => {
         defaultAccountFrozen: false,
         enableConfidentialTransfer: false,
         transferHookProgramId: hookProgram.programId,
+        supplyCap: new anchor.BN(0),
       })
       .accountsStrict({
         authority: authority.publicKey,
@@ -437,7 +439,7 @@ describe("SSS-2: Transfer Hook Enforcement", () => {
         program.programId
       );
       await program.methods
-        .updateRoles(roleType, authority.publicKey, true)
+        .assignRole(roleType, authority.publicKey)
         .accountsStrict({
           authority: authority.publicKey,
           config: configPda,

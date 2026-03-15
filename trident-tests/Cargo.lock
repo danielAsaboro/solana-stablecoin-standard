@@ -2827,6 +2827,7 @@ dependencies = [
  "anchor-spl",
  "blake3",
  "constant_time_eq",
+ "solana-security-txt",
  "spl-pod 0.4.0",
  "spl-token-2022",
  "spl-token-metadata-interface 0.5.1",

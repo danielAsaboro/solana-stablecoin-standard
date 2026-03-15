@@ -70,6 +70,7 @@ describe("Multi-Minter", () => {
         defaultAccountFrozen: false,
         enableConfidentialTransfer: false,
         transferHookProgramId: null,
+        supplyCap: new anchor.BN(0),
       })
       .accountsStrict({
         authority: authority.publicKey,
@@ -90,7 +91,7 @@ describe("Multi-Minter", () => {
         program.programId
       );
       await program.methods
-        .updateRoles(0, minter.publicKey, true)
+        .assignRole(0, minter.publicKey)
         .accountsStrict({
           authority: authority.publicKey,
           config: configPda,

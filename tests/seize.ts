@@ -77,6 +77,7 @@ describe("Seize", () => {
         defaultAccountFrozen: false,
         enableConfidentialTransfer: false,
         transferHookProgramId: hookProgram.programId,
+        supplyCap: new anchor.BN(0),
       })
       .accountsStrict({
         authority: authority.publicKey,
@@ -113,7 +114,7 @@ describe("Seize", () => {
         program.programId
       );
       await program.methods
-        .updateRoles(roleType, authority.publicKey, true)
+        .assignRole(roleType, authority.publicKey)
         .accountsStrict({
           authority: authority.publicKey,
           config: configPda,

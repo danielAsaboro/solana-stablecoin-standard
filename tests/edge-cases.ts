@@ -68,6 +68,7 @@ describe("Edge Cases: SSS-1", () => {
         defaultAccountFrozen: false,
         enableConfidentialTransfer: false,
         transferHookProgramId: null,
+        supplyCap: new anchor.BN(0),
       })
       .accountsStrict({
         authority: authority.publicKey,
@@ -87,7 +88,7 @@ describe("Edge Cases: SSS-1", () => {
       program.programId
     );
     await program.methods
-      .updateRoles(ROLE_MINTER, authority.publicKey, true)
+      .assignRole(ROLE_MINTER, authority.publicKey)
       .accountsStrict({
         authority: authority.publicKey,
         config: configPda,
@@ -102,7 +103,7 @@ describe("Edge Cases: SSS-1", () => {
       program.programId
     );
     await program.methods
-      .updateRoles(ROLE_BURNER, authority.publicKey, true)
+      .assignRole(ROLE_BURNER, authority.publicKey)
       .accountsStrict({
         authority: authority.publicKey,
         config: configPda,
@@ -117,7 +118,7 @@ describe("Edge Cases: SSS-1", () => {
       program.programId
     );
     await program.methods
-      .updateRoles(ROLE_PAUSER, authority.publicKey, true)
+      .assignRole(ROLE_PAUSER, authority.publicKey)
       .accountsStrict({
         authority: authority.publicKey,
         config: configPda,
@@ -184,6 +185,7 @@ describe("Edge Cases: SSS-1", () => {
             defaultAccountFrozen: false,
             enableConfidentialTransfer: false,
             transferHookProgramId: null,
+            supplyCap: new anchor.BN(0),
           })
           .accountsStrict({
             authority: authority.publicKey,
@@ -220,6 +222,7 @@ describe("Edge Cases: SSS-1", () => {
             defaultAccountFrozen: false,
             enableConfidentialTransfer: false,
             transferHookProgramId: null,
+            supplyCap: new anchor.BN(0),
           })
           .accountsStrict({
             authority: authority.publicKey,
@@ -256,6 +259,7 @@ describe("Edge Cases: SSS-1", () => {
             defaultAccountFrozen: false,
             enableConfidentialTransfer: false,
             transferHookProgramId: null,
+            supplyCap: new anchor.BN(0),
           })
           .accountsStrict({
             authority: authority.publicKey,
@@ -469,12 +473,11 @@ describe("Edge Cases: SSS-1", () => {
   describe("Role Self-Revocation", () => {
     it("master authority can self-revoke own minter role", async () => {
       await program.methods
-        .updateRoles(ROLE_MINTER, authority.publicKey, false)
+        .updateRole(ROLE_MINTER, authority.publicKey, false)
         .accountsStrict({
           authority: authority.publicKey,
           config: configPda,
           roleAccount: minterRolePda,
-          systemProgram: SystemProgram.programId,
         })
         .rpc();
 
@@ -505,12 +508,11 @@ describe("Edge Cases: SSS-1", () => {
     after(async () => {
       // Re-activate minter role for any subsequent tests
       await program.methods
-        .updateRoles(ROLE_MINTER, authority.publicKey, true)
+        .updateRole(ROLE_MINTER, authority.publicKey, true)
         .accountsStrict({
           authority: authority.publicKey,
           config: configPda,
           roleAccount: minterRolePda,
-          systemProgram: SystemProgram.programId,
         })
         .rpc();
     });
@@ -527,7 +529,7 @@ describe("Edge Cases: SSS-1", () => {
       );
       try {
         await program.methods
-          .updateRoles(invalidRoleType, authority.publicKey, true)
+          .assignRole(invalidRoleType, authority.publicKey)
           .accountsStrict({
             authority: authority.publicKey,
             config: configPda,
@@ -695,6 +697,7 @@ describe("Edge Cases: SSS-2 Compliance", () => {
         defaultAccountFrozen: false,
         enableConfidentialTransfer: false,
         transferHookProgramId: hookProgram.programId,
+        supplyCap: new anchor.BN(0),
       })
       .accountsStrict({
         authority: authority.publicKey,
@@ -714,7 +717,7 @@ describe("Edge Cases: SSS-2 Compliance", () => {
       program.programId
     );
     await program.methods
-      .updateRoles(ROLE_BLACKLISTER, authority.publicKey, true)
+      .assignRole(ROLE_BLACKLISTER, authority.publicKey)
       .accountsStrict({
         authority: authority.publicKey,
         config: configPda,
@@ -832,5 +835,286 @@ describe("Edge Cases: SSS-2 Compliance", () => {
         expect((err as Error).toString()).to.not.include("Should have thrown");
       }
     });
+  });
+});
+
+// ── Supply Cap Edge Cases ─────────────────────────────────────────────────────
+
+describe("Edge Cases: Supply Cap", () => {
+  const _env = anchor.AnchorProvider.env();
+  const provider = new anchor.AnchorProvider(
+    new anchor.web3.Connection(_env.connection.rpcEndpoint, "confirmed"),
+    _env.wallet,
+    { commitment: "confirmed", preflightCommitment: "confirmed" }
+  );
+  anchor.setProvider(provider);
+  const program = anchor.workspace.Sss as Program<Sss>;
+  const authority = provider.wallet;
+
+  // ── Capped stablecoin (supply_cap = 1000) ───────────────────────────────
+
+  let cappedMintKeypair: Keypair;
+  let cappedMintKey: PublicKey;
+  let cappedConfigPda: PublicKey;
+  let cappedMinterRolePda: PublicKey;
+  let cappedBurnerRolePda: PublicKey;
+  let cappedMinterQuotaPda: PublicKey;
+  let cappedAuthorityAta: PublicKey;
+
+  before(async () => {
+    cappedMintKeypair = Keypair.generate();
+    cappedMintKey = cappedMintKeypair.publicKey;
+    [cappedConfigPda] = PublicKey.findProgramAddressSync(
+      [STABLECOIN_SEED, cappedMintKey.toBuffer()],
+      program.programId
+    );
+
+    await program.methods
+      .initialize({
+        name: "Capped Token",
+        symbol: "CAP",
+        uri: "https://test.com",
+        decimals: 6,
+        enablePermanentDelegate: false,
+        enableTransferHook: false,
+        defaultAccountFrozen: false,
+        enableConfidentialTransfer: false,
+        transferHookProgramId: null,
+        supplyCap: new anchor.BN(1000),
+      })
+      .accountsStrict({
+        authority: authority.publicKey,
+        config: cappedConfigPda,
+        mint: cappedMintKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        rent: SYSVAR_RENT_PUBKEY,
+      })
+      .signers([cappedMintKeypair])
+      .rpc();
+
+    // Assign minter role
+    [cappedMinterRolePda] = PublicKey.findProgramAddressSync(
+      [ROLE_SEED, cappedConfigPda.toBuffer(), Buffer.from([ROLE_MINTER]), authority.publicKey.toBuffer()],
+      program.programId
+    );
+    await program.methods
+      .assignRole(ROLE_MINTER, authority.publicKey)
+      .accountsStrict({
+        authority: authority.publicKey,
+        config: cappedConfigPda,
+        roleAccount: cappedMinterRolePda,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    // Assign burner role
+    [cappedBurnerRolePda] = PublicKey.findProgramAddressSync(
+      [ROLE_SEED, cappedConfigPda.toBuffer(), Buffer.from([ROLE_BURNER]), authority.publicKey.toBuffer()],
+      program.programId
+    );
+    await program.methods
+      .assignRole(ROLE_BURNER, authority.publicKey)
+      .accountsStrict({
+        authority: authority.publicKey,
+        config: cappedConfigPda,
+        roleAccount: cappedBurnerRolePda,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    // Set minter quota to 10_000 (well above the 1000 supply cap)
+    [cappedMinterQuotaPda] = PublicKey.findProgramAddressSync(
+      [MINTER_QUOTA_SEED, cappedConfigPda.toBuffer(), authority.publicKey.toBuffer()],
+      program.programId
+    );
+    await program.methods
+      .updateMinter(authority.publicKey, new anchor.BN(10_000))
+      .accountsStrict({
+        authority: authority.publicKey,
+        config: cappedConfigPda,
+        minterQuota: cappedMinterQuotaPda,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    // Create authority's ATA for the capped mint
+    cappedAuthorityAta = getAssociatedTokenAddressSync(
+      cappedMintKey, authority.publicKey, false, TOKEN_2022_PROGRAM_ID
+    );
+    const tx = new anchor.web3.Transaction().add(
+      createAssociatedTokenAccountInstruction(
+        authority.publicKey, cappedAuthorityAta, authority.publicKey,
+        cappedMintKey, TOKEN_2022_PROGRAM_ID
+      )
+    );
+    await provider.sendAndConfirm(tx);
+  });
+
+  it("mint exactly at supply cap succeeds", async () => {
+    await program.methods
+      .mintTokens(new anchor.BN(1000))
+      .accountsStrict({
+        minter: authority.publicKey,
+        config: cappedConfigPda,
+        roleAccount: cappedMinterRolePda,
+        minterQuota: cappedMinterQuotaPda,
+        mint: cappedMintKey,
+        recipientTokenAccount: cappedAuthorityAta,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+
+    const config = await program.account.stablecoinConfig.fetch(cappedConfigPda);
+    expect(config.totalMinted.toNumber()).to.equal(1000);
+  });
+
+  it("mint 1 beyond supply cap fails", async () => {
+    try {
+      await program.methods
+        .mintTokens(new anchor.BN(1))
+        .accountsStrict({
+          minter: authority.publicKey,
+          config: cappedConfigPda,
+          roleAccount: cappedMinterRolePda,
+          minterQuota: cappedMinterQuotaPda,
+          mint: cappedMintKey,
+          recipientTokenAccount: cappedAuthorityAta,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
+      expect.fail("Should have thrown");
+    } catch (err: unknown) {
+      expect((err as Error).toString()).to.include("SupplyCapExceeded");
+    }
+  });
+
+  it("burn does not free supply cap space", async () => {
+    // Burn 500 tokens
+    await program.methods
+      .burnTokens(new anchor.BN(500))
+      .accountsStrict({
+        burner: authority.publicKey,
+        config: cappedConfigPda,
+        roleAccount: cappedBurnerRolePda,
+        mint: cappedMintKey,
+        fromTokenAccount: cappedAuthorityAta,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+
+    // total_minted is still 1000 despite burn, so minting 1 more should fail
+    try {
+      await program.methods
+        .mintTokens(new anchor.BN(1))
+        .accountsStrict({
+          minter: authority.publicKey,
+          config: cappedConfigPda,
+          roleAccount: cappedMinterRolePda,
+          minterQuota: cappedMinterQuotaPda,
+          mint: cappedMintKey,
+          recipientTokenAccount: cappedAuthorityAta,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
+      expect.fail("Should have thrown");
+    } catch (err: unknown) {
+      expect((err as Error).toString()).to.include("SupplyCapExceeded");
+    }
+  });
+
+  it("supply cap zero means unlimited", async () => {
+    // Initialize a separate stablecoin with supply_cap = 0 (unlimited)
+    const unlimitedMintKeypair = Keypair.generate();
+    const unlimitedMintKey = unlimitedMintKeypair.publicKey;
+    const [unlimitedConfigPda] = PublicKey.findProgramAddressSync(
+      [STABLECOIN_SEED, unlimitedMintKey.toBuffer()],
+      program.programId
+    );
+
+    await program.methods
+      .initialize({
+        name: "Unlimited Token",
+        symbol: "UNLIM",
+        uri: "https://test.com",
+        decimals: 6,
+        enablePermanentDelegate: false,
+        enableTransferHook: false,
+        defaultAccountFrozen: false,
+        enableConfidentialTransfer: false,
+        transferHookProgramId: null,
+        supplyCap: new anchor.BN(0),
+      })
+      .accountsStrict({
+        authority: authority.publicKey,
+        config: unlimitedConfigPda,
+        mint: unlimitedMintKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        rent: SYSVAR_RENT_PUBKEY,
+      })
+      .signers([unlimitedMintKeypair])
+      .rpc();
+
+    // Assign minter role
+    const [unlimitedMinterRolePda] = PublicKey.findProgramAddressSync(
+      [ROLE_SEED, unlimitedConfigPda.toBuffer(), Buffer.from([ROLE_MINTER]), authority.publicKey.toBuffer()],
+      program.programId
+    );
+    await program.methods
+      .assignRole(ROLE_MINTER, authority.publicKey)
+      .accountsStrict({
+        authority: authority.publicKey,
+        config: unlimitedConfigPda,
+        roleAccount: unlimitedMinterRolePda,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    // Set minter quota large enough
+    const [unlimitedMinterQuotaPda] = PublicKey.findProgramAddressSync(
+      [MINTER_QUOTA_SEED, unlimitedConfigPda.toBuffer(), authority.publicKey.toBuffer()],
+      program.programId
+    );
+    await program.methods
+      .updateMinter(authority.publicKey, new anchor.BN("2000000000"))
+      .accountsStrict({
+        authority: authority.publicKey,
+        config: unlimitedConfigPda,
+        minterQuota: unlimitedMinterQuotaPda,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    // Create ATA
+    const unlimitedAta = getAssociatedTokenAddressSync(
+      unlimitedMintKey, authority.publicKey, false, TOKEN_2022_PROGRAM_ID
+    );
+    const tx = new anchor.web3.Transaction().add(
+      createAssociatedTokenAccountInstruction(
+        authority.publicKey, unlimitedAta, authority.publicKey,
+        unlimitedMintKey, TOKEN_2022_PROGRAM_ID
+      )
+    );
+    await provider.sendAndConfirm(tx);
+
+    // Mint 1_000_000_000 (1 billion base units) — should succeed with no cap
+    await program.methods
+      .mintTokens(new anchor.BN(1_000_000_000))
+      .accountsStrict({
+        minter: authority.publicKey,
+        config: unlimitedConfigPda,
+        roleAccount: unlimitedMinterRolePda,
+        minterQuota: unlimitedMinterQuotaPda,
+        mint: unlimitedMintKey,
+        recipientTokenAccount: unlimitedAta,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+
+    const config = await program.account.stablecoinConfig.fetch(unlimitedConfigPda);
+    expect(config.totalMinted.toNumber()).to.equal(1_000_000_000);
   });
 });

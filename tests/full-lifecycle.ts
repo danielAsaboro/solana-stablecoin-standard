@@ -158,6 +158,7 @@ describe("Full Lifecycle: SSS-2 Compliant Stablecoin", () => {
         defaultAccountFrozen: false,
         enableConfidentialTransfer: false,
         transferHookProgramId: hookProgram.programId,
+        supplyCap: new anchor.BN(0),
       })
       .accountsStrict({
         authority: authority.publicKey,
@@ -191,7 +192,7 @@ describe("Full Lifecycle: SSS-2 Compliant Stablecoin", () => {
       [ROLE_SEIZER, seizerRolePda],
     ] as [number, PublicKey][]) {
       await program.methods
-        .updateRoles(roleType, authority.publicKey, true)
+        .assignRole(roleType, authority.publicKey)
         .accountsStrict({
           authority: authority.publicKey,
           config: configPda,

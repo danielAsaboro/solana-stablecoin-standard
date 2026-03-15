@@ -80,7 +80,7 @@ function deriveMinterQuotaPda(
 //
 // Tests the full lifecycle of transferring master authority to a new keypair,
 // verifying the security model:
-//   - Master authority controls: update_roles, update_minter, transfer_authority
+//   - Master authority controls: assign_role, update_role, update_minter, transfer_authority
 //   - Role-based operations: mint, burn, freeze, thaw, pause, unpause
 //   - Roles persist after authority transfer until explicitly revoked
 //   - Chain transfer: A → B → C → A proves the mechanism is repeatable
@@ -138,6 +138,7 @@ describe("Authority Rotation: SSS-1 Lifecycle", () => {
         defaultAccountFrozen: false,
         enableConfidentialTransfer: false,
         transferHookProgramId: null,
+        supplyCap: new anchor.BN(0),
       })
       .accountsStrict({
         authority: originalAuthority.publicKey,
@@ -155,7 +156,7 @@ describe("Authority Rotation: SSS-1 Lifecycle", () => {
     for (const roleType of [ROLE_MINTER, ROLE_BURNER, ROLE_PAUSER]) {
       const rolePda = deriveRolePda(configPda, roleType, originalAuthority.publicKey, program.programId);
       await program.methods
-        .updateRoles(roleType, originalAuthority.publicKey, true)
+        .assignRole(roleType, originalAuthority.publicKey)
         .accountsStrict({
           authority: originalAuthority.publicKey,
           config: configPda,
@@ -229,12 +230,12 @@ describe("Authority Rotation: SSS-1 Lifecycle", () => {
   // ── Stage 2: Old authority blocked from admin operations ──────────────────
 
   describe("Stage 2: Old authority loses admin (master-authority) privileges", () => {
-    it("old authority cannot update roles", async () => {
+    it("old authority cannot assign roles", async () => {
       const dummyUser = Keypair.generate();
       const dummyRolePda = deriveRolePda(configPda, ROLE_MINTER, dummyUser.publicKey, program.programId);
       try {
         await program.methods
-          .updateRoles(ROLE_MINTER, dummyUser.publicKey, true)
+          .assignRole(ROLE_MINTER, dummyUser.publicKey)
           .accountsStrict({
             authority: originalAuthority.publicKey,
             config: configPda,
@@ -361,12 +362,11 @@ describe("Authority Rotation: SSS-1 Lifecycle", () => {
   describe("Stage 4: New authority revokes old roles — old authority fully blocked", () => {
     it("new authority revokes old authority's minter role", async () => {
       await program.methods
-        .updateRoles(ROLE_MINTER, originalAuthority.publicKey, false)
+        .updateRole(ROLE_MINTER, originalAuthority.publicKey, false)
         .accountsStrict({
           authority: newAuthority.publicKey,
           config: configPda,
           roleAccount: originalMinterRolePda,
-          systemProgram: SystemProgram.programId,
         })
         .signers([newAuthority])
         .rpc({ commitment: "confirmed" });
@@ -377,12 +377,11 @@ describe("Authority Rotation: SSS-1 Lifecycle", () => {
 
     it("new authority revokes old authority's burner role", async () => {
       await program.methods
-        .updateRoles(ROLE_BURNER, originalAuthority.publicKey, false)
+        .updateRole(ROLE_BURNER, originalAuthority.publicKey, false)
         .accountsStrict({
           authority: newAuthority.publicKey,
           config: configPda,
           roleAccount: originalBurnerRolePda,
-          systemProgram: SystemProgram.programId,
         })
         .signers([newAuthority])
         .rpc({ commitment: "confirmed" });
@@ -393,12 +392,11 @@ describe("Authority Rotation: SSS-1 Lifecycle", () => {
 
     it("new authority revokes old authority's pauser role", async () => {
       await program.methods
-        .updateRoles(ROLE_PAUSER, originalAuthority.publicKey, false)
+        .updateRole(ROLE_PAUSER, originalAuthority.publicKey, false)
         .accountsStrict({
           authority: newAuthority.publicKey,
           config: configPda,
           roleAccount: originalPauserRolePda,
-          systemProgram: SystemProgram.programId,
         })
         .signers([newAuthority])
         .rpc({ commitment: "confirmed" });
@@ -476,7 +474,7 @@ describe("Authority Rotation: SSS-1 Lifecycle", () => {
       for (const roleType of [ROLE_MINTER, ROLE_BURNER, ROLE_PAUSER]) {
         const rolePda = deriveRolePda(configPda, roleType, newAuthority.publicKey, program.programId);
         await program.methods
-          .updateRoles(roleType, newAuthority.publicKey, true)
+          .assignRole(roleType, newAuthority.publicKey)
           .accountsStrict({
             authority: newAuthority.publicKey,
             config: configPda,
@@ -644,7 +642,7 @@ describe("Authority Rotation: SSS-1 Lifecycle", () => {
       const dummyRolePda = deriveRolePda(configPda, ROLE_MINTER, dummyUser.publicKey, program.programId);
       try {
         await program.methods
-          .updateRoles(ROLE_MINTER, dummyUser.publicKey, true)
+          .assignRole(ROLE_MINTER, dummyUser.publicKey)
           .accountsStrict({
             authority: newAuthority.publicKey,
             config: configPda,
@@ -662,7 +660,7 @@ describe("Authority Rotation: SSS-1 Lifecycle", () => {
     it("third authority can grant roles and update quotas", async () => {
       const thirdMinterRole = deriveRolePda(configPda, ROLE_MINTER, thirdAuthority.publicKey, program.programId);
       await program.methods
-        .updateRoles(ROLE_MINTER, thirdAuthority.publicKey, true)
+        .assignRole(ROLE_MINTER, thirdAuthority.publicKey)
         .accountsStrict({
           authority: thirdAuthority.publicKey,
           config: configPda,
@@ -759,6 +757,7 @@ describe("Authority Rotation: SSS-2 Compliance", () => {
         defaultAccountFrozen: false,
         enableConfidentialTransfer: false,
         transferHookProgramId: hookProgram.programId,
+        supplyCap: new anchor.BN(0),
       })
       .accountsStrict({
         authority: originalAuthority.publicKey,
@@ -776,7 +775,7 @@ describe("Authority Rotation: SSS-2 Compliance", () => {
     for (const roleType of [ROLE_MINTER, ROLE_BURNER, ROLE_PAUSER, ROLE_BLACKLISTER, ROLE_SEIZER]) {
       const rolePda = deriveRolePda(configPda, roleType, originalAuthority.publicKey, program.programId);
       await program.methods
-        .updateRoles(roleType, originalAuthority.publicKey, true)
+        .assignRole(roleType, originalAuthority.publicKey)
         .accountsStrict({
           authority: originalAuthority.publicKey,
           config: configPda,
@@ -879,7 +878,7 @@ describe("Authority Rotation: SSS-2 Compliance", () => {
     it("new authority can assign blacklister role to itself", async () => {
       const newBlacklisterRole = deriveRolePda(configPda, ROLE_BLACKLISTER, newAuthority.publicKey, program.programId);
       await program.methods
-        .updateRoles(ROLE_BLACKLISTER, newAuthority.publicKey, true)
+        .assignRole(ROLE_BLACKLISTER, newAuthority.publicKey)
         .accountsStrict({
           authority: newAuthority.publicKey,
           config: configPda,
@@ -921,7 +920,7 @@ describe("Authority Rotation: SSS-2 Compliance", () => {
     it("new authority can seize tokens via permanent delegate", async () => {
       const newSeizerRole = deriveRolePda(configPda, ROLE_SEIZER, newAuthority.publicKey, program.programId);
       await program.methods
-        .updateRoles(ROLE_SEIZER, newAuthority.publicKey, true)
+        .assignRole(ROLE_SEIZER, newAuthority.publicKey)
         .accountsStrict({
           authority: newAuthority.publicKey,
           config: configPda,
@@ -1023,7 +1022,7 @@ describe("Authority Rotation: SSS-2 Compliance", () => {
       const dummyBlacklisterRole = deriveRolePda(configPda, ROLE_BLACKLISTER, dummyUser.publicKey, program.programId);
       try {
         await program.methods
-          .updateRoles(ROLE_BLACKLISTER, dummyUser.publicKey, true)
+          .assignRole(ROLE_BLACKLISTER, dummyUser.publicKey)
           .accountsStrict({
             authority: originalAuthority.publicKey,
             config: configPda,
@@ -1036,5 +1035,300 @@ describe("Authority Rotation: SSS-2 Compliance", () => {
         expect((err as Error).toString()).to.include("InvalidAuthority");
       }
     });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Two-Step Authority Transfer: Sad Paths
+//
+// Tests the two-step (propose → accept) authority transfer pattern, covering
+// both happy paths (propose+accept, propose+cancel) and sad paths:
+//   - Wrong signer trying to accept
+//   - Accept with no pending proposal
+//   - Propose to self
+//   - Duplicate proposal while one is pending
+//   - Non-authority propose / cancel attempts
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe("Two-Step Authority Transfer: Sad Paths", () => {
+  const _env = anchor.AnchorProvider.env();
+  const provider = new anchor.AnchorProvider(
+    new anchor.web3.Connection(_env.connection.rpcEndpoint, "confirmed"),
+    _env.wallet,
+    { commitment: "confirmed", preflightCommitment: "confirmed" }
+  );
+  anchor.setProvider(provider);
+  const program = anchor.workspace.Sss as Program<Sss>;
+  const authority = provider.wallet;
+
+  const newAuth = Keypair.generate();
+  const impostor = Keypair.generate();
+
+  let mintKeypair: Keypair;
+  let mintKey: PublicKey;
+  let configPda: PublicKey;
+
+  before(async () => {
+    await fundAccount(provider, newAuth.publicKey, 2_000_000_000);
+    await fundAccount(provider, impostor.publicKey, 2_000_000_000);
+
+    mintKeypair = Keypair.generate();
+    mintKey = mintKeypair.publicKey;
+    [configPda] = PublicKey.findProgramAddressSync(
+      [STABLECOIN_SEED, mintKey.toBuffer()],
+      program.programId
+    );
+
+    await program.methods
+      .initialize({
+        name: "Two-Step Test",
+        symbol: "TST",
+        uri: "https://test.com",
+        decimals: 6,
+        enablePermanentDelegate: false,
+        enableTransferHook: false,
+        defaultAccountFrozen: false,
+        enableConfidentialTransfer: false,
+        transferHookProgramId: null,
+        supplyCap: new anchor.BN(0),
+      })
+      .accountsStrict({
+        authority: authority.publicKey,
+        config: configPda,
+        mint: mintKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        rent: SYSVAR_RENT_PUBKEY,
+      })
+      .signers([mintKeypair])
+      .rpc({ commitment: "confirmed" });
+  });
+
+  // ── Happy path: propose → accept ──────────────────────────────────────────
+
+  it("propose → accept happy path", async () => {
+    await program.methods
+      .proposeAuthorityTransfer(newAuth.publicKey)
+      .accountsStrict({
+        authority: authority.publicKey,
+        config: configPda,
+      })
+      .rpc({ commitment: "confirmed" });
+
+    let config = await program.account.stablecoinConfig.fetch(configPda);
+    expect(config.pendingAuthority.toBase58()).to.equal(newAuth.publicKey.toBase58());
+
+    await program.methods
+      .acceptAuthorityTransfer()
+      .accountsStrict({
+        newAuthority: newAuth.publicKey,
+        config: configPda,
+      })
+      .signers([newAuth])
+      .rpc({ commitment: "confirmed" });
+
+    config = await program.account.stablecoinConfig.fetch(configPda);
+    expect(config.masterAuthority.toBase58()).to.equal(newAuth.publicKey.toBase58());
+    expect(config.pendingAuthority.toBase58()).to.equal(PublicKey.default.toBase58());
+
+    // Transfer back so remaining tests use the original authority
+    await program.methods
+      .transferAuthority(authority.publicKey)
+      .accountsStrict({
+        authority: newAuth.publicKey,
+        config: configPda,
+      })
+      .signers([newAuth])
+      .rpc({ commitment: "confirmed" });
+
+    config = await program.account.stablecoinConfig.fetch(configPda);
+    expect(config.masterAuthority.toBase58()).to.equal(authority.publicKey.toBase58());
+  });
+
+  // ── Happy path: propose → cancel ──────────────────────────────────────────
+
+  it("cancel happy path", async () => {
+    await program.methods
+      .proposeAuthorityTransfer(newAuth.publicKey)
+      .accountsStrict({
+        authority: authority.publicKey,
+        config: configPda,
+      })
+      .rpc({ commitment: "confirmed" });
+
+    let config = await program.account.stablecoinConfig.fetch(configPda);
+    expect(config.pendingAuthority.toBase58()).to.equal(newAuth.publicKey.toBase58());
+
+    await program.methods
+      .cancelAuthorityTransfer()
+      .accountsStrict({
+        authority: authority.publicKey,
+        config: configPda,
+      })
+      .rpc({ commitment: "confirmed" });
+
+    config = await program.account.stablecoinConfig.fetch(configPda);
+    expect(config.pendingAuthority.toBase58()).to.equal(PublicKey.default.toBase58());
+  });
+
+  // ── Sad path: wrong signer cannot accept ──────────────────────────────────
+
+  it("wrong signer cannot accept", async () => {
+    await program.methods
+      .proposeAuthorityTransfer(newAuth.publicKey)
+      .accountsStrict({
+        authority: authority.publicKey,
+        config: configPda,
+      })
+      .rpc({ commitment: "confirmed" });
+
+    try {
+      await program.methods
+        .acceptAuthorityTransfer()
+        .accountsStrict({
+          newAuthority: impostor.publicKey,
+          config: configPda,
+        })
+        .signers([impostor])
+        .rpc();
+      expect.fail("Should have thrown — impostor is not the pending authority");
+    } catch (err: unknown) {
+      expect((err as Error).toString()).to.include("InvalidPendingAuthority");
+    }
+
+    // Clean up: cancel the pending proposal
+    await program.methods
+      .cancelAuthorityTransfer()
+      .accountsStrict({
+        authority: authority.publicKey,
+        config: configPda,
+      })
+      .rpc({ commitment: "confirmed" });
+  });
+
+  // ── Sad path: accept with no pending proposal ─────────────────────────────
+
+  it("accept with no pending proposal fails", async () => {
+    try {
+      await program.methods
+        .acceptAuthorityTransfer()
+        .accountsStrict({
+          newAuthority: newAuth.publicKey,
+          config: configPda,
+        })
+        .signers([newAuth])
+        .rpc();
+      expect.fail("Should have thrown — no pending transfer exists");
+    } catch (err: unknown) {
+      expect((err as Error).toString()).to.include("NoPendingTransfer");
+    }
+  });
+
+  // ── Sad path: propose to self ─────────────────────────────────────────────
+
+  it("propose to self fails", async () => {
+    try {
+      await program.methods
+        .proposeAuthorityTransfer(authority.publicKey)
+        .accountsStrict({
+          authority: authority.publicKey,
+          config: configPda,
+        })
+        .rpc();
+      expect.fail("Should have thrown — cannot propose transfer to self");
+    } catch (err: unknown) {
+      expect((err as Error).toString()).to.include("SameAuthority");
+    }
+  });
+
+  // ── Sad path: propose while another proposal pending ──────────────────────
+
+  it("propose while another proposal pending fails", async () => {
+    const secondCandidate = Keypair.generate();
+    await fundAccount(provider, secondCandidate.publicKey, 1_000_000_000);
+
+    await program.methods
+      .proposeAuthorityTransfer(newAuth.publicKey)
+      .accountsStrict({
+        authority: authority.publicKey,
+        config: configPda,
+      })
+      .rpc({ commitment: "confirmed" });
+
+    try {
+      await program.methods
+        .proposeAuthorityTransfer(secondCandidate.publicKey)
+        .accountsStrict({
+          authority: authority.publicKey,
+          config: configPda,
+        })
+        .rpc();
+      expect.fail("Should have thrown — a proposal is already pending");
+    } catch (err: unknown) {
+      expect((err as Error).toString()).to.include("PendingTransferExists");
+    }
+
+    // Clean up: cancel the pending proposal
+    await program.methods
+      .cancelAuthorityTransfer()
+      .accountsStrict({
+        authority: authority.publicKey,
+        config: configPda,
+      })
+      .rpc({ commitment: "confirmed" });
+  });
+
+  // ── Sad path: non-authority cannot propose ────────────────────────────────
+
+  it("non-authority cannot propose", async () => {
+    try {
+      await program.methods
+        .proposeAuthorityTransfer(impostor.publicKey)
+        .accountsStrict({
+          authority: impostor.publicKey,
+          config: configPda,
+        })
+        .signers([impostor])
+        .rpc();
+      expect.fail("Should have thrown — impostor is not the master authority");
+    } catch (err: unknown) {
+      expect((err as Error).toString()).to.include("InvalidAuthority");
+    }
+  });
+
+  // ── Sad path: non-authority cannot cancel ─────────────────────────────────
+
+  it("non-authority cannot cancel", async () => {
+    await program.methods
+      .proposeAuthorityTransfer(newAuth.publicKey)
+      .accountsStrict({
+        authority: authority.publicKey,
+        config: configPda,
+      })
+      .rpc({ commitment: "confirmed" });
+
+    try {
+      await program.methods
+        .cancelAuthorityTransfer()
+        .accountsStrict({
+          authority: impostor.publicKey,
+          config: configPda,
+        })
+        .signers([impostor])
+        .rpc();
+      expect.fail("Should have thrown — impostor is not the master authority");
+    } catch (err: unknown) {
+      expect((err as Error).toString()).to.include("InvalidAuthority");
+    }
+
+    // Clean up: cancel with the real authority
+    await program.methods
+      .cancelAuthorityTransfer()
+      .accountsStrict({
+        authority: authority.publicKey,
+        config: configPda,
+      })
+      .rpc({ commitment: "confirmed" });
   });
 });

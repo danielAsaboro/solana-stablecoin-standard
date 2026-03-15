@@ -95,6 +95,7 @@ describe("SSS-1: Minimal Stablecoin Lifecycle", () => {
         defaultAccountFrozen: false,
         enableConfidentialTransfer: false,
         transferHookProgramId: null,
+        supplyCap: new anchor.BN(0),
       };
 
       await program.methods
@@ -125,7 +126,7 @@ describe("SSS-1: Minimal Stablecoin Lifecycle", () => {
   describe("Roles", () => {
     it("assigns Minter role", async () => {
       await program.methods
-        .updateRoles(ROLE_MINTER, authority.publicKey, true)
+        .assignRole(ROLE_MINTER, authority.publicKey)
         .accountsStrict({
           authority: authority.publicKey,
           config: configPda,
@@ -141,7 +142,7 @@ describe("SSS-1: Minimal Stablecoin Lifecycle", () => {
 
     it("assigns Burner role", async () => {
       await program.methods
-        .updateRoles(ROLE_BURNER, authority.publicKey, true)
+        .assignRole(ROLE_BURNER, authority.publicKey)
         .accountsStrict({
           authority: authority.publicKey,
           config: configPda,
@@ -156,7 +157,7 @@ describe("SSS-1: Minimal Stablecoin Lifecycle", () => {
 
     it("assigns Pauser role", async () => {
       await program.methods
-        .updateRoles(ROLE_PAUSER, authority.publicKey, true)
+        .assignRole(ROLE_PAUSER, authority.publicKey)
         .accountsStrict({
           authority: authority.publicKey,
           config: configPda,
@@ -369,7 +370,7 @@ describe("SSS-1: Minimal Stablecoin Lifecycle", () => {
 
       // Assign the role
       await program.methods
-        .updateRoles(ROLE_MINTER, testUser.publicKey, true)
+        .assignRole(ROLE_MINTER, testUser.publicKey)
         .accountsStrict({
           authority: authority.publicKey,
           config: configPda,
@@ -383,12 +384,11 @@ describe("SSS-1: Minimal Stablecoin Lifecycle", () => {
 
       // Deactivate the role
       await program.methods
-        .updateRoles(ROLE_MINTER, testUser.publicKey, false)
+        .updateRole(ROLE_MINTER, testUser.publicKey, false)
         .accountsStrict({
           authority: authority.publicKey,
           config: configPda,
           roleAccount: testUserMinterRole,
-          systemProgram: SystemProgram.programId,
         })
         .rpc({ commitment: "confirmed" });
 
@@ -419,7 +419,7 @@ describe("SSS-1: Minimal Stablecoin Lifecycle", () => {
 
       // Assign role + quota
       await program.methods
-        .updateRoles(ROLE_MINTER, testUser.publicKey, true)
+        .assignRole(ROLE_MINTER, testUser.publicKey)
         .accountsStrict({
           authority: authority.publicKey,
           config: configPda,
@@ -439,12 +439,11 @@ describe("SSS-1: Minimal Stablecoin Lifecycle", () => {
 
       // Deactivate role
       await program.methods
-        .updateRoles(ROLE_MINTER, testUser.publicKey, false)
+        .updateRole(ROLE_MINTER, testUser.publicKey, false)
         .accountsStrict({
           authority: authority.publicKey,
           config: configPda,
           roleAccount: testUserMinterRole,
-          systemProgram: SystemProgram.programId,
         })
         .rpc({ commitment: "confirmed" });
 

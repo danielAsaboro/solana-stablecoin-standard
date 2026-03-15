@@ -54,10 +54,7 @@ pub mod transfer_hook {
 
     /// Transfer hook handler — invoked by Token-2022 on every transfer_checked.
     /// This is the Anchor instruction that maps to the SPL Transfer Hook execute interface.
-    pub fn transfer_hook_execute(
-        ctx: Context<TransferHookAccounts>,
-        amount: u64,
-    ) -> Result<()> {
+    pub fn transfer_hook_execute(ctx: Context<TransferHookAccounts>, amount: u64) -> Result<()> {
         instructions::transfer_hook::handler(ctx, amount)
     }
 

@@ -13,4 +13,7 @@ pub enum TransferHookError {
 
     #[msg("Invalid extra account metas")]
     InvalidExtraAccountMetas,
+
+    #[msg("Stablecoin is paused — transfers are blocked")]
+    Paused,
 }

@@ -65,7 +65,6 @@ pub fn handler(ctx: Context<InitializeExtraAccountMetaList>) -> Result<()> {
     let extra_account_metas = vec![
         // Index 5: SSS program (external, not a PDA, just a static account key)
         ExtraAccountMeta::new_with_pubkey(&ctx.accounts.sss_program.key(), false, false)?,
-
         // Index 6: StablecoinConfig PDA (read-only)
         // Seeds: ["stablecoin", mint.key()] on sss_program (index 5)
         ExtraAccountMeta::new_external_pda_with_seeds(
@@ -79,7 +78,6 @@ pub fn handler(ctx: Context<InitializeExtraAccountMetaList>) -> Result<()> {
             false, // is_signer
             false, // is_writable
         )?,
-
         // Index 7: Source owner BlacklistEntry PDA (may not exist)
         // Seeds: ["blacklist", config, source_owner] on sss_program
         // source_owner is extracted from the source token account's owner field
@@ -91,15 +89,14 @@ pub fn handler(ctx: Context<InitializeExtraAccountMetaList>) -> Result<()> {
                 },
                 Seed::AccountKey { index: 6 }, // config PDA (extra account index 1 → absolute 6)
                 Seed::AccountData {
-                    account_index: 0,   // source token account (standard index 0)
-                    data_index: 32,    // owner field offset in Token-2022 account data
-                    length: 32,         // pubkey length
+                    account_index: 0, // source token account (standard index 0)
+                    data_index: 32,   // owner field offset in Token-2022 account data
+                    length: 32,       // pubkey length
                 },
             ],
             false,
             false,
         )?,
-
         // Index 8: Destination owner BlacklistEntry PDA (may not exist)
         // Seeds: ["blacklist", config, dest_owner] on sss_program
         ExtraAccountMeta::new_external_pda_with_seeds(
@@ -110,9 +107,9 @@ pub fn handler(ctx: Context<InitializeExtraAccountMetaList>) -> Result<()> {
                 },
                 Seed::AccountKey { index: 6 }, // config PDA
                 Seed::AccountData {
-                    account_index: 2,   // destination token account (standard index 2)
-                    data_index: 32,    // owner field offset
-                    length: 32,         // pubkey length
+                    account_index: 2, // destination token account (standard index 2)
+                    data_index: 32,   // owner field offset
+                    length: 32,       // pubkey length
                 },
             ],
             false,
@@ -126,11 +123,7 @@ pub fn handler(ctx: Context<InitializeExtraAccountMetaList>) -> Result<()> {
     // Create the PDA account
     let mint_key = ctx.accounts.mint.key();
     let bump = ctx.bumps.extra_account_metas;
-    let signer_seeds: &[&[&[u8]]] = &[&[
-        EXTRA_ACCOUNT_METAS_SEED,
-        mint_key.as_ref(),
-        &[bump],
-    ]];
+    let signer_seeds: &[&[&[u8]]] = &[&[EXTRA_ACCOUNT_METAS_SEED, mint_key.as_ref(), &[bump]]];
 
     let rent = Rent::get()?;
     let lamports = rent.minimum_balance(account_size);

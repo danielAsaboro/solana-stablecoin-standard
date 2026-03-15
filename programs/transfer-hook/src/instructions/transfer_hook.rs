@@ -3,6 +3,38 @@ use anchor_lang::solana_program::program_error::ProgramError;
 
 use crate::error::TransferHookError;
 
+/// Read the `paused` flag from a StablecoinConfig account's raw data.
+///
+/// The field sits after three variable-length Borsh strings, so we skip
+/// through discriminator (8) + mint (32) + name + symbol + uri + decimals (1)
+/// + master_authority (32) + four bool flags, where `paused` is the fifth bool.
+fn is_config_paused(config: &AccountInfo) -> Result<bool> {
+    let data = config.try_borrow_data()?;
+    let mut offset: usize = 8 + 32; // discriminator + mint
+
+    // Skip three Borsh strings (4-byte len prefix + content)
+    for _ in 0..3 {
+        if offset + 4 > data.len() {
+            return Err(ProgramError::InvalidAccountData.into());
+        }
+        let len = u32::from_le_bytes(
+            data[offset..offset + 4]
+                .try_into()
+                .map_err(|_| ProgramError::InvalidAccountData)?,
+        ) as usize;
+        offset += 4 + len;
+    }
+
+    // decimals (1) + master_authority (32) + 4 bool flags
+    offset += 1 + 32 + 4;
+
+    if offset >= data.len() {
+        return Err(ProgramError::InvalidAccountData.into());
+    }
+
+    Ok(data[offset] != 0)
+}
+
 /// Transfer hook handler — called by Token-2022 on every transfer_checked.
 /// Checks if either the source owner or destination owner is blacklisted.
 ///
@@ -62,16 +94,24 @@ pub fn handler(ctx: Context<TransferHookAccounts>, _amount: u64) -> Result<()> {
         return Ok(()); // Seizure by permanent delegate - allow
     }
 
+    // Reject transfers when the stablecoin is paused
+    if is_config_paused(&ctx.accounts.config)? {
+        return Err(TransferHookError::Paused.into());
+    }
+
     // If the source blacklist PDA account has data, the source is blacklisted.
     // An empty/uninitialized account means not blacklisted.
     let source_bl = &ctx.accounts.source_blacklist;
-    if !source_bl.data_is_empty() && source_bl.owner != &anchor_lang::solana_program::system_program::ID {
+    if !source_bl.data_is_empty()
+        && source_bl.owner != &anchor_lang::solana_program::system_program::ID
+    {
         return Err(TransferHookError::SourceBlacklisted.into());
     }
 
     // Same check for destination
     let dest_bl = &ctx.accounts.dest_blacklist;
-    if !dest_bl.data_is_empty() && dest_bl.owner != &anchor_lang::solana_program::system_program::ID {
+    if !dest_bl.data_is_empty() && dest_bl.owner != &anchor_lang::solana_program::system_program::ID
+    {
         return Err(TransferHookError::DestinationBlacklisted.into());
     }
 
@@ -110,12 +150,15 @@ pub fn execute_transfer_hook<'info>(
 
     // Check if this is a seizure by the permanent delegate (config PDA).
     // If the owner/delegate is the config PDA, allow the transfer unconditionally.
-    let (expected_config, _) = Pubkey::find_program_address(
-        &[b"stablecoin", mint.key.as_ref()],
-        sss_program.key,
-    );
+    let (expected_config, _) =
+        Pubkey::find_program_address(&[b"stablecoin", mint.key.as_ref()], sss_program.key);
     if owner_delegate.key == &expected_config {
         return Ok(()); // Seizure by permanent delegate - allow
+    }
+
+    let config = &accounts[6];
+    if is_config_paused(config)? {
+        return Err(TransferHookError::Paused.into());
     }
 
     // Check blacklist: if the source blacklist PDA has data and is owned by the

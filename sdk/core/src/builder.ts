@@ -897,21 +897,91 @@ export class PauseBuilder extends OperationBuilder {
 }
 
 // ---------------------------------------------------------------------------
-// UpdateRolesBuilder
+// AssignRoleBuilder
 // ---------------------------------------------------------------------------
 
 /**
- * Fluent builder for role management operations.
+ * Fluent builder for assigning a new role (creates the RoleAccount PDA).
  *
  * @example
  * ```ts
- * await stablecoin.updateRoles(RoleType.Minter, userPubkey)
- *   .activate()
+ * await stablecoin.assignRole(RoleType.Minter, userPubkey)
  *   .by(masterKeypair)
  *   .send(payerKeypair);
  * ```
  */
-export class UpdateRolesBuilder extends OperationBuilder {
+export class AssignRoleBuilder extends OperationBuilder {
+  private readonly _roleType: RoleType;
+  private readonly _user: PublicKey;
+  private _authority?: PublicKey;
+
+  /** @internal */
+  constructor(ctx: BuilderContext, roleType: RoleType, user: PublicKey) {
+    super(ctx);
+    this._roleType = roleType;
+    this._user = user;
+  }
+
+  /** Alias kept for API parity with the old UpdateRolesBuilder. */
+  activate(): this {
+    return this;
+  }
+
+  /**
+   * Set the master authority. Accepts PublicKey or Keypair.
+   * @param authority - The master authority
+   */
+  by(authority: PublicKey | Keypair): this {
+    this._authority = toPublicKey(authority);
+    const kp = collectKeypair(authority);
+    if (kp) this._additionalSigners.push(kp);
+    return this;
+  }
+
+  protected async buildCoreInstructions(): Promise<TransactionInstruction[]> {
+    if (!this._authority) {
+      throw new Error(
+        "AssignRoleBuilder: authority not set. Call .by(authority)"
+      );
+    }
+
+    const [roleAccount] = getRoleAddress(
+      this.ctx.program.programId,
+      this.ctx.configAddress,
+      this._roleType,
+      this._user
+    );
+
+    const ix = await this.ctx.program.methods
+      .assignRole(this._roleType, this._user)
+      .accountsStrict({
+        authority: this._authority,
+        config: this.ctx.configAddress,
+        roleAccount,
+        systemProgram: SystemProgram.programId,
+      })
+      .instruction();
+
+    return [ix];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// UpdateRoleBuilder
+// ---------------------------------------------------------------------------
+
+/**
+ * Fluent builder for updating an existing role (modifies RoleAccount PDA, no systemProgram).
+ *
+ * @example
+ * ```ts
+ * await stablecoin.updateRole(RoleType.Minter, userPubkey)
+ *   .deactivate()
+ *   .by(masterKeypair)
+ *   .send(payerKeypair);
+ * ```
+ */
+export class UpdateRoleBuilder extends OperationBuilder {
   private readonly _roleType: RoleType;
   private readonly _user: PublicKey;
   private _active = true;
@@ -924,13 +994,13 @@ export class UpdateRolesBuilder extends OperationBuilder {
     this._user = user;
   }
 
-  /** Grant the role (default). */
+  /** Set the role to active. */
   activate(): this {
     this._active = true;
     return this;
   }
 
-  /** Revoke the role. */
+  /** Set the role to inactive. */
   deactivate(): this {
     this._active = false;
     return this;
@@ -950,7 +1020,7 @@ export class UpdateRolesBuilder extends OperationBuilder {
   protected async buildCoreInstructions(): Promise<TransactionInstruction[]> {
     if (!this._authority) {
       throw new Error(
-        "UpdateRolesBuilder: authority not set. Call .by(authority)"
+        "UpdateRoleBuilder: authority not set. Call .by(authority)"
       );
     }
 
@@ -962,18 +1032,23 @@ export class UpdateRolesBuilder extends OperationBuilder {
     );
 
     const ix = await this.ctx.program.methods
-      .updateRoles(this._roleType, this._user, this._active)
+      .updateRole(this._roleType, this._user, this._active)
       .accountsStrict({
         authority: this._authority,
         config: this.ctx.configAddress,
         roleAccount,
-        systemProgram: SystemProgram.programId,
       })
       .instruction();
 
     return [ix];
   }
 }
+
+/**
+ * @deprecated Use {@link AssignRoleBuilder} instead.
+ * Kept for backward compatibility.
+ */
+export const UpdateRolesBuilder = AssignRoleBuilder;
 
 // ---------------------------------------------------------------------------
 // UpdateMinterBuilder

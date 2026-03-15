@@ -79,16 +79,14 @@ describeLive("Compliance SDK Live Tests", function () {
     ]);
 
     await sendInstructions(connection, authority, [
-      await stablecoin.updateRoles({
+      await stablecoin.assignRole({
         roleType: RoleType.Minter,
         user: authority.publicKey,
-        active: true,
         authority: authority.publicKey,
       }),
-      await stablecoin.updateRoles({
+      await stablecoin.assignRole({
         roleType: RoleType.Blacklister,
         user: authority.publicKey,
-        active: true,
         authority: authority.publicKey,
       }),
     ]);

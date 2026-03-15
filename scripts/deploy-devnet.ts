@@ -61,6 +61,7 @@ async function main() {
     defaultAccountFrozen: false,
     enableConfidentialTransfer: false,
     transferHookProgramId: null,
+    supplyCap: new anchor.BN(0),
   };
 
   const tx1 = await program.methods
@@ -100,7 +101,7 @@ async function main() {
     );
 
     const roleTx = await program.methods
-      .updateRoles(roleType, authority.publicKey, true)
+      .assignRole(roleType, authority.publicKey)
       .accountsStrict({
         authority: authority.publicKey,
         config: configPda,

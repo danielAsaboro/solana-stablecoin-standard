@@ -150,7 +150,8 @@ export class AuditLog {
       if (log.includes("Instruction: ThawTokenAccount")) return "thaw";
       if (log.includes("Instruction: Pause")) return "pause";
       if (log.includes("Instruction: Unpause")) return "unpause";
-      if (log.includes("Instruction: UpdateRoles")) return "update_roles";
+      if (log.includes("Instruction: AssignRole")) return "assign_role";
+      if (log.includes("Instruction: UpdateRole")) return "update_role";
       if (log.includes("Instruction: UpdateMinter")) return "update_minter";
       if (log.includes("Instruction: TransferAuthority")) return "transfer_authority";
       if (log.includes("Instruction: AddToBlacklist")) return "blacklist_add";

@@ -66,6 +66,7 @@ async function main() {
     defaultAccountFrozen: false,
     enableConfidentialTransfer: false,
     transferHookProgramId: hookProgram.programId,
+    supplyCap: new anchor.BN(0),
   };
 
   const tx1 = await sssProgram.methods
@@ -131,7 +132,7 @@ async function main() {
     );
 
     await sssProgram.methods
-      .updateRoles(roleType, authority.publicKey, true)
+      .assignRole(roleType, authority.publicKey)
       .accountsStrict({
         authority: authority.publicKey,
         config: configPda,

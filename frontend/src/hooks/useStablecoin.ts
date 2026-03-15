@@ -859,20 +859,36 @@ export function useStablecoin(): UseStablecoinResult {
       const userPk = new PublicKey(user);
       const [roleAccount] = getRoleAddress(configAddress, roleType, userPk);
 
-      const ix = await program.methods
-        .updateRoles(roleType, userPk, active)
-        .accountsStrict({
-          authority: wallet.publicKey,
-          config: configAddress,
-          roleAccount,
-          systemProgram: SystemProgram.programId,
-        })
-        .instruction();
+      // Check if the RoleAccount PDA already exists to route correctly
+      const roleAccountInfo = await connection.getAccountInfo(roleAccount);
+      const roleExists = roleAccountInfo !== null;
+
+      let ix;
+      if (roleExists) {
+        ix = await program.methods
+          .updateRole(roleType, userPk, active)
+          .accountsStrict({
+            authority: wallet.publicKey,
+            config: configAddress,
+            roleAccount,
+          })
+          .instruction();
+      } else {
+        ix = await program.methods
+          .assignRole(roleType, userPk)
+          .accountsStrict({
+            authority: wallet.publicKey,
+            config: configAddress,
+            roleAccount,
+            systemProgram: SystemProgram.programId,
+          })
+          .instruction();
+      }
 
       const tx = new Transaction().add(ix);
       return sendTx(tx);
     },
-    [program, configAddress, wallet.publicKey, sendTx]
+    [program, configAddress, wallet.publicKey, sendTx, connection]
   );
 
   // Update minter quota

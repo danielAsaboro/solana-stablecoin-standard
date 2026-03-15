@@ -108,19 +108,36 @@ async function handleRolesUpdate(
 
   const program = await loadSssProgram(provider);
 
+  // Check if the RoleAccount PDA already exists to route to the correct instruction
+  const roleAccountInfo = await connection.getAccountInfo(rolePDA);
+  const roleExists = roleAccountInfo !== null;
+
   const spinner = spin("Sending role update transaction...");
 
   let tx: string;
   try {
-    tx = await program.methods
-      .updateRoles(roleType, userPubkey, active)
-      .accounts({
-        authority: keypair.publicKey,
-        config: configPDA,
-        roleAccount: rolePDA,
-        systemProgram: SystemProgram.programId,
-      })
-      .rpc();
+    if (roleExists) {
+      // RoleAccount already exists — use updateRole (no systemProgram needed)
+      tx = await program.methods
+        .updateRole(roleType, userPubkey, active)
+        .accounts({
+          authority: keypair.publicKey,
+          config: configPDA,
+          roleAccount: rolePDA,
+        })
+        .rpc();
+    } else {
+      // RoleAccount does not exist — use assignRole (needs systemProgram to create PDA)
+      tx = await program.methods
+        .assignRole(roleType, userPubkey)
+        .accounts({
+          authority: keypair.publicKey,
+          config: configPDA,
+          roleAccount: rolePDA,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+    }
   } catch (err) {
     spinner.fail("Role update failed");
     throw err;

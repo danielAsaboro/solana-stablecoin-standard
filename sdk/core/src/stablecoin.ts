@@ -33,6 +33,8 @@ import {
   FreezeParams,
   ThawParams,
   PauseParams,
+  AssignRoleParams,
+  UpdateRoleParams,
   UpdateRolesParams,
   UpdateMinterParams,
   TransferAuthorityParams,
@@ -55,7 +57,8 @@ import {
   FreezeBuilder,
   ThawBuilder,
   PauseBuilder,
-  UpdateRolesBuilder,
+  AssignRoleBuilder,
+  UpdateRoleBuilder,
   UpdateMinterBuilder,
   TransferAuthorityBuilder,
   ProposeAuthorityBuilder,
@@ -566,6 +569,7 @@ export class SolanaStablecoin {
       defaultAccountFrozen,
       enableConfidentialTransfer,
       transferHookProgramId: params.transferHookProgramId ?? null,
+      supplyCap: new BN(params.supplyCap ?? 0),
     };
 
     const instruction = await program.methods
@@ -993,26 +997,27 @@ export class SolanaStablecoin {
   }
 
   /**
-   * Build an update_roles instruction, or start a fluent {@link UpdateRolesBuilder}.
+   * Build an assign_role instruction (creates a new RoleAccount PDA),
+   * or start a fluent {@link AssignRoleBuilder}.
    *
    * **Overloaded:**
-   * - `updateRoles(params)` — returns a TransactionInstruction
-   * - `updateRoles(roleType, user)` — returns an {@link UpdateRolesBuilder}
+   * - `assignRole(params)` — returns a TransactionInstruction
+   * - `assignRole(roleType, user)` — returns an {@link AssignRoleBuilder}
    */
-  updateRoles(params: UpdateRolesParams): Promise<TransactionInstruction>;
-  updateRoles(roleType: RoleType, user: PublicKey): UpdateRolesBuilder;
-  updateRoles(
-    paramsOrRole: UpdateRolesParams | RoleType,
+  assignRole(params: AssignRoleParams): Promise<TransactionInstruction>;
+  assignRole(roleType: RoleType, user: PublicKey): AssignRoleBuilder;
+  assignRole(
+    paramsOrRole: AssignRoleParams | RoleType,
     user?: PublicKey
-  ): Promise<TransactionInstruction> | UpdateRolesBuilder {
+  ): Promise<TransactionInstruction> | AssignRoleBuilder {
     if (typeof paramsOrRole === "number" && user) {
-      return new UpdateRolesBuilder(this, paramsOrRole, user);
+      return new AssignRoleBuilder(this, paramsOrRole, user);
     }
-    return this._updateRolesImpl(paramsOrRole as UpdateRolesParams);
+    return this._assignRoleImpl(paramsOrRole as AssignRoleParams);
   }
 
-  private async _updateRolesImpl(
-    params: UpdateRolesParams
+  private async _assignRoleImpl(
+    params: AssignRoleParams
   ): Promise<TransactionInstruction> {
     const [roleAccount] = getRoleAddress(
       this.program.programId,
@@ -1022,7 +1027,7 @@ export class SolanaStablecoin {
     );
 
     return await this.program.methods
-      .updateRoles(params.roleType, params.user, params.active)
+      .assignRole(params.roleType, params.user)
       .accountsStrict({
         authority: params.authority,
         config: this.configAddress,
@@ -1030,6 +1035,96 @@ export class SolanaStablecoin {
         systemProgram: SystemProgram.programId,
       })
       .instruction();
+  }
+
+  /**
+   * Build an update_role instruction (modifies an existing RoleAccount PDA),
+   * or start a fluent {@link UpdateRoleBuilder}.
+   *
+   * **Overloaded:**
+   * - `updateRole(params)` — returns a TransactionInstruction
+   * - `updateRole(roleType, user)` — returns an {@link UpdateRoleBuilder}
+   */
+  updateRole(params: UpdateRoleParams): Promise<TransactionInstruction>;
+  updateRole(roleType: RoleType, user: PublicKey): UpdateRoleBuilder;
+  updateRole(
+    paramsOrRole: UpdateRoleParams | RoleType,
+    user?: PublicKey
+  ): Promise<TransactionInstruction> | UpdateRoleBuilder {
+    if (typeof paramsOrRole === "number" && user) {
+      return new UpdateRoleBuilder(this, paramsOrRole, user);
+    }
+    return this._updateRoleImpl(paramsOrRole as UpdateRoleParams);
+  }
+
+  private async _updateRoleImpl(
+    params: UpdateRoleParams
+  ): Promise<TransactionInstruction> {
+    const [roleAccount] = getRoleAddress(
+      this.program.programId,
+      this.configAddress,
+      params.roleType,
+      params.user
+    );
+
+    return await this.program.methods
+      .updateRole(params.roleType, params.user, params.active)
+      .accountsStrict({
+        authority: params.authority,
+        config: this.configAddress,
+        roleAccount,
+      })
+      .instruction();
+  }
+
+  /**
+   * @deprecated Use {@link assignRole} or {@link updateRole} instead.
+   *
+   * Backward-compatible facade that checks whether the RoleAccount PDA
+   * exists on-chain and routes to `assignRole` (if missing) or
+   * `updateRole` (if present).
+   */
+  updateRoles(params: UpdateRolesParams): Promise<TransactionInstruction>;
+  updateRoles(roleType: RoleType, user: PublicKey): AssignRoleBuilder;
+  updateRoles(
+    paramsOrRole: UpdateRolesParams | RoleType,
+    user?: PublicKey
+  ): Promise<TransactionInstruction> | AssignRoleBuilder {
+    if (typeof paramsOrRole === "number" && user) {
+      return new AssignRoleBuilder(this, paramsOrRole, user);
+    }
+    return this._updateRolesCompat(paramsOrRole as UpdateRolesParams);
+  }
+
+  private async _updateRolesCompat(
+    params: UpdateRolesParams
+  ): Promise<TransactionInstruction> {
+    const [roleAccount] = getRoleAddress(
+      this.program.programId,
+      this.configAddress,
+      params.roleType,
+      params.user
+    );
+
+    const exists = await accountExists(
+      this.program.provider.connection,
+      roleAccount
+    );
+
+    if (exists) {
+      return this._updateRoleImpl({
+        roleType: params.roleType,
+        user: params.user,
+        active: params.active,
+        authority: params.authority,
+      });
+    }
+
+    return this._assignRoleImpl({
+      roleType: params.roleType,
+      user: params.user,
+      authority: params.authority,
+    });
   }
 
   /**

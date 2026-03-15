@@ -24,16 +24,24 @@ import { BN } from "@coral-xyz/anchor";
  *
  * Each role maps to a `u8` discriminator stored on-chain in the
  * `RoleAccount` PDA. Roles are assigned by the master authority via
- * {@link UpdateRolesParams}.
+ * {@link AssignRoleParams} and toggled via {@link UpdateRoleParams}.
  *
  * @example
  * ```ts
  * import { RoleType } from "@stbr/sss-core-sdk";
  *
- * await stablecoin.updateRoles({
+ * // Assign a new role (creates PDA)
+ * await stablecoin.assignRole({
  *   roleType: RoleType.Minter,
  *   user: minterPubkey,
- *   active: true,
+ *   authority: masterAuthority,
+ * });
+ *
+ * // Update an existing role (toggles active flag)
+ * await stablecoin.updateRole({
+ *   roleType: RoleType.Minter,
+ *   user: minterPubkey,
+ *   active: false,
  *   authority: masterAuthority,
  * });
  * ```
@@ -87,6 +95,8 @@ export interface StablecoinConfig {
   totalMinted: BN;
   /** Total tokens burned over lifetime */
   totalBurned: BN;
+  /** Global supply cap in base units (0 = unlimited) */
+  supplyCap: BN;
   /** Transfer hook program ID (if enabled) */
   transferHookProgram: PublicKey;
 
@@ -223,6 +233,8 @@ export interface CreateStablecoinParams {
   enableConfidentialTransfer?: boolean;
   /** Transfer hook program ID (required when enableTransferHook = true) */
   transferHookProgramId?: PublicKey;
+  /** Global supply cap in base units. Set to 0 or omit for unlimited supply. */
+  supplyCap?: BN | number;
 }
 
 /** Parameters for minting tokens. */
@@ -272,17 +284,34 @@ export interface PauseParams {
   authority: PublicKey;
 }
 
-/** Parameters for updating roles. */
-export interface UpdateRolesParams {
-  /** Role type to assign/revoke */
+/** Parameters for assigning a new role (creates RoleAccount PDA). */
+export interface AssignRoleParams {
+  /** Role type to assign */
   roleType: RoleType;
-  /** The user to assign/revoke the role for */
+  /** The user to assign the role to */
+  user: PublicKey;
+  /** The master authority */
+  authority: PublicKey;
+}
+
+/** Parameters for updating an existing role (modifies RoleAccount PDA). */
+export interface UpdateRoleParams {
+  /** Role type to update */
+  roleType: RoleType;
+  /** The user whose role to update */
   user: PublicKey;
   /** Whether the role should be active */
   active: boolean;
   /** The master authority */
   authority: PublicKey;
 }
+
+/**
+ * @deprecated Use {@link AssignRoleParams} or {@link UpdateRoleParams} instead.
+ * Kept for backward compatibility — the SDK will route to assign or update
+ * depending on whether the RoleAccount PDA already exists.
+ */
+export type UpdateRolesParams = AssignRoleParams & { active: boolean };
 
 /** Parameters for updating minter quota. */
 export interface UpdateMinterParams {
@@ -454,9 +483,10 @@ export interface StablecoinUnpausedEvent {
 }
 
 /**
- * Emitted when a role is granted or revoked via the `update_roles` instruction.
+ * Emitted when a role is granted or revoked via the `assign_role` or `update_role` instruction.
  *
- * @see {@link UpdateRolesParams}
+ * @see {@link AssignRoleParams}
+ * @see {@link UpdateRoleParams}
  */
 export interface RoleUpdatedEvent {
   /** The stablecoin config PDA address. */

@@ -115,19 +115,34 @@ async function handleMintersAdd(addressStr: string, quotaStr: string, globalOpts
   // First assign the minter role
   const [rolePDA] = deriveRolePDA(configPDA, ROLE_MINTER, minterPubkey);
 
+  // Check if role PDA already exists to choose the right instruction
+  const roleAccountInfo = await connection.getAccountInfo(rolePDA);
+  const roleExists = roleAccountInfo !== null;
+
   const spinner = spin("Assigning minter role...");
 
   let tx1: string;
   try {
-    tx1 = await program.methods
-      .updateRoles(ROLE_MINTER, minterPubkey, true)
-      .accounts({
-        authority: keypair.publicKey,
-        config: configPDA,
-        roleAccount: rolePDA,
-        systemProgram: SystemProgram.programId,
-      })
-      .rpc();
+    if (roleExists) {
+      tx1 = await program.methods
+        .updateRole(ROLE_MINTER, minterPubkey, true)
+        .accounts({
+          authority: keypair.publicKey,
+          config: configPDA,
+          roleAccount: rolePDA,
+        })
+        .rpc();
+    } else {
+      tx1 = await program.methods
+        .assignRole(ROLE_MINTER, minterPubkey)
+        .accounts({
+          authority: keypair.publicKey,
+          config: configPDA,
+          roleAccount: rolePDA,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+    }
   } catch (err) {
     spinner.fail("Failed to assign minter role");
     throw err;
@@ -185,13 +200,13 @@ async function handleMintersRemove(addressStr: string, globalOpts: any): Promise
 
   let tx: string;
   try {
+    // updateRole — the RoleAccount must already exist for removal
     tx = await program.methods
-      .updateRoles(ROLE_MINTER, minterPubkey, false)
+      .updateRole(ROLE_MINTER, minterPubkey, false)
       .accounts({
         authority: keypair.publicKey,
         config: configPDA,
         roleAccount: rolePDA,
-        systemProgram: SystemProgram.programId,
       })
       .rpc();
   } catch (err) {

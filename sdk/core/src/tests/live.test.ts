@@ -89,16 +89,14 @@ describeLive("SDK Live Tests", function () {
     ]);
 
     await sendInstructions(connection, authority, [
-      await stablecoin.updateRoles({
+      await stablecoin.assignRole({
         roleType: RoleType.Minter,
         user: authority.publicKey,
-        active: true,
         authority: authority.publicKey,
       }),
-      await stablecoin.updateRoles({
+      await stablecoin.assignRole({
         roleType: RoleType.Pauser,
         user: authority.publicKey,
-        active: true,
         authority: authority.publicKey,
       }),
     ]);
@@ -195,22 +193,19 @@ describeLive("SDK Live Tests", function () {
     ]);
 
     await sendInstructions(connection, authority, [
-      await compliantStablecoin.updateRoles({
+      await compliantStablecoin.assignRole({
         roleType: RoleType.Minter,
         user: authority.publicKey,
-        active: true,
         authority: authority.publicKey,
       }),
-      await compliantStablecoin.updateRoles({
+      await compliantStablecoin.assignRole({
         roleType: RoleType.Blacklister,
         user: authority.publicKey,
-        active: true,
         authority: authority.publicKey,
       }),
-      await compliantStablecoin.updateRoles({
+      await compliantStablecoin.assignRole({
         roleType: RoleType.Seizer,
         user: authority.publicKey,
-        active: true,
         authority: authority.publicKey,
       }),
     ]);

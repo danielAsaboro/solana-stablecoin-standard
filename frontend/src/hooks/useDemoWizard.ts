@@ -96,7 +96,7 @@ function makeSteps(): DemoStep[] {
         "Assign Minter, Burner, Pauser, Blacklister, and Seizer roles to the connected wallet. Set the minter quota to 100M tokens.",
       codeSnippet: `// Assign all 5 roles to the authority
 for (const role of [Minter, Burner, Pauser, Blacklister, Seizer]) {
-  await stablecoin.updateRoles({ roleType: role, user: authority, active: true });
+  await stablecoin.assignRole({ roleType: role, user: authority, authority });
 }
 // Set minter quota
 await stablecoin.updateMinter({ minter: authority, quota: 100_000_000 });`,
@@ -346,8 +346,8 @@ export function useDemoWizard() {
       RoleType.Seizer,
     ]) {
       const ixArr = await stablecoin
-        .updateRoles(roleType, authority)
-        .activate()
+        .assignRole(roleType, authority)
+        .by(authority)
         .instruction();
       roleIxs.push(...ixArr);
     }

@@ -8,6 +8,60 @@
   },
   "instructions": [
     {
+      "name": "accept_authority_transfer",
+      "docs": [
+        "Accept a pending authority transfer. Must be signed by the proposed new authority."
+      ],
+      "discriminator": [
+        239,
+        248,
+        177,
+        2,
+        206,
+        97,
+        46,
+        255
+      ],
+      "accounts": [
+        {
+          "name": "new_authority",
+          "docs": [
+            "The proposed new authority — must sign to confirm acceptance."
+          ],
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "StablecoinConfig"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "add_to_blacklist",
       "docs": [
         "Add an address to the blacklist. Requires Blacklister role.",
@@ -106,6 +160,74 @@
       ]
     },
     {
+      "name": "assign_role",
+      "docs": [
+        "Assign a new role to a user. Master authority only."
+      ],
+      "discriminator": [
+        255,
+        174,
+        125,
+        180,
+        203,
+        155,
+        202,
+        131
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "StablecoinConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "role_account",
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "role_type",
+          "type": "u8"
+        },
+        {
+          "name": "user",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
       "name": "burn_tokens",
       "docs": [
         "Burn tokens. Requires Burner role."
@@ -180,6 +302,57 @@
       ]
     },
     {
+      "name": "cancel_authority_transfer",
+      "docs": [
+        "Cancel a pending authority transfer. Master authority only."
+      ],
+      "discriminator": [
+        94,
+        131,
+        125,
+        184,
+        183,
+        24,
+        125,
+        229
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "StablecoinConfig"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "freeze_token_account",
       "docs": [
         "Freeze a token account. Requires Pauser role."
@@ -244,6 +417,196 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "get_config",
+      "docs": [
+        "Return the full stablecoin configuration."
+      ],
+      "discriminator": [
+        149,
+        105,
+        239,
+        181,
+        106,
+        218,
+        221,
+        71
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "StablecoinConfig"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [],
+      "returns": {
+        "defined": {
+          "name": "ConfigInfo"
+        }
+      }
+    },
+    {
+      "name": "get_minter_info",
+      "docs": [
+        "Return quota statistics for a specific minter: quota, minted, remaining."
+      ],
+      "discriminator": [
+        67,
+        185,
+        48,
+        32,
+        230,
+        3,
+        217,
+        232
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "StablecoinConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "minter_quota",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116,
+                  101,
+                  114,
+                  95,
+                  113,
+                  117,
+                  111,
+                  116,
+                  97
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config"
+              },
+              {
+                "kind": "arg",
+                "path": "minter"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "minter",
+          "type": "pubkey"
+        }
+      ],
+      "returns": {
+        "defined": {
+          "name": "MinterInfo"
+        }
+      }
+    },
+    {
+      "name": "get_supply_info",
+      "docs": [
+        "Return supply statistics: total_minted, total_burned, current_supply, supply_cap."
+      ],
+      "discriminator": [
+        195,
+        15,
+        219,
+        198,
+        89,
+        216,
+        184,
+        95
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "StablecoinConfig"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [],
+      "returns": {
+        "defined": {
+          "name": "SupplyInfo"
+        }
+      }
     },
     {
       "name": "initialize",
@@ -326,6 +689,92 @@
           }
         }
       ]
+    },
+    {
+      "name": "is_blacklisted",
+      "docs": [
+        "Return whether an address is on the blacklist."
+      ],
+      "discriminator": [
+        161,
+        58,
+        62,
+        208,
+        128,
+        170,
+        119,
+        18
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "StablecoinConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "blacklist_entry",
+          "docs": [
+            "The blacklist entry PDA. May or may not exist.",
+            "discriminator manually to determine whether the address is blacklisted."
+          ],
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  108,
+                  97,
+                  99,
+                  107,
+                  108,
+                  105,
+                  115,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config"
+              },
+              {
+                "kind": "arg",
+                "path": "address"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "address",
+          "type": "pubkey"
+        }
+      ],
+      "returns": "bool"
     },
     {
       "name": "mint_tokens",
@@ -488,6 +937,155 @@
       "args": []
     },
     {
+      "name": "preview_mint",
+      "docs": [
+        "Simulate whether a mint of `amount` would succeed, without modifying state."
+      ],
+      "discriminator": [
+        42,
+        71,
+        86,
+        125,
+        215,
+        190,
+        214,
+        81
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "StablecoinConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "minter_quota",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116,
+                  101,
+                  114,
+                  95,
+                  113,
+                  117,
+                  111,
+                  116,
+                  97
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config"
+              },
+              {
+                "kind": "arg",
+                "path": "minter"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "minter",
+          "type": "pubkey"
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ],
+      "returns": {
+        "defined": {
+          "name": "PreviewMintResult"
+        }
+      }
+    },
+    {
+      "name": "propose_authority_transfer",
+      "docs": [
+        "Propose a 2-step authority transfer. The new authority must call",
+        "`accept_authority_transfer` to complete the handoff."
+      ],
+      "discriminator": [
+        57,
+        206,
+        225,
+        129,
+        35,
+        111,
+        174,
+        145
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "StablecoinConfig"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "new_authority",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
       "name": "remove_from_blacklist",
       "docs": [
         "Remove an address from the blacklist. Requires Blacklister role.",
@@ -578,6 +1176,95 @@
       ]
     },
     {
+      "name": "reset_minter_quota",
+      "docs": [
+        "Reset a minter's cumulative `minted` counter to zero.",
+        "Allows the minter to issue up to their full quota again. Master authority only."
+      ],
+      "discriminator": [
+        39,
+        254,
+        135,
+        13,
+        194,
+        228,
+        66,
+        134
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "StablecoinConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "minter_quota",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116,
+                  101,
+                  114,
+                  95,
+                  113,
+                  117,
+                  111,
+                  116,
+                  97
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config"
+              },
+              {
+                "kind": "arg",
+                "path": "minter"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "minter",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
       "name": "seize",
       "docs": [
         "Seize tokens from an account using the permanent delegate.",
@@ -627,6 +1314,41 @@
         },
         {
           "name": "role_account"
+        },
+        {
+          "name": "blacklisted_owner",
+          "docs": [
+            "The wallet owner being seized from (must match from_token_account.owner)."
+          ]
+        },
+        {
+          "name": "blacklist_entry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  108,
+                  97,
+                  99,
+                  107,
+                  108,
+                  105,
+                  115,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config"
+              },
+              {
+                "kind": "account",
+                "path": "blacklisted_owner"
+              }
+            ]
+          }
         },
         {
           "name": "mint"
@@ -725,7 +1447,7 @@
     {
       "name": "transfer_authority",
       "docs": [
-        "Transfer master authority to a new address."
+        "Transfer master authority to a new address (immediate, emergency path)."
       ],
       "discriminator": [
         48,
@@ -930,24 +1652,23 @@
       ]
     },
     {
-      "name": "update_roles",
+      "name": "update_role",
       "docs": [
-        "Assign or revoke a role. Master authority only."
+        "Activate or deactivate an existing role. Master authority only."
       ],
       "discriminator": [
-        220,
-        152,
-        205,
-        233,
-        177,
-        123,
-        219,
-        125
+        36,
+        223,
+        162,
+        98,
+        168,
+        209,
+        75,
+        151
       ],
       "accounts": [
         {
           "name": "authority",
-          "writable": true,
           "signer": true
         },
         {
@@ -980,10 +1701,6 @@
         {
           "name": "role_account",
           "writable": true
-        },
-        {
-          "name": "system_program",
-          "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
@@ -1110,6 +1827,45 @@
       ]
     },
     {
+      "name": "AuthorityTransferAccepted",
+      "discriminator": [
+        149,
+        165,
+        140,
+        221,
+        104,
+        203,
+        239,
+        121
+      ]
+    },
+    {
+      "name": "AuthorityTransferCancelled",
+      "discriminator": [
+        31,
+        228,
+        187,
+        148,
+        20,
+        99,
+        237,
+        48
+      ]
+    },
+    {
+      "name": "AuthorityTransferProposed",
+      "discriminator": [
+        103,
+        244,
+        27,
+        116,
+        177,
+        4,
+        100,
+        119
+      ]
+    },
+    {
       "name": "AuthorityTransferred",
       "discriminator": [
         245,
@@ -1120,6 +1876,19 @@
         92,
         22,
         64
+      ]
+    },
+    {
+      "name": "MinterQuotaReset",
+      "discriminator": [
+        195,
+        72,
+        78,
+        23,
+        76,
+        26,
+        136,
+        209
       ]
     },
     {
@@ -1317,6 +2086,31 @@
       "code": 6017,
       "name": "InvalidDecimals",
       "msg": "Invalid decimals - must be between 0 and 9"
+    },
+    {
+      "code": 6018,
+      "name": "InvalidConfig",
+      "msg": "Invalid configuration: transfer hook requires a valid program ID"
+    },
+    {
+      "code": 6019,
+      "name": "SupplyCapExceeded",
+      "msg": "Global supply cap would be exceeded by this mint"
+    },
+    {
+      "code": 6020,
+      "name": "PendingTransferExists",
+      "msg": "An authority transfer is already in progress — cancel or accept first"
+    },
+    {
+      "code": 6021,
+      "name": "NoPendingTransfer",
+      "msg": "No authority transfer is in progress"
+    },
+    {
+      "code": 6022,
+      "name": "InvalidPendingAuthority",
+      "msg": "Only the proposed pending authority may accept the transfer"
     }
   ],
   "types": [
@@ -1461,6 +2255,112 @@
       }
     },
     {
+      "name": "AuthorityTransferAccepted",
+      "docs": [
+        "Emitted when a 2-step authority transfer is completed via",
+        "[`accept_authority_transfer`](crate::sss::accept_authority_transfer)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "config",
+            "docs": [
+              "The stablecoin config PDA."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "previous_authority",
+            "docs": [
+              "The outgoing master authority."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "new_authority",
+            "docs": [
+              "The new master authority (formerly `pending_authority`)."
+            ],
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AuthorityTransferCancelled",
+      "docs": [
+        "Emitted when a pending authority transfer is cancelled via",
+        "[`cancel_authority_transfer`](crate::sss::cancel_authority_transfer)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "config",
+            "docs": [
+              "The stablecoin config PDA."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "cancelled_by",
+            "docs": [
+              "The authority that cancelled the transfer."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "cleared_pending",
+            "docs": [
+              "The pending authority that was cleared."
+            ],
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AuthorityTransferProposed",
+      "docs": [
+        "Emitted when an authority transfer is proposed via",
+        "[`propose_authority_transfer`](crate::sss::propose_authority_transfer)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "config",
+            "docs": [
+              "The stablecoin config PDA."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "current_authority",
+            "docs": [
+              "The current master authority proposing the transfer."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "pending_authority",
+            "docs": [
+              "The proposed new master authority."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "proposed_at",
+            "docs": [
+              "Unix timestamp when the proposal was created."
+            ],
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
       "name": "AuthorityTransferred",
       "docs": [
         "Emitted when master authority is transferred via [`transfer_authority`](crate::sss::transfer_authority)."
@@ -1552,6 +2452,85 @@
       }
     },
     {
+      "name": "ConfigInfo",
+      "docs": [
+        "Returned by [`get_config`](crate::sss::get_config)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "symbol",
+            "type": "string"
+          },
+          {
+            "name": "uri",
+            "type": "string"
+          },
+          {
+            "name": "decimals",
+            "type": "u8"
+          },
+          {
+            "name": "master_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "pending_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "enable_permanent_delegate",
+            "type": "bool"
+          },
+          {
+            "name": "enable_transfer_hook",
+            "type": "bool"
+          },
+          {
+            "name": "default_account_frozen",
+            "type": "bool"
+          },
+          {
+            "name": "enable_confidential_transfer",
+            "type": "bool"
+          },
+          {
+            "name": "paused",
+            "type": "bool"
+          },
+          {
+            "name": "total_minted",
+            "type": "u64"
+          },
+          {
+            "name": "total_burned",
+            "type": "u64"
+          },
+          {
+            "name": "current_supply",
+            "type": "u64"
+          },
+          {
+            "name": "supply_cap",
+            "type": "u64"
+          },
+          {
+            "name": "transfer_hook_program",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
       "name": "InitializeParams",
       "docs": [
         "Parameters for initializing a new stablecoin.",
@@ -1613,6 +2592,13 @@
             "type": "bool"
           },
           {
+            "name": "enable_confidential_transfer",
+            "docs": [
+              "Enable confidential transfers via Token-2022 ConfidentialTransferMint extension (SSS-3)."
+            ],
+            "type": "bool"
+          },
+          {
             "name": "transfer_hook_program_id",
             "docs": [
               "The transfer hook program ID. Required when `enable_transfer_hook` is true."
@@ -1620,6 +2606,45 @@
             "type": {
               "option": "pubkey"
             }
+          },
+          {
+            "name": "supply_cap",
+            "docs": [
+              "Global supply cap in base units. Set to 0 for unlimited supply."
+            ],
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MinterInfo",
+      "docs": [
+        "Returned by [`get_minter_info`](crate::sss::get_minter_info)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "quota",
+            "docs": [
+              "The maximum amount this minter may mint."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "minted",
+            "docs": [
+              "Cumulative amount minted so far (may be reset by master authority)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "remaining",
+            "docs": [
+              "Remaining quota (`quota - minted`)."
+            ],
+            "type": "u64"
           }
         ]
       }
@@ -1678,6 +2703,46 @@
       }
     },
     {
+      "name": "MinterQuotaReset",
+      "docs": [
+        "Emitted when a minter's cumulative `minted` counter is reset via",
+        "[`reset_minter_quota`](crate::sss::reset_minter_quota)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "config",
+            "docs": [
+              "The stablecoin config PDA."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "minter",
+            "docs": [
+              "The minter whose counter was reset."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "previous_minted",
+            "docs": [
+              "The `minted` value before the reset."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "reset_by",
+            "docs": [
+              "The master authority who triggered the reset."
+            ],
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
       "name": "MinterQuotaUpdated",
       "docs": [
         "Emitted when a minter's quota is set or updated via [`update_minter`](crate::sss::update_minter)."
@@ -1712,6 +2777,31 @@
               "The master authority who made the change."
             ],
             "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PreviewMintResult",
+      "docs": [
+        "Returned by [`preview_mint`](crate::sss::preview_mint)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "would_succeed",
+            "docs": [
+              "Whether the mint would succeed given current state."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "failure_reason",
+            "docs": [
+              "Human-readable reason if `would_succeed` is false."
+            ],
+            "type": "string"
           }
         ]
       }
@@ -1771,7 +2861,8 @@
     {
       "name": "RoleUpdated",
       "docs": [
-        "Emitted when a role is assigned or revoked via [`update_roles`](crate::sss::update_roles)."
+        "Emitted when a role is assigned via [`assign_role`](crate::sss::assign_role)",
+        "or toggled via [`update_role`](crate::sss::update_role)."
       ],
       "type": {
         "kind": "struct",
@@ -1892,6 +2983,13 @@
             "type": "bool"
           },
           {
+            "name": "enable_confidential_transfer",
+            "docs": [
+              "Whether confidential transfers are enabled (SSS-3 privacy preset)"
+            ],
+            "type": "bool"
+          },
+          {
             "name": "paused",
             "docs": [
               "Whether the stablecoin is paused"
@@ -1920,6 +3018,28 @@
             "type": "pubkey"
           },
           {
+            "name": "supply_cap",
+            "docs": [
+              "Global supply cap in base units (0 = unlimited).",
+              "Once total_minted reaches this value no further minting is allowed."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "pending_authority",
+            "docs": [
+              "Pending authority in a 2-step authority transfer (Pubkey::default() = no transfer in flight)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "authority_transfer_at",
+            "docs": [
+              "Unix timestamp when the authority transfer was proposed (0 = no transfer in flight)."
+            ],
+            "type": "i64"
+          },
+          {
             "name": "bump",
             "docs": [
               "PDA bump seed"
@@ -1934,7 +3054,7 @@
             "type": {
               "array": [
                 "u8",
-                64
+                15
               ]
             }
           }
@@ -2004,6 +3124,13 @@
               "Whether the transfer hook extension is enabled (SSS-2)."
             ],
             "type": "bool"
+          },
+          {
+            "name": "enable_confidential_transfer",
+            "docs": [
+              "Whether confidential transfers are enabled (SSS-3)."
+            ],
+            "type": "bool"
           }
         ]
       }
@@ -2056,6 +3183,45 @@
               "The pauser who triggered the unpause."
             ],
             "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SupplyInfo",
+      "docs": [
+        "Returned by [`get_supply_info`](crate::sss::get_supply_info)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "total_minted",
+            "docs": [
+              "Cumulative tokens minted over the lifetime of this stablecoin."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "total_burned",
+            "docs": [
+              "Cumulative tokens burned over the lifetime of this stablecoin."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "current_supply",
+            "docs": [
+              "Current circulating supply (`total_minted - total_burned`)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "supply_cap",
+            "docs": [
+              "Global supply cap (0 = unlimited)."
+            ],
+            "type": "u64"
           }
         ]
       }

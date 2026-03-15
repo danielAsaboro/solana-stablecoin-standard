@@ -99,7 +99,8 @@ pub struct StablecoinUnpaused {
     pub authority: Pubkey,
 }
 
-/// Emitted when a role is assigned or revoked via [`update_roles`](crate::sss::update_roles).
+/// Emitted when a role is assigned via [`assign_role`](crate::sss::assign_role)
+/// or toggled via [`update_role`](crate::sss::update_role).
 #[event]
 pub struct RoleUpdated {
     /// The stablecoin config PDA.

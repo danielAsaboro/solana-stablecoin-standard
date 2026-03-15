@@ -82,11 +82,7 @@ pub fn handler<'info>(ctx: Context<'_, '_, 'info, 'info, Seize<'info>>, amount: 
 
     let mint_key = ctx.accounts.config.mint;
     let bump = ctx.accounts.config.bump;
-    let signer_seeds: &[&[&[u8]]] = &[&[
-        STABLECOIN_SEED,
-        mint_key.as_ref(),
-        &[bump],
-    ]];
+    let signer_seeds: &[&[&[u8]]] = &[&[STABLECOIN_SEED, mint_key.as_ref(), &[bump]]];
 
     let decimals = ctx.accounts.config.decimals;
 
@@ -111,11 +107,12 @@ pub fn handler<'info>(ctx: Context<'_, '_, 'info, 'info, Seize<'info>>, amount: 
     // the hook program, and the ExtraAccountMetas PDA.  Token-2022 needs them in
     // the instruction's account list to forward them to the hook program.
     for remaining in ctx.remaining_accounts.iter() {
-        ix.accounts.push(anchor_lang::solana_program::instruction::AccountMeta {
-            pubkey: *remaining.key,
-            is_signer: remaining.is_signer,
-            is_writable: remaining.is_writable,
-        });
+        ix.accounts
+            .push(anchor_lang::solana_program::instruction::AccountMeta {
+                pubkey: *remaining.key,
+                is_signer: remaining.is_signer,
+                is_writable: remaining.is_writable,
+            });
     }
 
     // Collect ALL account infos: the 4 base accounts + remaining accounts.

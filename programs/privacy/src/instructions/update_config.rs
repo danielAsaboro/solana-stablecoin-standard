@@ -44,10 +44,7 @@ pub struct UpdatePrivacyConfig<'info> {
 /// # Events
 ///
 /// Emits [`PrivacyConfigUpdated`].
-pub fn handler(
-    ctx: Context<UpdatePrivacyConfig>,
-    params: UpdatePrivacyConfigParams,
-) -> Result<()> {
+pub fn handler(ctx: Context<UpdatePrivacyConfig>, params: UpdatePrivacyConfigParams) -> Result<()> {
     let privacy_config = &mut ctx.accounts.privacy_config;
 
     if let Some(auto_approve) = params.auto_approve {

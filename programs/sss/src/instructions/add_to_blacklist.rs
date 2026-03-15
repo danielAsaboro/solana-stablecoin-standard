@@ -48,7 +48,10 @@ pub struct AddToBlacklist<'info> {
 /// Creates a [`BlacklistEntry`] PDA that the transfer hook program checks on
 /// every `transfer_checked` call. Emits [`AddressBlacklisted`].
 pub fn handler(ctx: Context<AddToBlacklist>, address: Pubkey, reason: String) -> Result<()> {
-    require!(reason.len() <= MAX_REASON_LEN, StablecoinError::ReasonTooLong);
+    require!(
+        reason.len() <= MAX_REASON_LEN,
+        StablecoinError::ReasonTooLong
+    );
 
     let clock = Clock::get()?;
     let entry = &mut ctx.accounts.blacklist_entry;

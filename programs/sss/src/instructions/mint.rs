@@ -71,7 +71,10 @@ pub fn handler(ctx: Context<MintTokens>, amount: u64) -> Result<()> {
         .minted
         .checked_add(amount)
         .ok_or(StablecoinError::MathOverflow)?;
-    require!(new_minted <= minter_quota.quota, StablecoinError::QuotaExceeded);
+    require!(
+        new_minted <= minter_quota.quota,
+        StablecoinError::QuotaExceeded
+    );
     minter_quota.minted = new_minted;
 
     let config = &mut ctx.accounts.config;
@@ -82,7 +85,10 @@ pub fn handler(ctx: Context<MintTokens>, amount: u64) -> Result<()> {
             .total_minted
             .checked_add(amount)
             .ok_or(StablecoinError::MathOverflow)?;
-        require!(new_total <= config.supply_cap, StablecoinError::SupplyCapExceeded);
+        require!(
+            new_total <= config.supply_cap,
+            StablecoinError::SupplyCapExceeded
+        );
     }
 
     config.total_minted = config
@@ -93,11 +99,7 @@ pub fn handler(ctx: Context<MintTokens>, amount: u64) -> Result<()> {
     let mint_key = config.mint;
     let bump = config.bump;
     let default_frozen = config.default_account_frozen;
-    let signer_seeds: &[&[&[u8]]] = &[&[
-        STABLECOIN_SEED,
-        mint_key.as_ref(),
-        &[bump],
-    ]];
+    let signer_seeds: &[&[&[u8]]] = &[&[STABLECOIN_SEED, mint_key.as_ref(), &[bump]]];
 
     // CPI: mint_to via config PDA as mint authority
     token_interface::mint_to(
@@ -116,17 +118,15 @@ pub fn handler(ctx: Context<MintTokens>, amount: u64) -> Result<()> {
     // FIX-1: if default_account_frozen, freeze the recipient's ATA after minting
     // (skip if already frozen to avoid a redundant CPI error)
     if default_frozen && !ctx.accounts.recipient_token_account.is_frozen() {
-        token_interface::freeze_account(
-            CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
-                token_interface::FreezeAccount {
-                    account: ctx.accounts.recipient_token_account.to_account_info(),
-                    mint: ctx.accounts.mint.to_account_info(),
-                    authority: ctx.accounts.config.to_account_info(),
-                },
-                signer_seeds,
-            ),
-        )?;
+        token_interface::freeze_account(CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            token_interface::FreezeAccount {
+                account: ctx.accounts.recipient_token_account.to_account_info(),
+                mint: ctx.accounts.mint.to_account_info(),
+                authority: ctx.accounts.config.to_account_info(),
+            },
+            signer_seeds,
+        ))?;
     }
 
     emit!(TokensMinted {

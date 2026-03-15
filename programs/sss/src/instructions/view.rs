@@ -174,7 +174,11 @@ pub fn get_minter_info(ctx: Context<GetMinterInfo>, _minter: Pubkey) -> Result<M
 ///
 /// Checks pause state, quota, and supply cap. Returns a structured
 /// result rather than an error so clients can distinguish the failure reason.
-pub fn preview_mint(ctx: Context<PreviewMint>, _minter: Pubkey, amount: u64) -> Result<PreviewMintResult> {
+pub fn preview_mint(
+    ctx: Context<PreviewMint>,
+    _minter: Pubkey,
+    amount: u64,
+) -> Result<PreviewMintResult> {
     let config = &ctx.accounts.config;
     let quota = &ctx.accounts.minter_quota;
 

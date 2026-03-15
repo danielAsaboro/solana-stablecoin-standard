@@ -47,8 +47,8 @@ impl PrivacyConfig {
         + 1                     // auto_approve
         + 4                     // allowlist_count
         + 1                     // bump
-        + 64;                   // _reserved
-    // Total = 142
+        + 64; // _reserved
+              // Total = 142
 
     /// The PDA seed prefix for this account type.
     pub const SEED_PREFIX: &'static [u8] = PRIVACY_CONFIG_SEED;
@@ -90,8 +90,8 @@ impl AllowlistEntry {
         + (4 + MAX_LABEL_LEN)   // label (string prefix + max data)
         + 8                     // added_at
         + 32                    // added_by
-        + 1;                    // bump
-    // Total = 149
+        + 1; // bump
+             // Total = 149
 
     /// The PDA seed prefix for this account type.
     pub const SEED_PREFIX: &'static [u8] = ALLOWLIST_SEED;

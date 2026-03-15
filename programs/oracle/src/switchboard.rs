@@ -50,13 +50,15 @@ pub fn parse_aggregator_result(data: &[u8]) -> Result<AggregatorResult> {
     );
 
     // Parse round_open_timestamp (i64, 8 bytes at offset 365)
-    let timestamp_bytes: [u8; 8] = data[AGGREGATOR_TIMESTAMP_OFFSET..AGGREGATOR_TIMESTAMP_OFFSET + 8]
+    let timestamp_bytes: [u8; 8] = data
+        [AGGREGATOR_TIMESTAMP_OFFSET..AGGREGATOR_TIMESTAMP_OFFSET + 8]
         .try_into()
         .map_err(|_| error!(OracleError::InvalidAggregatorData))?;
     let timestamp = i64::from_le_bytes(timestamp_bytes);
 
     // Parse result.mantissa (i128, 16 bytes at offset 373)
-    let mantissa_bytes: [u8; 16] = data[AGGREGATOR_MANTISSA_OFFSET..AGGREGATOR_MANTISSA_OFFSET + 16]
+    let mantissa_bytes: [u8; 16] = data
+        [AGGREGATOR_MANTISSA_OFFSET..AGGREGATOR_MANTISSA_OFFSET + 16]
         .try_into()
         .map_err(|_| error!(OracleError::InvalidAggregatorData))?;
     let mantissa = i128::from_le_bytes(mantissa_bytes);
@@ -101,9 +103,7 @@ pub fn convert_to_fixed_point(mantissa: i128, scale: u32, target_decimals: u8) -
         let shift = target_exp
             .checked_sub(scale)
             .ok_or(OracleError::MathOverflow)?;
-        let multiplier = 10u128
-            .checked_pow(shift)
-            .ok_or(OracleError::MathOverflow)?;
+        let multiplier = 10u128.checked_pow(shift).ok_or(OracleError::MathOverflow)?;
         mantissa_u128
             .checked_mul(multiplier)
             .ok_or(OracleError::MathOverflow)?
@@ -112,9 +112,7 @@ pub fn convert_to_fixed_point(mantissa: i128, scale: u32, target_decimals: u8) -
         let shift = scale
             .checked_sub(target_exp)
             .ok_or(OracleError::MathOverflow)?;
-        let divisor = 10u128
-            .checked_pow(shift)
-            .ok_or(OracleError::MathOverflow)?;
+        let divisor = 10u128.checked_pow(shift).ok_or(OracleError::MathOverflow)?;
         mantissa_u128
             .checked_div(divisor)
             .ok_or(OracleError::MathOverflow)?

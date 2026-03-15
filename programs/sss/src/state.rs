@@ -85,7 +85,7 @@ impl StablecoinConfig {
         + 32               // pending_authority
         + 8                // authority_transfer_at
         + 1                // bump
-        + 15;              // _reserved
+        + 15; // _reserved
 
     pub const SEED_PREFIX: &'static [u8] = STABLECOIN_SEED;
 }
@@ -117,7 +117,7 @@ impl RoleAccount {
         + 32  // user
         + 1   // role_type
         + 1   // active
-        + 1;  // bump
+        + 1; // bump
 
     pub const SEED_PREFIX: &'static [u8] = ROLE_SEED;
 }
@@ -150,7 +150,7 @@ impl MinterQuota {
         + 32  // minter
         + 8   // quota
         + 8   // minted
-        + 1;  // bump
+        + 1; // bump
 
     pub const SEED_PREFIX: &'static [u8] = MINTER_QUOTA_SEED;
 }
@@ -185,7 +185,7 @@ impl BlacklistEntry {
         + (4 + MAX_REASON_LEN)  // reason
         + 8   // blacklisted_at
         + 32  // blacklisted_by
-        + 1;  // bump
+        + 1; // bump
 
     pub const SEED_PREFIX: &'static [u8] = BLACKLIST_SEED;
 }

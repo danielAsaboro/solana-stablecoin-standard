@@ -15,7 +15,8 @@
 //! | `thaw_token_account`           | [`thaw_account`]          | Pauser           |
 //! | `pause`                        | [`pause`]                 | Pauser           |
 //! | `unpause`                      | [`unpause`]               | Pauser           |
-//! | `update_roles`                 | [`update_roles`]          | Master authority |
+//! | `assign_role`                  | [`assign_role`]           | Master authority |
+//! | `update_role`                  | [`update_role`]           | Master authority |
 //! | `update_minter`                | [`update_minter`]         | Master authority |
 //! | `reset_minter_quota`           | [`reset_minter_quota`]    | Master authority |
 //! | `transfer_authority`           | [`transfer_authority`]    | Master authority |
@@ -41,43 +42,48 @@
 //! | `is_blacklisted`    | [`view`]| `bool`              |
 //! | `get_config`        | [`view`]| `ConfigInfo`        |
 
+pub mod accept_authority;
+pub mod add_to_blacklist;
+pub mod assign_role;
+pub mod burn;
+pub mod cancel_authority;
+pub mod freeze_account;
 pub mod initialize;
 pub mod mint;
-pub mod burn;
-pub mod freeze_account;
-pub mod thaw_account;
 pub mod pause;
-pub mod unpause;
-pub mod update_roles;
-pub mod update_minter;
-pub mod reset_minter_quota;
-pub mod transfer_authority;
 pub mod propose_authority;
-pub mod accept_authority;
-pub mod cancel_authority;
-pub mod add_to_blacklist;
 pub mod remove_from_blacklist;
+pub mod reset_minter_quota;
 pub mod seize;
+pub mod thaw_account;
+pub mod transfer_authority;
+pub mod unpause;
+pub mod update_minter;
+pub mod update_role;
 pub mod view;
 
 // Glob re-exports are required for Anchor-generated __client_accounts_* modules.
 // The `handler` name collision is harmless — lib.rs calls handlers via qualified paths.
 #[allow(ambiguous_glob_reexports)]
+pub use accept_authority::*;
+pub use add_to_blacklist::*;
+#[allow(ambiguous_glob_reexports)]
+pub use assign_role::*;
+pub use burn::*;
+pub use cancel_authority::*;
+pub use freeze_account::*;
+#[allow(ambiguous_glob_reexports)]
 pub use initialize::*;
 pub use mint::*;
-pub use burn::*;
-pub use freeze_account::*;
-pub use thaw_account::*;
 pub use pause::*;
-pub use unpause::*;
-pub use update_roles::*;
-pub use update_minter::*;
-pub use reset_minter_quota::*;
-pub use transfer_authority::*;
 pub use propose_authority::*;
-pub use accept_authority::*;
-pub use cancel_authority::*;
-pub use add_to_blacklist::*;
 pub use remove_from_blacklist::*;
+pub use reset_minter_quota::*;
 pub use seize::*;
+pub use thaw_account::*;
+pub use transfer_authority::*;
+pub use unpause::*;
+pub use update_minter::*;
+#[allow(ambiguous_glob_reexports)]
+pub use update_role::*;
 pub use view::*;

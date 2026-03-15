@@ -51,23 +51,17 @@ pub fn handler(ctx: Context<FreezeTokenAccount>) -> Result<()> {
 
     let mint_key = ctx.accounts.config.mint;
     let bump = ctx.accounts.config.bump;
-    let signer_seeds: &[&[&[u8]]] = &[&[
-        STABLECOIN_SEED,
-        mint_key.as_ref(),
-        &[bump],
-    ]];
+    let signer_seeds: &[&[&[u8]]] = &[&[STABLECOIN_SEED, mint_key.as_ref(), &[bump]]];
 
-    token_interface::freeze_account(
-        CpiContext::new_with_signer(
-            ctx.accounts.token_program.to_account_info(),
-            token_interface::FreezeAccount {
-                account: ctx.accounts.token_account.to_account_info(),
-                mint: ctx.accounts.mint.to_account_info(),
-                authority: ctx.accounts.config.to_account_info(),
-            },
-            signer_seeds,
-        ),
-    )?;
+    token_interface::freeze_account(CpiContext::new_with_signer(
+        ctx.accounts.token_program.to_account_info(),
+        token_interface::FreezeAccount {
+            account: ctx.accounts.token_account.to_account_info(),
+            mint: ctx.accounts.mint.to_account_info(),
+            authority: ctx.accounts.config.to_account_info(),
+        },
+        signer_seeds,
+    ))?;
 
     emit!(AccountFrozen {
         config: ctx.accounts.config.key(),

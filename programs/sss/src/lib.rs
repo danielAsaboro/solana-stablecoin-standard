@@ -42,6 +42,14 @@ use instructions::*;
 
 declare_id!("DNfk1e2vMJrxHm4BwoRTVqQxcfYjZLHggxr11hMZ5Dyu");
 
+#[cfg(not(feature = "no-entrypoint"))]
+solana_security_txt::security_txt! {
+    name: "Solana Stablecoin Standard (SSS)",
+    project_url: "https://github.com/solanabr/solana-stablecoin-standard",
+    contacts: "email:security@example.com",
+    policy: "https://github.com/solanabr/solana-stablecoin-standard/blob/main/SECURITY.md"
+}
+
 #[program]
 pub mod sss {
     use super::*;
@@ -83,14 +91,19 @@ pub mod sss {
         instructions::unpause::handler(ctx)
     }
 
-    /// Assign or revoke a role. Master authority only.
-    pub fn update_roles(
-        ctx: Context<UpdateRoles>,
+    /// Assign a new role to a user. Master authority only.
+    pub fn assign_role(ctx: Context<AssignRole>, role_type: u8, user: Pubkey) -> Result<()> {
+        instructions::assign_role::handler(ctx, role_type, user)
+    }
+
+    /// Activate or deactivate an existing role. Master authority only.
+    pub fn update_role(
+        ctx: Context<UpdateRole>,
         role_type: u8,
         user: Pubkey,
         active: bool,
     ) -> Result<()> {
-        instructions::update_roles::handler(ctx, role_type, user, active)
+        instructions::update_role::handler(ctx, role_type, user, active)
     }
 
     /// Set or update a minter's quota. Master authority only.
@@ -105,7 +118,10 @@ pub mod sss {
     }
 
     /// Transfer master authority to a new address (immediate, emergency path).
-    pub fn transfer_authority(ctx: Context<TransferAuthority>, new_authority: Pubkey) -> Result<()> {
+    pub fn transfer_authority(
+        ctx: Context<TransferAuthority>,
+        new_authority: Pubkey,
+    ) -> Result<()> {
         instructions::transfer_authority::handler(ctx, new_authority)
     }
 
@@ -142,16 +158,16 @@ pub mod sss {
 
     /// Remove an address from the blacklist. Requires Blacklister role.
     /// Closes the BlacklistEntry PDA and returns rent.
-    pub fn remove_from_blacklist(
-        ctx: Context<RemoveFromBlacklist>,
-        address: Pubkey,
-    ) -> Result<()> {
+    pub fn remove_from_blacklist(ctx: Context<RemoveFromBlacklist>, address: Pubkey) -> Result<()> {
         instructions::remove_from_blacklist::handler(ctx, address)
     }
 
     /// Seize tokens from an account using the permanent delegate.
     /// Requires Seizer role and permanent delegate enabled.
-    pub fn seize<'info>(ctx: Context<'_, '_, 'info, 'info, Seize<'info>>, amount: u64) -> Result<()> {
+    pub fn seize<'info>(
+        ctx: Context<'_, '_, 'info, 'info, Seize<'info>>,
+        amount: u64,
+    ) -> Result<()> {
         instructions::seize::handler(ctx, amount)
     }
 
@@ -168,7 +184,11 @@ pub mod sss {
     }
 
     /// Simulate whether a mint of `amount` would succeed, without modifying state.
-    pub fn preview_mint(ctx: Context<PreviewMint>, minter: Pubkey, amount: u64) -> Result<PreviewMintResult> {
+    pub fn preview_mint(
+        ctx: Context<PreviewMint>,
+        minter: Pubkey,
+        amount: u64,
+    ) -> Result<PreviewMintResult> {
         instructions::view::preview_mint(ctx, minter, amount)
     }
 

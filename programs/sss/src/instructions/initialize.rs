@@ -3,9 +3,7 @@ use anchor_lang::solana_program::program::{invoke, invoke_signed};
 use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token_interface::TokenInterface;
 use spl_token_2022::{
-    extension::{
-        confidential_transfer, metadata_pointer, transfer_hook, ExtensionType,
-    },
+    extension::{confidential_transfer, metadata_pointer, transfer_hook, ExtensionType},
     instruction as token_instruction,
     state::Mint as MintState,
 };
@@ -86,8 +84,14 @@ pub struct Initialize<'info> {
 /// 5. Populates the [`StablecoinConfig`] PDA with runtime state.
 /// 6. Emits a [`StablecoinInitialized`] event.
 pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()> {
-    require!(params.name.len() <= MAX_NAME_LEN, StablecoinError::NameTooLong);
-    require!(params.symbol.len() <= MAX_SYMBOL_LEN, StablecoinError::SymbolTooLong);
+    require!(
+        params.name.len() <= MAX_NAME_LEN,
+        StablecoinError::NameTooLong
+    );
+    require!(
+        params.symbol.len() <= MAX_SYMBOL_LEN,
+        StablecoinError::SymbolTooLong
+    );
     require!(params.uri.len() <= MAX_URI_LEN, StablecoinError::UriTooLong);
     require!(params.decimals <= 9, StablecoinError::InvalidDecimals);
     require!(
@@ -174,7 +178,7 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     if params.enable_transfer_hook {
         let hook_program_id = params
             .transfer_hook_program_id
-            .unwrap();
+            .ok_or(StablecoinError::InvalidConfig)?;
         invoke(
             &transfer_hook::instruction::initialize(
                 ctx.accounts.token_program.key,
@@ -193,8 +197,8 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
                 ctx.accounts.token_program.key,
                 &mint_key,
                 Some(config_key),
-                true,  // auto_approve_new_accounts for PoC
-                None,  // no auditor for PoC
+                true, // auto_approve_new_accounts for PoC
+                None, // no auditor for PoC
             )?,
             &[ctx.accounts.mint.to_account_info()],
         )?;
@@ -226,11 +230,7 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
 
     // 7. Initialize token metadata on the mint itself
     let bump = ctx.bumps.config;
-    let signer_seeds: &[&[&[u8]]] = &[&[
-        STABLECOIN_SEED,
-        mint_key.as_ref(),
-        &[bump],
-    ]];
+    let signer_seeds: &[&[&[u8]]] = &[&[STABLECOIN_SEED, mint_key.as_ref(), &[bump]]];
 
     invoke_signed(
         &metadata_instruction::initialize(
@@ -265,9 +265,7 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     config.paused = false;
     config.total_minted = 0;
     config.total_burned = 0;
-    config.transfer_hook_program = params
-        .transfer_hook_program_id
-        .unwrap_or_default();
+    config.transfer_hook_program = params.transfer_hook_program_id.unwrap_or_default();
     config.supply_cap = params.supply_cap;
     config.pending_authority = Pubkey::default();
     config.authority_transfer_at = 0;

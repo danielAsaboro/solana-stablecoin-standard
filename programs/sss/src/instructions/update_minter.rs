@@ -23,6 +23,9 @@ pub struct UpdateMinter<'info> {
     )]
     pub config: Account<'info, StablecoinConfig>,
 
+    // Safety: init_if_needed is acceptable here because only the master authority
+    // (validated by the config constraint above) can call this instruction. A
+    // reinitialization attack requires an untrusted caller, which is impossible.
     #[account(
         init_if_needed,
         payer = authority,

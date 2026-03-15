@@ -29,7 +29,6 @@ pub struct OracleConfig {
     pub base_currency: String,
 
     // ── Feed configuration ───────────────────────────────────────────────
-
     /// Maximum acceptable age (in seconds) of the aggregator price data.
     /// If the aggregator's `round_open_timestamp` is older than this threshold
     /// relative to the current clock, `refresh_price` will reject the data.
@@ -48,7 +47,6 @@ pub struct OracleConfig {
     pub manual_override: bool,
 
     // ── Latest verified price ────────────────────────────────────────────
-
     /// The most recently verified price (scaled by `10^price_decimals`).
     /// Updated by `refresh_price` or `push_manual_price`.
     pub last_price: u64,
@@ -75,7 +73,7 @@ impl OracleConfig {
         + 8                    // last_price
         + 8                    // last_timestamp
         + 1                    // bump
-        + 64;                  // _reserved
+        + 64; // _reserved
 
     pub const SEED_PREFIX: &'static [u8] = ORACLE_CONFIG_SEED;
 }

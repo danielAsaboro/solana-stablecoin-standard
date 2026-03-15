@@ -16,6 +16,7 @@ use uuid::Uuid;
 
 use crate::error::AppError;
 use crate::persistence::JsonFileStore;
+use crate::services::cache::CacheBackend;
 use crate::solana::{
     build_add_to_blacklist_instruction, build_remove_from_blacklist_instruction,
     derive_blacklist_pda, parse_pubkey, SolanaContext,
@@ -85,7 +86,7 @@ pub struct ComplianceOperation {
 pub struct ComplianceService {
     ctx: Arc<SolanaContext>,
     operations: RwLock<HashMap<String, ComplianceOperation>>,
-    store: Option<JsonFileStore>,
+    store: Option<CacheBackend>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -113,7 +114,20 @@ impl ComplianceService {
         Ok(Self {
             ctx,
             operations: RwLock::new(persisted.operations),
-            store: Some(store),
+            store: Some(CacheBackend::File(store)),
+        })
+    }
+
+    /// Create a new compliance service backed by a cache backend (file or Redis).
+    pub async fn with_cache(
+        ctx: Arc<SolanaContext>,
+        backend: CacheBackend,
+    ) -> Result<Self, AppError> {
+        let persisted: PersistedComplianceState = backend.load().await?;
+        Ok(Self {
+            ctx,
+            operations: RwLock::new(persisted.operations),
+            store: Some(backend),
         })
     }
 
@@ -347,7 +361,7 @@ impl ComplianceService {
     }
 
     async fn persist_state(&self) {
-        let Some(store) = &self.store else {
+        let Some(backend) = &self.store else {
             return;
         };
 
@@ -358,12 +372,8 @@ impl ComplianceService {
             }
         };
 
-        if let Err(e) = store.save(&snapshot) {
-            tracing::error!(
-                error = %e,
-                path = %store.path().display(),
-                "Failed to persist compliance state"
-            );
+        if let Err(e) = backend.save(&snapshot).await {
+            tracing::error!(error = %e, "Failed to persist compliance state");
         }
     }
 }

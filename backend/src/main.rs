@@ -6,6 +6,7 @@
 use std::env;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Instant;
 
 use axum::{
     extract::Request,
@@ -13,10 +14,12 @@ use axum::{
     middleware::{self, Next},
     response::Response,
 };
+use metrics_exporter_prometheus::PrometheusBuilder;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+use sss_backend::services::cache::{CacheBackend, RedisCache};
 use sss_backend::services::compliance::ComplianceService;
 use sss_backend::services::indexer::IndexerService;
 use sss_backend::services::mint_burn::MintBurnService;
@@ -28,10 +31,14 @@ use sss_backend::AppState;
 /// API-key authentication middleware.
 ///
 /// Checks the `X-API-Key` header against the `SSS_API_KEY` environment variable.
-/// Skips authentication for the `/health` endpoint and when no key is configured.
+/// Skips authentication for the `/health` and `/metrics` endpoints and when no
+/// key is configured.
 async fn auth_middleware(req: Request, next: Next) -> Result<Response, StatusCode> {
     let api_key = env::var("SSS_API_KEY").unwrap_or_default();
-    if api_key.is_empty() || req.uri().path() == "/health" {
+    if api_key.is_empty()
+        || req.uri().path() == "/health"
+        || req.uri().path() == "/metrics"
+    {
         return Ok(next.run(req).await);
     }
     let auth_header = req
@@ -43,6 +50,36 @@ async fn auth_middleware(req: Request, next: Next) -> Result<Response, StatusCod
         return Err(StatusCode::UNAUTHORIZED);
     }
     Ok(next.run(req).await)
+}
+
+/// Request metrics middleware.
+///
+/// Records `sss_http_requests_total` counter and `sss_http_request_duration_seconds`
+/// histogram for every request, labelled by method, path, and status code.
+async fn metrics_middleware(req: Request, next: Next) -> Response {
+    let method = req.method().to_string();
+    let path = req.uri().path().to_string();
+    let start = Instant::now();
+
+    let response = next.run(req).await;
+
+    let status = response.status().as_u16().to_string();
+    let duration = start.elapsed().as_secs_f64();
+
+    let labels = [
+        ("method", method),
+        ("path", path),
+        ("status", status),
+    ];
+
+    metrics::counter!("sss_http_requests_total", &labels).increment(1);
+    metrics::histogram!(
+        "sss_http_request_duration_seconds",
+        &labels[..2]
+    )
+    .record(duration);
+
+    response
 }
 
 /// Try to initialize the Solana context from environment variables.
@@ -112,53 +149,132 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    // Initialize Solana context (optional — backend works without it)
-    let state_dir = backend_state_dir();
-    tracing::info!(state_dir = %state_dir.display(), "Backend persistence enabled");
+    // Initialize Prometheus metrics exporter
+    let prometheus_handle = match PrometheusBuilder::new().install_recorder() {
+        Ok(handle) => {
+            tracing::info!("Prometheus metrics exporter initialized");
+            Some(handle)
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "Failed to install Prometheus recorder, metrics disabled");
+            None
+        }
+    };
 
-    let webhook = Arc::new(
-        WebhookService::with_persistence(state_dir.join("webhooks.json"))
-            .expect("Failed to initialize webhook persistence"),
-    );
-    let operator_snapshots = Arc::new(
-        OperatorSnapshotService::with_persistence(state_dir.join("operator_snapshots.json"))
-            .expect("Failed to initialize operator snapshot persistence"),
-    );
+    // Try to connect to Redis; fall back to file-based persistence
+    let redis_cache = match env::var("REDIS_URL") {
+        Ok(url) if !url.is_empty() => match RedisCache::new(&url).await {
+            Ok(cache) => {
+                tracing::info!(url = %url, "Redis cache connected");
+                Some(cache)
+            }
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "Failed to connect to Redis, falling back to file persistence"
+                );
+                None
+            }
+        },
+        _ => None,
+    };
+
+    let state_dir = backend_state_dir();
+    if redis_cache.is_none() {
+        tracing::info!(state_dir = %state_dir.display(), "Using file-based persistence");
+    }
 
     let solana_ctx = init_solana_context();
-    let mint_burn = solana_ctx
-        .as_ref()
-        .map(|ctx| {
-            Arc::new(
+
+    // Initialize services with either Redis or file backend
+    let webhook = match &redis_cache {
+        Some(cache) => Arc::new(
+            WebhookService::with_cache(CacheBackend::redis(cache.clone(), "sss:webhooks"))
+                .await
+                .expect("Failed to initialize webhook service with Redis"),
+        ),
+        None => Arc::new(
+            WebhookService::with_persistence(state_dir.join("webhooks.json"))
+                .expect("Failed to initialize webhook persistence"),
+        ),
+    };
+
+    let operator_snapshots = match &redis_cache {
+        Some(cache) => Arc::new(
+            OperatorSnapshotService::with_cache(
+                CacheBackend::redis(cache.clone(), "sss:operator_snapshots"),
+            )
+            .await
+            .expect("Failed to initialize operator snapshot service with Redis"),
+        ),
+        None => Arc::new(
+            OperatorSnapshotService::with_persistence(state_dir.join("operator_snapshots.json"))
+                .expect("Failed to initialize operator snapshot persistence"),
+        ),
+    };
+
+    let mint_burn = match solana_ctx.as_ref() {
+        Some(ctx) => match &redis_cache {
+            Some(cache) => Some(Arc::new(
+                MintBurnService::with_cache(
+                    Arc::clone(ctx),
+                    CacheBackend::redis(cache.clone(), "sss:mint_burn"),
+                )
+                .await
+                .expect("Failed to initialize mint/burn service with Redis"),
+            )),
+            None => Some(Arc::new(
                 MintBurnService::with_persistence(
                     Arc::clone(ctx),
                     state_dir.join("mint_burn.json"),
                 )
                 .expect("Failed to initialize mint/burn persistence"),
-            )
-        });
-    let compliance = solana_ctx
-        .as_ref()
-        .map(|ctx| {
-            Arc::new(
+            )),
+        },
+        None => None,
+    };
+
+    let compliance = match solana_ctx.as_ref() {
+        Some(ctx) => match &redis_cache {
+            Some(cache) => Some(Arc::new(
+                ComplianceService::with_cache(
+                    Arc::clone(ctx),
+                    CacheBackend::redis(cache.clone(), "sss:compliance"),
+                )
+                .await
+                .expect("Failed to initialize compliance service with Redis"),
+            )),
+            None => Some(Arc::new(
                 ComplianceService::with_persistence(
                     Arc::clone(ctx),
                     state_dir.join("compliance.json"),
                 )
                 .expect("Failed to initialize compliance persistence"),
-            )
-        });
-    let indexer = solana_ctx
-        .as_ref()
-        .map(|ctx| {
-            Arc::new(
+            )),
+        },
+        None => None,
+    };
+
+    let indexer = match solana_ctx.as_ref() {
+        Some(ctx) => match &redis_cache {
+            Some(cache) => Some(Arc::new(
+                IndexerService::with_cache(
+                    Arc::clone(ctx),
+                    CacheBackend::redis(cache.clone(), "sss:indexer"),
+                )
+                .await
+                .expect("Failed to initialize indexer service with Redis"),
+            )),
+            None => Some(Arc::new(
                 IndexerService::with_persistence(
                     Arc::clone(ctx),
                     state_dir.join("indexer.json"),
                 )
                 .expect("Failed to initialize indexer persistence"),
-            )
-        });
+            )),
+        },
+        None => None,
+    };
 
     // Start the indexer background polling loop (every 10 seconds)
     if let Some(ref indexer_service) = indexer {
@@ -176,6 +292,7 @@ async fn main() {
         indexer,
         webhook,
         operator_snapshots,
+        prometheus_handle,
     };
 
     // CORS configuration
@@ -186,6 +303,7 @@ async fn main() {
 
     // Build the application router with middleware
     let app = sss_backend::build_router(state)
+        .layer(middleware::from_fn(metrics_middleware))
         .layer(middleware::from_fn(auth_middleware))
         .layer(cors)
         .layer(TraceLayer::new_for_http());

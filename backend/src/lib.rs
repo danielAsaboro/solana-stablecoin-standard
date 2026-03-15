@@ -12,6 +12,7 @@ pub mod solana;
 
 use std::sync::Arc;
 
+use metrics_exporter_prometheus::PrometheusHandle;
 use services::compliance::ComplianceService;
 use services::indexer::IndexerService;
 use services::mint_burn::MintBurnService;
@@ -31,16 +32,19 @@ pub struct AppState {
     pub webhook: Arc<WebhookService>,
     /// Operator snapshot persistence for evidence bundles and diffs.
     pub operator_snapshots: Arc<OperatorSnapshotService>,
+    /// Prometheus metrics handle for rendering the `/metrics` endpoint.
+    pub prometheus_handle: Option<PrometheusHandle>,
 }
 
 /// Build the application router with the given state.
 ///
-/// Returns the full Axum router with health, API, and webhook routes.
+/// Returns the full Axum router with health, API, metrics, and webhook routes.
 /// Does **not** include middleware layers (CORS, auth, tracing) — those
 /// are added by the binary crate for production, or omitted in tests.
 pub fn build_router(state: AppState) -> axum::Router {
     axum::Router::<AppState>::new()
         .merge(routes::health::router())
+        .merge(routes::metrics::router())
         .nest("/api/v1", routes::api_router())
         .with_state(state)
 }

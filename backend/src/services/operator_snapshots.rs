@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use crate::error::AppError;
 use crate::persistence::JsonFileStore;
+use crate::services::cache::CacheBackend;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct OperatorSnapshotSummary {
@@ -40,7 +41,7 @@ struct PersistedOperatorSnapshotState {
 
 pub struct OperatorSnapshotService {
     snapshots: RwLock<Vec<OperatorSnapshotRecord>>,
-    store: Option<JsonFileStore>,
+    store: Option<CacheBackend>,
 }
 
 impl OperatorSnapshotService {
@@ -57,7 +58,17 @@ impl OperatorSnapshotService {
 
         Ok(Self {
             snapshots: RwLock::new(persisted.snapshots),
-            store: Some(store),
+            store: Some(CacheBackend::File(store)),
+        })
+    }
+
+    /// Create a new service backed by a cache backend (file or Redis).
+    pub async fn with_cache(backend: CacheBackend) -> Result<Self, AppError> {
+        let persisted: PersistedOperatorSnapshotState = backend.load().await?;
+
+        Ok(Self {
+            snapshots: RwLock::new(persisted.snapshots),
+            store: Some(backend),
         })
     }
 
@@ -101,7 +112,7 @@ impl OperatorSnapshotService {
     }
 
     async fn persist_state(&self) {
-        let Some(store) = &self.store else {
+        let Some(backend) = &self.store else {
             return;
         };
 
@@ -112,12 +123,8 @@ impl OperatorSnapshotService {
             }
         };
 
-        if let Err(error) = store.save(&snapshot) {
-            tracing::error!(
-                error = %error,
-                path = %store.path().display(),
-                "Failed to persist operator snapshots"
-            );
+        if let Err(error) = backend.save(&snapshot).await {
+            tracing::error!(error = %error, "Failed to persist operator snapshots");
         }
     }
 }

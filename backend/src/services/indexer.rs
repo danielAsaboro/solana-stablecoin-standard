@@ -23,6 +23,7 @@ use uuid::Uuid;
 
 use crate::error::AppError;
 use crate::persistence::JsonFileStore;
+use crate::services::cache::CacheBackend;
 use crate::services::webhook::{DispatchMetadata, WebhookService};
 use crate::solana::SolanaContext;
 
@@ -123,8 +124,8 @@ pub struct IndexerService {
     last_signature: RwLock<Option<Signature>>,
     /// Pre-computed event discriminators for fast matching.
     discriminators: Vec<EventDiscriminator>,
-    /// Optional local JSON persistence store.
-    store: Option<JsonFileStore>,
+    /// Optional persistence backend (file or Redis).
+    store: Option<CacheBackend>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -166,7 +167,31 @@ impl IndexerService {
             events: RwLock::new(persisted.events),
             last_signature: RwLock::new(last_signature),
             discriminators: build_discriminators(),
-            store: Some(store),
+            store: Some(CacheBackend::File(store)),
+        })
+    }
+
+    /// Create a new indexer backed by a cache backend (file or Redis).
+    pub async fn with_cache(
+        ctx: Arc<SolanaContext>,
+        backend: CacheBackend,
+    ) -> Result<Self, AppError> {
+        let persisted: PersistedIndexerState = backend.load().await?;
+        let last_signature = match persisted.last_signature {
+            Some(signature) => Some(Signature::from_str(&signature).map_err(|e| {
+                AppError::Internal(format!(
+                    "Invalid persisted indexer cursor '{signature}': {e}"
+                ))
+            })?),
+            None => None,
+        };
+
+        Ok(Self {
+            ctx,
+            events: RwLock::new(persisted.events),
+            last_signature: RwLock::new(last_signature),
+            discriminators: build_discriminators(),
+            store: Some(backend),
         })
     }
 
@@ -575,7 +600,7 @@ impl IndexerService {
     }
 
     async fn persist_state(&self) {
-        let Some(store) = &self.store else {
+        let Some(backend) = &self.store else {
             return;
         };
 
@@ -593,12 +618,8 @@ impl IndexerService {
             }
         };
 
-        if let Err(e) = store.save(&snapshot) {
-            tracing::error!(
-                error = %e,
-                path = %store.path().display(),
-                "Failed to persist indexer state"
-            );
+        if let Err(e) = backend.save(&snapshot).await {
+            tracing::error!(error = %e, "Failed to persist indexer state");
         }
     }
 }

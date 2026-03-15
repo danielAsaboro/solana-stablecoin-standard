@@ -1,6 +1,7 @@
 pub mod compliance;
 pub mod health;
 pub mod indexer;
+pub mod metrics;
 pub mod mint_burn;
 pub mod operator_timeline;
 pub mod webhooks;

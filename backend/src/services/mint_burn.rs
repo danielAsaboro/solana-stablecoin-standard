@@ -15,6 +15,7 @@ use uuid::Uuid;
 
 use crate::error::AppError;
 use crate::persistence::JsonFileStore;
+use crate::services::cache::CacheBackend;
 use crate::solana::{
     build_burn_instruction, build_mint_instruction, get_associated_token_address, parse_pubkey,
     SolanaContext,
@@ -69,7 +70,7 @@ pub struct MintBurnOperation {
 pub struct MintBurnService {
     ctx: Arc<SolanaContext>,
     operations: RwLock<HashMap<String, MintBurnOperation>>,
-    store: Option<JsonFileStore>,
+    store: Option<CacheBackend>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -97,7 +98,20 @@ impl MintBurnService {
         Ok(Self {
             ctx,
             operations: RwLock::new(persisted.operations),
-            store: Some(store),
+            store: Some(CacheBackend::File(store)),
+        })
+    }
+
+    /// Create a new service backed by a cache backend (file or Redis).
+    pub async fn with_cache(
+        ctx: Arc<SolanaContext>,
+        backend: CacheBackend,
+    ) -> Result<Self, AppError> {
+        let persisted: PersistedMintBurnState = backend.load().await?;
+        Ok(Self {
+            ctx,
+            operations: RwLock::new(persisted.operations),
+            store: Some(backend),
         })
     }
 
@@ -270,7 +284,7 @@ impl MintBurnService {
     }
 
     async fn persist_state(&self) {
-        let Some(store) = &self.store else {
+        let Some(backend) = &self.store else {
             return;
         };
 
@@ -281,12 +295,8 @@ impl MintBurnService {
             }
         };
 
-        if let Err(e) = store.save(&snapshot) {
-            tracing::error!(
-                error = %e,
-                path = %store.path().display(),
-                "Failed to persist mint/burn state"
-            );
+        if let Err(e) = backend.save(&snapshot).await {
+            tracing::error!(error = %e, "Failed to persist mint/burn state");
         }
     }
 }

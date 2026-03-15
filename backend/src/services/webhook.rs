@@ -18,6 +18,7 @@ use uuid::Uuid;
 
 use crate::error::AppError;
 use crate::persistence::JsonFileStore;
+use crate::services::cache::CacheBackend;
 
 /// HMAC-SHA256 type alias used for payload signing.
 type HmacSha256 = Hmac<Sha256>;
@@ -173,8 +174,8 @@ pub struct WebhookService {
     delivery_log: RwLock<HashMap<String, DeliveryRecord>>,
     /// Shared HTTP client reused across all deliveries.
     http_client: reqwest::Client,
-    /// Optional local JSON persistence store.
-    store: Option<JsonFileStore>,
+    /// Optional persistence backend (file or Redis).
+    store: Option<CacheBackend>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -212,7 +213,23 @@ impl WebhookService {
             registrations: RwLock::new(persisted.registrations),
             delivery_log: RwLock::new(persisted.delivery_log),
             http_client,
-            store: Some(store),
+            store: Some(CacheBackend::File(store)),
+        })
+    }
+
+    /// Create a new webhook service backed by a cache backend (file or Redis).
+    pub async fn with_cache(backend: CacheBackend) -> Result<Self, AppError> {
+        let http_client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(10))
+            .build()
+            .unwrap_or_default();
+        let persisted: PersistedWebhookState = backend.load().await?;
+
+        Ok(Self {
+            registrations: RwLock::new(persisted.registrations),
+            delivery_log: RwLock::new(persisted.delivery_log),
+            http_client,
+            store: Some(backend),
         })
     }
 
@@ -742,7 +759,7 @@ impl WebhookService {
     }
 
     async fn persist_state(&self) {
-        let Some(store) = &self.store else {
+        let Some(backend) = &self.store else {
             return;
         };
 
@@ -755,12 +772,8 @@ impl WebhookService {
             }
         };
 
-        if let Err(e) = store.save(&snapshot) {
-            tracing::error!(
-                error = %e,
-                path = %store.path().display(),
-                "Failed to persist webhook state"
-            );
+        if let Err(e) = backend.save(&snapshot).await {
+            tracing::error!(error = %e, "Failed to persist webhook state");
         }
     }
 }

@@ -42,6 +42,7 @@ fn unconfigured_state() -> AppState {
         indexer: None,
         webhook: Arc::new(WebhookService::new()),
         operator_snapshots: Arc::new(OperatorSnapshotService::new()),
+        prometheus_handle: None,
     }
 }
 
@@ -59,6 +60,7 @@ fn test_app_with_webhook() -> (axum::Router, Arc<WebhookService>) {
         indexer: None,
         webhook: Arc::clone(&webhook),
         operator_snapshots: Arc::new(OperatorSnapshotService::new()),
+        prometheus_handle: None,
     };
     (sss_backend::build_router(state), webhook)
 }
@@ -72,6 +74,7 @@ fn configured_state() -> AppState {
         indexer: Some(Arc::new(IndexerService::new(Arc::clone(&ctx)))),
         webhook: Arc::new(WebhookService::new()),
         operator_snapshots: Arc::new(OperatorSnapshotService::new()),
+        prometheus_handle: None,
     }
 }
 
@@ -101,6 +104,7 @@ fn configured_test_app_with_compliance_operations(
         indexer: Some(Arc::new(IndexerService::new(Arc::clone(&ctx)))),
         webhook: Arc::new(WebhookService::new()),
         operator_snapshots: Arc::new(OperatorSnapshotService::new()),
+        prometheus_handle: None,
     };
 
     sss_backend::build_router(state)
@@ -148,6 +152,7 @@ fn configured_test_app_with_timeline_data(
         )),
         webhook: Arc::new(WebhookService::with_persistence(&webhook_path).unwrap()),
         operator_snapshots: Arc::new(OperatorSnapshotService::new()),
+        prometheus_handle: None,
     };
 
     sss_backend::build_router(state)
@@ -458,6 +463,7 @@ async fn test_webhook_dispatch_creates_delivery_record() {
         indexer: None,
         webhook: Arc::clone(&webhook),
         operator_snapshots: Arc::new(OperatorSnapshotService::new()),
+        prometheus_handle: None,
     };
     let app = sss_backend::build_router(state);
     webhook
@@ -566,6 +572,7 @@ async fn test_webhook_delivery_can_be_replayed() {
         indexer: None,
         webhook: Arc::clone(&webhook),
         operator_snapshots: Arc::new(OperatorSnapshotService::new()),
+        prometheus_handle: None,
     };
     let app = sss_backend::build_router(state);
     webhook.register(mock_server.uri(), vec![], None).await;
@@ -1083,6 +1090,7 @@ async fn test_operator_snapshots_create_and_diff() {
         indexer: None,
         webhook: Arc::new(WebhookService::new()),
         operator_snapshots: Arc::new(OperatorSnapshotService::new()),
+        prometheus_handle: None,
     };
     let app = sss_backend::build_router(state);
 

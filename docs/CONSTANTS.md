@@ -160,163 +160,6 @@ const [allowlistPda] = PublicKey.findProgramAddressSync(
 );
 ```
 
-### SSS-Caps Module
-
-#### CapsConfig
-
-```
-Seeds: ["caps_config", stablecoin_config_pubkey]
-Program: SSS-Caps
-```
-
-Stores the global supply cap and per-minter cap. Passed as a `remaining_accounts` entry during `mint_tokens` when the caps module is active.
-
-```typescript
-const [capsConfigPda] = PublicKey.findProgramAddressSync(
-  [Buffer.from("caps_config"), configPda.toBuffer()],
-  SSS_CAPS_PROGRAM_ID
-);
-```
-
-### SSS-Allowlist Module
-
-#### AllowlistConfig
-
-```
-Seeds: ["allowlist_config", stablecoin_config_pubkey]
-Program: SSS-Allowlist
-```
-
-Root configuration for the allowlist-only minting mode. Controls whether the stablecoin operates in open or allowlist-only mode.
-
-```typescript
-const [allowlistConfigPda] = PublicKey.findProgramAddressSync(
-  [Buffer.from("allowlist_config"), configPda.toBuffer()],
-  SSS_ALLOWLIST_PROGRAM_ID
-);
-```
-
-#### AllowlistEntry (Allowlist Module)
-
-```
-Seeds: ["allowlist_entry", allowlist_config_pubkey, address_pubkey]
-Program: SSS-Allowlist
-```
-
-Presence means the address is permitted to receive minted tokens in allowlist-only mode.
-
-```typescript
-const [entryPda] = PublicKey.findProgramAddressSync(
-  [
-    Buffer.from("allowlist_entry"),
-    allowlistConfigPda.toBuffer(),
-    address.toBuffer(),
-  ],
-  SSS_ALLOWLIST_PROGRAM_ID
-);
-```
-
-### SSS-Timelock Module
-
-#### TimelockConfig
-
-```
-Seeds: ["timelock_config", stablecoin_config_pubkey]
-Program: SSS-Timelock
-```
-
-Configuration for the timelock module. Stores the delay period (in seconds) required before pending operations can be executed.
-
-```typescript
-const [timelockConfigPda] = PublicKey.findProgramAddressSync(
-  [Buffer.from("timelock_config"), configPda.toBuffer()],
-  SSS_TIMELOCK_PROGRAM_ID
-);
-```
-
-#### PendingOp
-
-```
-Seeds: ["pending_op", timelock_config_pubkey, op_id_le_bytes]
-Program: SSS-Timelock
-```
-
-A queued governance operation awaiting the timelock delay. `op_id` is a `u64` serialized as 8 little-endian bytes.
-
-```typescript
-const opIdBuf = Buffer.alloc(8);
-opIdBuf.writeBigUInt64LE(BigInt(opId));
-const [pendingOpPda] = PublicKey.findProgramAddressSync(
-  [Buffer.from("pending_op"), timelockConfigPda.toBuffer(), opIdBuf],
-  SSS_TIMELOCK_PROGRAM_ID
-);
-```
-
-### SSS-10 Async Mint/Redeem Module
-
-#### AsyncConfig
-
-```
-Seeds: ["async_config", stablecoin_config_pubkey]
-Program: SSS-10
-```
-
-Governs the async request queue. Stores the authority and a monotonically increasing `total_requests` counter.
-
-#### MintRequest
-
-```
-Seeds: ["mint_request", async_config_pubkey, request_id_le_bytes]
-Program: SSS-10
-```
-
-One PDA per mint request. `request_id` is a `u64` in 8-byte little-endian form.
-
-```typescript
-const reqIdBuf = Buffer.alloc(8);
-reqIdBuf.writeBigUInt64LE(BigInt(requestId));
-const [mintReqPda] = PublicKey.findProgramAddressSync(
-  [Buffer.from("mint_request"), asyncConfigPda.toBuffer(), reqIdBuf],
-  SSS_10_PROGRAM_ID
-);
-```
-
-#### RedeemRequest
-
-```
-Seeds: ["redeem_request", async_config_pubkey, request_id_le_bytes]
-Program: SSS-10
-```
-
-One PDA per redeem request, with the same derivation pattern as `MintRequest`.
-
-### SSS-11 Credit Module
-
-#### CreditConfig
-
-```
-Seeds: ["credit_config", stablecoin_config_pubkey]
-Program: SSS-11
-```
-
-Root configuration for the credit module. Stores risk parameters (collateral ratios, liquidation thresholds).
-
-#### CreditPosition
-
-```
-Seeds: ["credit_position", credit_config_pubkey, borrower_pubkey]
-Program: SSS-11
-```
-
-One PDA per borrower. Tracks deposited collateral, outstanding debt, and health factor.
-
-```typescript
-const [positionPda] = PublicKey.findProgramAddressSync(
-  [Buffer.from("credit_position"), creditConfigPda.toBuffer(), borrower.toBuffer()],
-  SSS_11_PROGRAM_ID
-);
-```
-
 ---
 
 ## Program IDs
@@ -329,11 +172,6 @@ const [positionPda] = PublicKey.findProgramAddressSync(
 | Transfer Hook | `Gcd58Ng9gqRg1XtiU1i8KopwX1u82Mt9VmxKbLJ8RANH` |
 | Oracle | `6PHWYPgkVWE7f5Saak4EXVh49rv9ZcXdz7HMfHnQdNLJ` |
 | Privacy | `Bmyova5VaKqiBRRDV4ft8pLsdfgMMZojafLy4sdFDWQk` |
-| SSS-Caps | _(deploy from `programs/sss-caps/`)_ |
-| SSS-Allowlist | _(deploy from `programs/sss-allowlist/`)_ |
-| SSS-Timelock | _(deploy from `programs/sss-timelock/`)_ |
-| SSS-10 Async | _(deploy from `programs/sss-10/`)_ |
-| SSS-11 Credit | _(deploy from `programs/sss-11/`)_ |
 | SSS-Math | _(library, no deployment)_ |
 
 ### Devnet
@@ -393,7 +231,6 @@ All string fields are Rust `String` values stored on-chain. The limits below are
 | `MAX_SYMBOL_LEN` | 10 bytes | `StablecoinConfig.symbol` | `SymbolTooLong` |
 | `MAX_URI_LEN` | 200 bytes | `StablecoinConfig.uri` | `UriTooLong` |
 | `MAX_REASON_LEN` | 64 bytes | `BlacklistEntry.reason` | `ReasonTooLong` |
-| `MAX_MEMO_LEN` | 128 bytes | `MintRequest.memo`, `RedeemRequest.memo` | `MemoTooLong` |
 
 These limits determine the allocation size of the PDA accounts. The account sizes are calculated once at initialization and cannot be expanded without closing and re-creating the account.
 
@@ -434,20 +271,9 @@ BlacklistEntry.LEN =
 |-------|-------|-------------|
 | Max supply cap | `u64::MAX` (18,446,744,073,709,551,615) | Upper bound for `supply_cap` and `quota` fields |
 | Supply cap disabled | `0` | Setting `supply_cap = 0` means unlimited |
-| Max BPS | `10_000` | Basis points denominator (100.00%) used in SSS-11 ratios |
+| Max BPS | `10_000` | Basis points denominator (100.00%) |
 | Max decimals | `9` | Token decimals; values 0–9 are valid, ≥10 returns `InvalidDecimals` |
 | Minter quota disabled | `u64::MAX` | Effectively unlimited quota |
-
-### BPS (Basis Points) Usage
-
-The SSS-11 credit module and SSS-Caps module express ratios in basis points where 10,000 BPS = 100%. Examples:
-
-| BPS Value | Percentage | Usage |
-|-----------|------------|-------|
-| 15,000 | 150% | Minimum collateral ratio (1.5x overcollateralized) |
-| 13,000 | 130% | Liquidation threshold |
-| 500 | 5% | Liquidation penalty |
-| 10,000 | 100% | Fully collateralized |
 
 ---
 

@@ -178,11 +178,6 @@ anchor build --program-name sss
 anchor build --program-name transfer-hook
 anchor build --program-name oracle
 anchor build --program-name privacy
-anchor build --program-name sss-caps
-anchor build --program-name sss-allowlist
-anchor build --program-name sss-timelock
-anchor build --program-name sss-10
-anchor build --program-name sss-11
 
 # Build TypeScript SDK and CLI
 npm run build:packages
@@ -446,8 +441,6 @@ Operational Keypairs
 ├── Blacklister (sanctions team)
 └── Seizer (legal/recovery team)
 
-Caps Authority (risk team)
-Allowlist Authority (KYC team)
 Oracle Authority (data team)
 ```
 

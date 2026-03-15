@@ -68,35 +68,11 @@ await oracleProgram.methods.initializeOracle({
 
 The `burn_tokens` instruction is the on-chain redemption mechanism. When a holder submits a redemption request:
 
-1. Holder calls `burn_tokens` (or initiates via the SSS-10 async queue)
+1. Holder calls `burn_tokens` (or initiates via an off-chain redemption queue)
 2. Tokens are permanently destroyed
 3. Off-chain: issuer sends equivalent fiat to the holder's bank account
 
-**SSS-10 Async Redemption Queue** is purpose-built for the GENIUS Act's 2-business-day requirement:
-
-```typescript
-// User submits a redemption request
-await sss10Program.methods.submitRedeemRequest(
-  amount,
-  "Redemption - bank ACH to account XXXXX" // memo for off-chain processing
-).accounts({
-  asyncConfig: asyncConfigPda,
-  mintRequest: redeemRequestPda,
-  sourceTokenAccount: userAta,
-  requester: user.publicKey,
-}).rpc();
-
-// Emits RedeemRequested event with request_id and amount
-// Off-chain: compliance team reviews, initiates ACH/wire
-// Authority approves after off-chain settlement is confirmed
-await sss10Program.methods.approveRedeemRequest(requestId).rpc();
-
-// Execute burns the tokens on-chain
-await sss10Program.methods.executeRedeemRequest(requestId).rpc();
-// Emits RedeemExecuted event — permanent on-chain record
-```
-
-The `approved_by` field in `RedeemRequest` records which compliance officer approved the redemption, satisfying BSA record-keeping requirements.
+The `TokensBurned` event provides a permanent on-chain record of every redemption, satisfying BSA record-keeping requirements. The backend API's event indexer surfaces these events via the `/api/v1/audit` endpoint.
 
 ---
 
@@ -108,21 +84,21 @@ The `approved_by` field in `RedeemRequest` records which compliance officer appr
 
 SSS does not perform KYC on-chain (identity documents cannot be stored on-chain efficiently). Instead, SSS provides the enforcement layer:
 
-1. **Allowlist Module (Pre-screening)**: Using SSS-Allowlist in `AllowlistOnly` mode, only addresses that have passed off-chain KYC can receive minted tokens.
+1. **Privacy Allowlist (SSS-3 Pre-screening)**: Using the Privacy Program's allowlist, only addresses that have passed off-chain KYC can be approved for confidential transfers.
 
 ```typescript
 // Add KYC-verified address after off-chain verification
-await allowlistProgram.methods.addToAllowlist(
-  "Customer ID: CUS-2026-00142 | KYC Verified: 2026-01-15 | Tier: Individual"
+await privacyProgram.methods.addToAllowlist(
+  "Customer ID: CUS-2026-00142 | KYC Verified: 2026-01-15"
 ).accounts({
-  allowlistConfig: allowlistConfigPda,
+  privacyConfig: privacyConfigPda,
   allowlistEntry: entryPda,
   address: verifiedCustomer,
   authority: kycAuthority.publicKey,
 }).rpc();
 ```
 
-2. **Blacklist Module (Sanctions/AML screening)**: The SSS-2 blacklist is the primary sanctions enforcement mechanism. When an address is identified as a prohibited party, it is immediately blacklisted at the protocol level.
+2. **Blacklist (Sanctions/AML screening)**: The SSS-2 blacklist is the primary sanctions enforcement mechanism. When an address is identified as a prohibited party, it is immediately blacklisted at the protocol level.
 
 3. **Audit Trail**: Every compliance action (blacklist add/remove, allowlist add/remove, seizure) emits an event that is indexed by the backend API and surfaced via the `/api/v1/audit` endpoint in JSONL format suitable for BSA record-keeping.
 
@@ -210,7 +186,7 @@ async function screenAndBlacklist(address: PublicKey, ssnListMatch: OFACMatch) {
 
 3. **2-Step Authority Transfer**: Authority transfers require a proposal and acceptance, preventing accidental or unauthorized governance changes.
 
-4. **Timelock on Parameter Changes**: Using the SSS-Timelock module, cap increases and role grants can be subject to a mandatory delay, giving the board of directors visibility before changes take effect.
+4. **Operational Controls on Parameter Changes**: Cap increases and role grants should be gated behind a Squads multisig, ensuring board visibility and approval before changes take effect.
 
 **Recommended Governance Structure for GENIUS Act:**
 
@@ -271,21 +247,17 @@ The backend API's event indexer provides a complete transaction history that can
 │                    Governance Layer                          │
 │                                                              │
 │   Board Multisig (Squads 3-of-5)                            │
-│   ├── SSS Master Authority                                  │
-│   └── Timelock: 48hr delay on all parameter changes        │
+│   └── SSS Master Authority                                  │
 └──────────────────────────────────────────────────────────────┘
                          │
 ┌──────────────────────────────────────────────────────────────┐
 │                   Issuance Controls                          │
 │                                                              │
-│   SSS-Allowlist (AllowlistOnly mode)                        │
-│   └── KYC-Verified addresses only can hold tokens          │
-│                                                              │
-│   SSS-Caps (Risk team authority)                            │
+│   SSS Supply Cap                                            │
 │   └── Global cap = custodied reserve balance               │
 │                                                              │
-│   SSS-10 Async Mint/Redeem                                  │
-│   └── Every issuance and redemption requires approval      │
+│   Privacy Allowlist (SSS-3)                                  │
+│   └── KYC-Verified addresses for confidential transfers    │
 └──────────────────────────────────────────────────────────────┘
                          │
 ┌──────────────────────────────────────────────────────────────┐
@@ -326,7 +298,7 @@ The backend API's event indexer provides a complete transaction history that can
 | KYC identity verification | Off-chain | SSS enforces the allowlist; identity verification must happen off-chain |
 | Reserve custody | Off-chain | Reserves must be held in regulated TradFi accounts |
 | SAR filing | Off-chain | SSS provides the audit trail; actual FinCEN filings are the issuer's responsibility |
-| Redemption SLA enforcement | Partial | SSS-10 provides the queue and record-keeping; the 2-business-day window is an operational commitment |
+| Redemption SLA enforcement | Partial | SSS provides `burn_tokens` and event logging; the 2-business-day window is an operational commitment |
 | Cross-chain compliance | Not covered | If the stablecoin bridges to other chains, those chains need their own compliance stack |
 | Travel Rule (FATF) | Not covered | Sender/receiver identity disclosure for transfers >$3,000 must be implemented at the application layer |
 

@@ -48,12 +48,7 @@ programs/
   transfer-hook/     # SPL Transfer Hook for blacklist enforcement (SSS-2)
   oracle/            # Switchboard V2 price feed integration
   privacy/           # Confidential transfer management (SSS-3)
-  sss-caps/          # Composable: global and per-user deposit caps
-  sss-allowlist/     # Composable: address allowlist with modes
-  sss-timelock/      # Composable: time-delayed governance operations
   sss-math/          # Shared checked arithmetic library
-  sss-10/            # Composable: cross-chain bridge integration
-  sss-11/            # Composable: CDP lending module
 sdk/
   core/              # @stbr/sss-core-sdk - TypeScript SDK
   compliance/        # @stbr/sss-compliance-sdk - compliance extensions
@@ -84,19 +79,6 @@ SSS defines three stablecoin presets across two dimensions: compliance level and
 | GENIUS Act compliant | partial | **full** | full |
 
 **Key constraint**: Feature gates are set at initialization and are immutable. An SSS-1 stablecoin can never gain SSS-2 capabilities. This is a feature — issuers can guarantee their users that seizure and blacklisting will never be possible.
-
-### Composable Modules
-
-Modules are standalone programs that extend any SSS preset:
-
-| Module | Purpose | Status |
-|--------|---------|--------|
-| sss-caps | Deposit/mint caps per user and global | Complete |
-| sss-allowlist | Address allowlist with configurable modes | Complete |
-| sss-timelock | Time-delayed governance operations | Complete |
-| sss-math | Shared checked arithmetic library | Complete |
-| sss-10 | Cross-chain bridge integration | Complete |
-| sss-11 | CDP lending against stablecoin collateral | Complete |
 
 ## Development Workflow
 
@@ -146,7 +128,7 @@ security(sss): enforce minter quota ceiling check
 mkdir -p programs/sss-<name>/src
 ```
 
-Follow the pattern in `programs/sss-caps/` or `programs/sss-allowlist/`.
+Follow the pattern in `programs/oracle/` or `programs/privacy/`.
 
 ### Step 2: Register in workspace
 

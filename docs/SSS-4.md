@@ -237,8 +237,8 @@ Extra account metas resolved by Token-2022:
   [5] sss_config PDA (from ExtraAccountMeta seeds)
   [6] blacklist_entry_source (may not exist → transfer allowed)
   [7] blacklist_entry_dest (may not exist → transfer allowed)
-  [8] allowlist_config (SSS-Allowlist module)
-  [9] allowlist_entry_source (may not exist → transfer blocked in AllowlistOnly mode)
+  [8] privacy_config (Privacy program)
+  [9] allowlist_entry_source (may not exist → transfer blocked if auto_approve=false)
 ```
 
 ### Seizure of Confidential Balances

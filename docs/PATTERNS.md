@@ -110,101 +110,7 @@ console.assert(
 
 ---
 
-## Pattern 2: Timelocked Parameter Changes
-
-### Problem
-
-A compromised authority can change supply caps or add malicious minters instantly. A timelock ensures parameter changes are visible to the community before taking effect.
-
-### Setup
-
-```typescript
-// Initialize the timelock module with a 48-hour delay
-const delay = 48 * 60 * 60; // 172800 seconds
-
-const [timelockConfigPda] = PublicKey.findProgramAddressSync(
-  [Buffer.from("timelock_config"), stablecoinConfigPda.toBuffer()],
-  TIMELOCK_PROGRAM_ID
-);
-
-await timelockProgram.methods
-  .initializeTimelockConfig(new BN(delay))
-  .accounts({
-    timelockConfig: timelockConfigPda,
-    stablecoinConfig: stablecoinConfigPda,
-    authority: multisigVaultPda,
-    systemProgram: SystemProgram.programId,
-  })
-  .rpc();
-```
-
-### Scheduling and Executing a Caps Change
-
-```typescript
-// Day 0: Schedule a global cap increase
-const opId = await timelockProgram.methods
-  .scheduleOp({
-    // Encoded instruction data for the caps update
-    targetProgram: CAPS_PROGRAM_ID,
-    data: capsProgram.coder.instruction.encode("updateCapsConfig", {
-      newGlobalCap: new BN(200_000_000_000_000),
-      newPerMinterCap: new BN(20_000_000_000_000),
-    }),
-  })
-  .accounts({
-    timelockConfig: timelockConfigPda,
-    authority: multisigVaultPda,
-    systemProgram: SystemProgram.programId,
-  })
-  .rpc();
-
-// The opId is a u64 counter from timelockConfig.total_ops
-
-console.log(
-  `Scheduled: op will be executable after ${new Date(Date.now() + delay * 1000).toISOString()}`
-);
-
-// Day 2: Execute the scheduled operation
-const opIdBuf = Buffer.alloc(8);
-opIdBuf.writeBigUInt64LE(BigInt(opId));
-const [pendingOpPda] = PublicKey.findProgramAddressSync(
-  [Buffer.from("pending_op"), timelockConfigPda.toBuffer(), opIdBuf],
-  TIMELOCK_PROGRAM_ID
-);
-
-await timelockProgram.methods
-  .executeOp(new BN(opId))
-  .accounts({
-    timelockConfig: timelockConfigPda,
-    pendingOp: pendingOpPda,
-    authority: multisigVaultPda,
-    // Target accounts for the caps update
-    capsConfig: capsConfigPda,
-    capsProgram: CAPS_PROGRAM_ID,
-    clock: SYSVAR_CLOCK_PUBKEY,
-  })
-  .rpc();
-```
-
-### Cancelling a Pending Operation
-
-```typescript
-// If a scheduled operation is discovered to be incorrect, cancel it
-await timelockProgram.methods
-  .cancelOp(new BN(opId))
-  .accounts({
-    timelockConfig: timelockConfigPda,
-    pendingOp: pendingOpPda,
-    authority: multisigVaultPda,
-  })
-  .rpc();
-
-console.log("Operation cancelled — it will never be executable");
-```
-
----
-
-## Pattern 3: Batch Operations
+## Pattern 2: Batch Operations
 
 ### Minting to Multiple Recipients in One Transaction
 
@@ -295,7 +201,7 @@ await provider.sendAndConfirm(tx, [authority]);
 
 ---
 
-## Pattern 4: Emergency Pause + Seizure Flow
+## Pattern 3: Emergency Pause + Seizure Flow
 
 ### Problem
 
@@ -460,7 +366,7 @@ await sssProgram.methods
 
 ---
 
-## Pattern 5: Supply Cap Management
+## Pattern 4: Supply Cap Management
 
 ### Setting an Initial Cap
 
@@ -468,19 +374,12 @@ await sssProgram.methods
 // Set a $10M cap (with 6 decimals = 10,000,000,000,000 base units)
 const cap = new BN(10_000_000).mul(new BN(1_000_000));
 
-// Option A: Set at initialization
 await sssProgram.methods
   .initialize({
     // ...
     supplyCap: cap,
   })
   // ...
-  .rpc();
-
-// Option B: Use the SSS-Caps module for external management
-await capsProgram.methods
-  .initializeCapsConfig(cap, new BN(1_000_000).mul(new BN(1_000_000)))
-  .accounts({ /* ... */ })
   .rpc();
 ```
 
@@ -489,63 +388,29 @@ await capsProgram.methods
 ```typescript
 async function getCapUtilization(
   sssProgram: Program,
-  capsProgram: Program,
-  configPda: PublicKey,
-  capsConfigPda: PublicKey
+  configPda: PublicKey
 ) {
-  const [config, caps] = await Promise.all([
-    sssProgram.account.stablecoinConfig.fetch(configPda),
-    capsProgram.account.capsConfig.fetch(capsConfigPda),
-  ]);
+  const config = await sssProgram.account.stablecoinConfig.fetch(configPda);
 
-  const utilizationBps = caps.globalCap.isZero()
+  const utilizationBps = config.supplyCap.isZero()
     ? 0
-    : config.totalMinted.mul(new BN(10000)).div(caps.globalCap).toNumber();
+    : config.totalMinted.mul(new BN(10000)).div(config.supplyCap).toNumber();
 
   return {
     totalMinted: config.totalMinted.toString(),
-    globalCap: caps.globalCap.toString(),
+    supplyCap: config.supplyCap.toString(),
     utilizationBps,
     utilizationPercent: utilizationBps / 100,
-    remainingCapacity: caps.globalCap.sub(config.totalMinted).toString(),
+    remainingCapacity: config.supplyCap.isZero()
+      ? "unlimited"
+      : config.supplyCap.sub(config.totalMinted).toString(),
   };
 }
 ```
 
-### Adjusting the Cap
-
-```typescript
-// Increase cap to $20M (must be done by caps authority)
-await capsProgram.methods
-  .updateCapsConfig(
-    new BN(20_000_000).mul(new BN(1_000_000)), // new global cap
-    new BN(2_000_000).mul(new BN(1_000_000))   // new per-minter cap
-  )
-  .accounts({
-    capsConfig: capsConfigPda,
-    stablecoinConfig: stablecoinConfigPda,
-    authority: capsAuthority.publicKey,
-  })
-  .signers([capsAuthority])
-  .rpc();
-```
-
-### Removing the Cap (Unlimited Supply)
-
-```typescript
-// Setting global_cap to 0 means no cap is enforced
-await capsProgram.methods
-  .updateCapsConfig(
-    new BN(0), // 0 = unlimited
-    new BN(0)  // 0 = unlimited per minter
-  )
-  .accounts({ /* ... */ })
-  .rpc();
-```
-
 ---
 
-## Pattern 6: Quota-Based Minting Cycles
+## Pattern 5: Quota-Based Minting Cycles
 
 ### Monthly Quota Reset
 
@@ -615,154 +480,6 @@ async function getRemainingQuota(
 
   const quota = await sssProgram.account.minterQuota.fetch(quotaPda);
   return quota.quota.sub(quota.minted);
-}
-```
-
----
-
-## Pattern 7: Allowlist-Only Mode (Private Stablecoin Distribution)
-
-### Use Case
-
-A regulated stablecoin issuer wants only KYC-verified addresses to hold the token. Using the SSS-Allowlist module, minting is restricted to addresses on an approved list.
-
-### Setup
-
-```typescript
-// Initialize allowlist module in "AllowlistOnly" mode
-const [allowlistConfigPda] = PublicKey.findProgramAddressSync(
-  [Buffer.from("allowlist_config"), stablecoinConfigPda.toBuffer()],
-  SSS_ALLOWLIST_PROGRAM_ID
-);
-
-await allowlistProgram.methods
-  .initializeAllowlistConfig({ allowlistOnly: {} }) // mode: AllowlistOnly
-  .accounts({
-    allowlistConfig: allowlistConfigPda,
-    stablecoinConfig: stablecoinConfigPda,
-    authority: complianceTeam.publicKey,
-    systemProgram: SystemProgram.programId,
-  })
-  .signers([complianceTeam])
-  .rpc();
-```
-
-### Adding KYC-Verified Addresses
-
-```typescript
-async function approveAddress(
-  allowlistProgram: Program,
-  allowlistConfigPda: PublicKey,
-  address: PublicKey,
-  label: string,
-  authority: Keypair
-) {
-  const [entryPda] = PublicKey.findProgramAddressSync(
-    [
-      Buffer.from("allowlist_entry"),
-      allowlistConfigPda.toBuffer(),
-      address.toBuffer(),
-    ],
-    SSS_ALLOWLIST_PROGRAM_ID
-  );
-
-  await allowlistProgram.methods
-    .addToAllowlist(label)
-    .accounts({
-      allowlistConfig: allowlistConfigPda,
-      allowlistEntry: entryPda,
-      address: address,
-      authority: authority.publicKey,
-      systemProgram: SystemProgram.programId,
-    })
-    .signers([authority])
-    .rpc();
-
-  console.log(`Approved ${address.toString()} (${label})`);
-}
-
-// Bulk onboard KYC-verified users
-const kycUsers = [
-  { address: institutionalClient1, label: "Acme Corp - KYC 2026-01-01" },
-  { address: institutionalClient2, label: "Beta Fund - KYC 2026-02-15" },
-];
-
-for (const { address, label } of kycUsers) {
-  await approveAddress(allowlistProgram, allowlistConfigPda, address, label, complianceTeam);
-}
-```
-
-### Minting to Allowlisted Address
-
-```typescript
-// The allowlist entry PDA must be in remaining_accounts for the constraint to be checked
-const [allowlistEntryPda] = PublicKey.findProgramAddressSync(
-  [
-    Buffer.from("allowlist_entry"),
-    allowlistConfigPda.toBuffer(),
-    recipientAddress.toBuffer(),
-  ],
-  SSS_ALLOWLIST_PROGRAM_ID
-);
-
-await sssProgram.methods
-  .mintTokens(new BN(1_000_000_000)) // 1000 tokens
-  .accounts({ /* ... standard accounts ... */ })
-  .remainingAccounts([
-    { pubkey: allowlistConfigPda, isSigner: false, isWritable: false },
-    { pubkey: allowlistEntryPda, isSigner: false, isWritable: false },
-  ])
-  .rpc();
-```
-
-### Switching Between Open and AllowlistOnly Modes
-
-```typescript
-// Temporarily open the stablecoin for public minting
-await allowlistProgram.methods
-  .updateAllowlistMode({ open: {} })
-  .accounts({
-    allowlistConfig: allowlistConfigPda,
-    authority: complianceTeam.publicKey,
-  })
-  .rpc();
-
-// Switch back to allowlist-only
-await allowlistProgram.methods
-  .updateAllowlistMode({ allowlistOnly: {} })
-  .accounts({
-    allowlistConfig: allowlistConfigPda,
-    authority: complianceTeam.publicKey,
-  })
-  .rpc();
-```
-
-### Removing an Address (Offboarding)
-
-```typescript
-async function revokeAddress(
-  allowlistProgram: Program,
-  allowlistConfigPda: PublicKey,
-  address: PublicKey,
-  authority: Keypair
-) {
-  const [entryPda] = PublicKey.findProgramAddressSync(
-    [Buffer.from("allowlist_entry"), allowlistConfigPda.toBuffer(), address.toBuffer()],
-    SSS_ALLOWLIST_PROGRAM_ID
-  );
-
-  await allowlistProgram.methods
-    .removeFromAllowlist()
-    .accounts({
-      allowlistConfig: allowlistConfigPda,
-      allowlistEntry: entryPda,
-      address: address,
-      authority: authority.publicKey,
-    })
-    .signers([authority])
-    .rpc();
-
-  console.log(`Revoked ${address.toString()}`);
 }
 ```
 

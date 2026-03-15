@@ -332,14 +332,11 @@ Most ERC-20 tokens have no built-in supply cap. USDC implements an off-chain pro
 
 ### SSS
 
-Two layers of supply cap enforcement:
-
-1. **SSS-native**: `StablecoinConfig.supply_cap` (set at initialization, updatable by master authority)
-2. **SSS-Caps module**: `CapsConfig.global_cap` and `CapsConfig.per_minter_cap` (separate authority, passed via `remaining_accounts`)
+Supply cap enforcement via `StablecoinConfig.supply_cap` (set at initialization, updatable by master authority). Per-minter caps are enforced via the `MinterQuota` PDA.
 
 ```
-Total supply cap = min(config.supply_cap, caps_config.global_cap)
-Per-minter cap   = min(minter_quota.quota, caps_config.per_minter_cap)
+Global supply cap  = config.supply_cap (0 = unlimited)
+Per-minter cap     = minter_quota.quota
 ```
 
 ---

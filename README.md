@@ -154,12 +154,7 @@ programs/
   transfer-hook/     Blacklist enforcement hook (SPL Transfer Hook Interface)
   oracle/            Switchboard V2 price feed integration
   privacy/           Confidential transfer allowlist management (SSS-3)
-  sss-caps/          Composable module: global and per-user deposit caps
-  sss-allowlist/     Composable module: address allowlist with modes
-  sss-timelock/      Composable module: time-delayed governance operations
   sss-math/          Shared checked arithmetic library
-  sss-10/            Composable module: cross-chain bridge integration
-  sss-11/            Composable module: CDP lending
 sdk/
   core/              @stbr/sss-core-sdk -- TypeScript SDK
   compliance/        @stbr/sss-compliance-sdk -- compliance extensions
@@ -225,21 +220,6 @@ const events = await parser.parseTransaction(connection, txSignature);
 ```
 
 See [docs/SDK.md](docs/SDK.md) for the complete API reference.
-
----
-
-## Composable Modules (Bonus)
-
-Six standalone programs that extend any SSS preset:
-
-| Module | Description |
-|--------|-------------|
-| `sss-caps` | Global and per-user deposit/mint caps |
-| `sss-allowlist` | Address allowlist with configurable modes |
-| `sss-timelock` | Time-delayed governance operations (propose/execute) |
-| `sss-math` | Shared checked arithmetic library |
-| `sss-10` | Cross-chain bridge integration (request/approve/execute) |
-| `sss-11` | CDP lending: collateralize SOL to mint stablecoins |
 
 ---
 
